@@ -40,6 +40,9 @@ export interface RemotePlayerDepthEntry {
     name: string;
     direction?: 'north' | 'south' | 'east' | 'west';
     controller?: SpriteAnimationController;
+    /** Posição interpolada em pixels (preferida para desenho e depth sort). */
+    worldX?: number;
+    worldY?: number;
 }
 
 export function footSortKeyFromPlacement(
@@ -317,8 +320,8 @@ export function collectRemoteDepthDrawables(
 
     for (const remote of remotes) {
         if (remote.z !== z) continue;
-        const worldX = remote.tileX * tileSize;
-        const worldY = remote.tileY * tileSize;
+        const worldX = remote.worldX ?? remote.tileX * tileSize;
+        const worldY = remote.worldY ?? remote.tileY * tileSize;
         const ctrl = remote.controller;
 
         if (ctrl?.isLoaded && ctrl.image) {
@@ -372,7 +375,12 @@ export function collectRemoteDepthDrawables(
             continue;
         }
 
-        const { sortY, sortX } = getTileFootSortKey(remote.tileX, remote.tileY, tileSize);
+        const { sortY, sortX } = getEntityFootSortKey(
+            worldX,
+            worldY,
+            { sx: 0, sy: 0, sw: tileSize, sh: tileSize },
+            tileSize
+        );
         const rx = worldX - camera.x;
         const ry = worldY - camera.y;
 

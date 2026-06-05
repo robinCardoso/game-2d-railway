@@ -33,6 +33,7 @@ Documento de referência para humanos e agentes IA. **Atualizar este arquivo** q
 | **Play spawn em área vazia** | Personagem em `10,10` (default) mas Rookgaard tem tiles só ~33–50; mapa “carregava” mas canvas preto | `resolveEffectiveSpawn()` + `game.config` start `50,50`; módulo compartilhado `src/world/worldBoot.ts` |
 | **Itens altos somem de repente** | `collectItemDepthDrawables` só iterava tiles visíveis; árvore 64×64 sumia quando o SQM do pé saía da tela | Margem + cull por bounding box do sprite + fade 28px na borda (`depthSortDraw.ts`) |
 | **Outfit de jogador remoto** | WS sincronizava só posição/nome; remoto desenhado como quadrado rosa | `PlayerAppearance` no protocolo + ticket + `RemotePlayerSpriteManager` no Play |
+| **Movimento remoto “pulo”** | Remoto desenhado direto no tile do servidor, sem walk | `RemotePlayerSpriteManager` interpola `visualX/Y` + `walk`/`idle` como o grid local |
 
 ---
 

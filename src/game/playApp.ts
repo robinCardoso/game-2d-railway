@@ -648,16 +648,9 @@ function draw(): void {
         ];
 
         if (currentMapId && gameNet) {
-            const remoteEntries = gameNet
-                .getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId())
-                .map((remote) => ({
-                    tileX: remote.tileX,
-                    tileY: remote.tileY,
-                    z: remote.z,
-                    name: remote.name,
-                    direction: remote.direction,
-                    controller: remoteSprites.get(remote.playerId),
-                }));
+            const remoteEntries = remoteSprites.buildRemoteDepthEntries(
+                gameNet.getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId())
+            );
             depthDrawables.push(
                 ...collectRemoteDepthDrawables(remoteEntries, z, camState, TILE_SIZE_SCREEN)
             );

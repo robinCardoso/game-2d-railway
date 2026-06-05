@@ -1,375 +1,336 @@
-O WebSocket está sincronizando posição e nome, mas ainda não está sincronizando a aparência/sprite/outfit do outro jogador.
+Agora você está exatamente no próximo problema natural:
 
-Hoje o PlayerSnapshot do protocolo tem basicamente:
+O servidor manda “o player foi do tile A para o tile B”, mas o cliente remoto está desenhando direto no tile B.
+Então parece teleporte/pulo, não caminhada.
 
-playerId
-name
-mapId
-instanceId
-tileX
-tileY
-z
+Você precisa de duas coisas separadas:
 
-Ele não carrega outfitId, spriteSheetUrl, gender, vocationId nem direction. Então o cliente que vê o outro player sabe onde ele está e qual é o nome dele, mas não sabe qual sprite deve desenhar. Isso aparece no protocolo atual compartilhado entre servidor e cliente.
+1. Interpolação visual entre SQMs
+2. Animação walk loop da outfit
 
-No servidor, o toSnapshot() também retorna só esses dados básicos do jogador, sem aparência.
+Não mexa no servidor agora. O servidor já deve continuar mandando estado discreto por tile. A suavização deve ser no cliente.
 
-Então está funcionando o multiplayer, mas ainda está faltando a camada de network appearance.
+Como deve funcionar
 
-Como o sistema deveria funcionar
+O servidor continua sendo autoritativo:
 
-O ideal é separar em 2 coisas:
+player saiu de x=50,y=50
+player foi para x=51,y=50
+servidor valida
+servidor envia player_moved
 
-1. Estado de rede
-   posição, mapa, direção, playerId
+O cliente remoto não deve desenhar imediatamente em x=51,y=50.
 
-2. Aparência visual
-   outfitId, spriteSheetUrl, gender, vocationId
+Ele deve fazer:
 
-O servidor não precisa mandar a sprite inteira toda hora. Ele só precisa mandar a referência da aparência quando o jogador entra.
+posição visual atual: x=50,y=50
+posição alvo: x=51,y=50
+durante 180ms/250ms/300ms:
+  interpolar worldX/worldY até o alvo
+quando terminar:
+  trava exatamente no tile alvo
 
-Exemplo:
+E enquanto está interpolando:
 
-export interface PlayerAppearance {
-  outfitId: string;
-  spriteSheetUrl: string;
-  gender: 'male' | 'female';
-  vocationId: string;
-}
+sprite remote = walking
+frame 1 → frame 2 → frame 3 → frame 4
 
-E o snapshot do player deveria virar:
+Quando termina:
 
-export interface PlayerSnapshot {
+sprite remote = idle
+frame parado
+Estrutura recomendada
+
+Hoje o RemotePlayerSpriteManager carrega a sprite e guarda SpriteAnimationController por player. Ele já atualiza direção no ensurePlayer e chama ctrl.update(nowMs) no tick.
+
+Agora você precisa evoluir ele para guardar também estado visual de movimento.
+
+Eu criaria um novo tipo:
+
+type RemoteVisualState = {
   playerId: string;
-  name: string;
-
-  mapId: string;
-  instanceId?: string;
 
   tileX: number;
   tileY: number;
   z: number;
-  direction: 'north' | 'south' | 'east' | 'west';
 
-  appearance: PlayerAppearance;
-}
+  visualX: number;
+  visualY: number;
 
-Assim, quando você abre 2 abas:
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
 
-Aba 1 entra com Knight male
-Aba 2 recebe PlayerSnapshot do Knight male
-Aba 2 carrega /tiles/characters/knight_male.png
-Aba 2 desenha o outro player com a outfit correta
-Onde ajustar no seu sistema
-1. shared/protocol.ts
+  moveStartedAt: number;
+  moveDurationMs: number;
+  moving: boolean;
 
-Adicionar aparência no PlayerSnapshot.
-
-Algo assim:
-
-export interface PlayerAppearance {
-  outfitId: string;
-  spriteSheetUrl: string;
-  gender: 'male' | 'female';
-  vocationId: string;
-}
-
-export interface PlayerSnapshot {
-  playerId: string;
-  name: string;
-
-  mapId: string;
-  instanceId?: string;
-
-  tileX: number;
-  tileY: number;
-  z: number;
-  direction: 'north' | 'south' | 'east' | 'west';
-
-  appearance: PlayerAppearance;
-}
-
-E no PlayerMovedMessage, eu também adicionaria direction:
-
-export interface PlayerMovedMessage {
-  type: 'player_moved';
-  v: number;
-  playerId: string;
-  tileX: number;
-  tileY: number;
-  z: number;
-  mapId: string;
-  instanceId?: string;
-  direction?: 'north' | 'south' | 'east' | 'west';
-}
-
-Porque o outro jogador precisa virar para a direção certa.
-
-2. POST /api/ws-ticket
-
-O ticket hoje já leva dados importantes do personagem, como characterId, accountId, name, mapId, tileX, tileY, z e direction. Mas ele precisa levar também:
-
-outfitId
-spriteSheetUrl
-gender
-vocationId
-
-Então quando o backend buscar o personagem no banco para gerar o ticket, inclua esses dados.
-
-Exemplo conceitual:
-
-const ticketPayload = {
-  characterId: character.id,
-  accountId: user.id,
-  name: character.name,
-
-  mapId: character.map_id,
-  tileX: character.position_x,
-  tileY: character.position_y,
-  z: character.position_z,
-  direction: character.direction,
-
-  appearance: {
-    outfitId: character.outfit_id,
-    spriteSheetUrl: character.sprite_sheet_url,
-    gender: character.gender,
-    vocationId: character.vocation_id,
-  },
+  lastDirection: 'north' | 'south' | 'east' | 'west';
+  controller: SpriteAnimationController;
 };
-3. server/src/GameRoom.ts
 
-No ConnectedPlayer, adicionar:
+Ou seja: o player remoto passa a ter duas posições:
 
-appearance: PlayerAppearance;
+posição lógica:
+  tileX, tileY
 
-No handleJoin, depois de validar o ticket:
+posição visual:
+  visualX, visualY
 
-appearance = ticket.appearance;
+A posição lógica vem do servidor.
+A posição visual é interpolada no cliente.
 
-No toSnapshot, retornar:
+Implementação prática
+1. Criar movimento remoto dentro de RemotePlayerSpriteManager
 
-private toSnapshot(p: ConnectedPlayer): PlayerSnapshot {
-  return {
-    playerId: p.id,
-    name: p.name,
-    mapId: p.mapId,
-    instanceId: p.instanceId,
-    tileX: p.tileX,
-    tileY: p.tileY,
-    z: p.z,
-    direction: p.direction,
-    appearance: p.appearance,
-  };
+Em vez de o playApp desenhar o remoto direto pelo tileX/tileY, o manager deve expor algo como:
+
+remoteSprites.getDrawableState(playerId)
+
+retornando:
+
+{
+  worldX: visualX,
+  worldY: visualY,
+  worldZ: z,
+  controller
+}
+Função de update
+
+Dentro de RemotePlayerSpriteManager, no sync(players):
+
+sync(players: PlayerSnapshot[]): void {
+  const now = performance.now();
+
+  for (const player of players) {
+    void this.ensurePlayer(player);
+
+    const state = this.states.get(player.playerId);
+    if (!state) continue;
+
+    this.applyNetworkPosition(state, player, now);
+  }
 }
 
-E no player_moved, mandar direção:
+A função applyNetworkPosition:
 
-const payload: ServerMessage = {
-  type: 'player_moved',
-  v: PROTOCOL_VERSION,
-  playerId: player.id,
-  tileX: player.tileX,
-  tileY: player.tileY,
-  z: player.z,
-  mapId: player.mapId,
-  instanceId: player.instanceId,
-  direction: player.direction,
-};
-4. GameNetClient
+private applyNetworkPosition(
+  state: RemoteVisualState,
+  player: PlayerSnapshot,
+  now: number
+): void {
+  const targetWorldX = player.tileX * TILE_SIZE_SCREEN;
+  const targetWorldY = player.tileY * TILE_SIZE_SCREEN;
 
-Quando receber:
+  const changed =
+    player.tileX !== state.tileX ||
+    player.tileY !== state.tileY ||
+    player.z !== state.z;
 
-welcome
-player_joined
-state_sync
+  if (!changed) {
+    state.lastDirection = player.direction;
+    state.controller.setDirection(protocolDirectionToSprite(player.direction));
+    return;
+  }
 
-ele deve guardar o player com aparência.
+  state.fromX = state.visualX;
+  state.fromY = state.visualY;
+  state.toX = targetWorldX;
+  state.toY = targetWorldY;
 
-Quando receber:
+  state.tileX = player.tileX;
+  state.tileY = player.tileY;
+  state.z = player.z;
 
-player_moved
+  state.moveStartedAt = now;
+  state.moveDurationMs = 220;
+  state.moving = true;
+  state.lastDirection = player.direction;
 
-ele só atualiza:
+  state.controller.setDirection(protocolDirectionToSprite(player.direction));
+  state.controller.setMoving?.(true);
+}
 
-posição
-mapa
-z
-direction
+Se o seu SpriteAnimationController ainda não tiver setMoving, aí precisa adicionar.
 
-Não precisa reenviar appearance em todo movimento.
+2. Interpolar no tick
 
-5. Renderização no playApp
+No tick(nowMs) do manager:
 
-Hoje provavelmente o outro player está sendo desenhado como marcador simples/nome, porque o cliente não tem sprite dele.
+tick(nowMs: number): void {
+  for (const state of this.states.values()) {
+    if (state.moving) {
+      const t = Math.min(
+        1,
+        (nowMs - state.moveStartedAt) / state.moveDurationMs
+      );
 
-O ideal é criar um controlador visual para cada remote player:
+      const eased = t; // depois pode usar easeOut
 
-const remoteCharacterControllers = new Map<string, CharacterSpriteController>();
+      state.visualX = state.fromX + (state.toX - state.fromX) * eased;
+      state.visualY = state.fromY + (state.toY - state.fromY) * eased;
 
-Quando chegar um player novo:
+      if (t >= 1) {
+        state.visualX = state.toX;
+        state.visualY = state.toY;
+        state.moving = false;
+        state.controller.setMoving?.(false);
+      }
+    }
 
-player_joined
+    state.controller.update(nowMs);
+  }
+}
 
-o client faz:
+Para começar, use linear. Depois você pode melhorar com:
 
-createRemoteCharacterController(player.appearance.spriteSheetUrl);
+const eased = t < 0.5
+  ? 2 * t * t
+  : 1 - Math.pow(-2 * t + 2, 2) / 2;
 
-Quando o player sair:
+Mas linear já resolve o “pulo”.
 
-player_left
+3. Walk loop da outfit
 
-remove:
+O SpriteAnimationController precisa saber quando tocar animação.
 
-remoteCharacterControllers.delete(playerId);
+A ideia correta:
 
-Quando ele se mover:
+local player:
+  andando pelo input → walking true
+  parado → walking false
 
-player_moved
+remote player:
+  interpolando entre tiles → walking true
+  chegou no alvo → walking false
 
-atualiza posição/direção e anima.
+Se hoje o controller troca frame sempre ou só usa idle, adicione estado:
 
-Fluxo correto final
+private moving = false;
 
-O fluxo ideal fica assim:
+setMoving(value: boolean): void {
+  this.moving = value;
+  if (!value) {
+    this.currentFrame = this.getIdleFrameForDirection();
+  }
+}
 
-1. Jogador cria personagem
-   salva vocation_id, gender, outfit_id, sprite_sheet_url
+No update(nowMs):
 
-2. Jogador entra no play
-   frontend pede /api/ws-ticket
+update(nowMs: number): void {
+  if (!this.moving) {
+    this.frameIndex = 0;
+    return;
+  }
 
-3. Backend gera ticket com:
-   characterId
-   accountId
-   nome
-   posição
-   direção
-   appearance
+  if (nowMs - this.lastFrameAt >= this.frameDurationMs) {
+    this.frameIndex = (this.frameIndex + 1) % this.walkFrames.length;
+    this.lastFrameAt = nowMs;
+  }
+}
 
-4. Cliente conecta no WebSocket
-   envia join + ticket
+O importante: a animação não deve depender de chegar mensagem nova do servidor. Ela deve depender do estado moving.
 
-5. Servidor valida ticket
-   cria ConnectedPlayer com posição + aparência
+Duração do movimento
 
-6. Servidor envia para os outros:
-   player_joined com PlayerSnapshot completo
+Para agora, eu usaria:
 
-7. Outros clientes carregam spriteSheetUrl
-   desenham a outfit correta
+remote move duration: 220ms
+walk frame duration: 80ms a 120ms
 
-8. Durante movimento:
-   servidor envia só posição + direção
-Dica importante de performance
+Por quê?
 
-Não mande isso a cada movimento:
+Se ficar muito rápido:
 
-spriteSheetUrl
-outfitId
-gender
-vocationId
-nome
+parece teleporte
 
-Mande isso só em:
+Se ficar muito lento:
 
-welcome
-player_joined
-state_sync
+remote fica atrasado demais
 
-E no movimento mande só:
+Como o seu jogo é por grid, algo entre 180ms e 260ms costuma ficar bom.
 
-playerId
-tileX
-tileY
-z
-mapId
-instanceId
-direction
+Mais para frente, isso deve vir do servidor:
 
-Isso reduz muito o tráfego.
+stepDurationMs
 
-Performance para MMORPG 2D
+Porque knight, mage, buff de speed, terreno lento etc. podem mudar o tempo do passo.
 
-Para seu jogo, eu seguiria essas regras desde agora:
+Mas agora pode ser fixo.
 
-1. Atualização só por sala/mapa
+Importante: não sincronizar pixel por rede
 
-Você já está fazendo isso com roomKey. Ótimo.
+Não faça o servidor mandar:
 
-O player em Rookgaard não precisa receber movimento de player em outro mapa.
+worldX/worldY a cada frame
 
-2. Depois, limitar por distância
+Isso seria pior para performance.
 
-Hoje, se tiver 100 players no mesmo mapa, todo mundo pode receber todo mundo.
+O certo é:
 
-Mais para frente, faça “área de interesse”:
+servidor manda tile discreto
+cliente interpola visualmente
 
-só envia players num raio de 15 a 25 tiles
+Esse é o modelo ideal para seu tipo de jogo.
 
-Exemplo:
+Cuidado com o depth sort
 
-player A em x=100, y=100
-player B em x=180, y=180
-não precisa sincronizar
+Quando você interpolar o remoto, o desenho deve usar:
 
-Isso é uma das maiores otimizações para MMORPG.
+visualX / visualY
 
-3. Não salvar posição a cada passo
+mas a ordenação de profundidade pode usar:
 
-Você já fez certo salvando por fila/intervalo no servidor.
+visualY + altura do sprite
 
-Mantenha assim:
+ou pode continuar usando tileY no começo.
 
-salvar posição a cada 15–30 segundos
-salvar ao desconectar
-salvar ao trocar mapa
+Para ficar bonito, eu recomendo:
 
-Nunca:
+sortY = visualY + TILE_SIZE_SCREEN;
 
-salvar no banco a cada movimento
-4. Preload/cache de sprites
+Assim, enquanto o player anda, ele passa na frente/atrás de objetos com mais naturalidade.
 
-Quando receber spriteSheetUrl, carregue uma vez e guarde em cache:
+Como você já usa collectRemoteDepthDrawables e drawDepthSorted, a mudança deve ficar concentrada ali: em vez de usar player.tileX * tileSize, usar a posição visual do manager. O commit mostra que você já mexeu no depthSortDraw.ts para desenhar remotos com sprite real, então esse é o lugar certo para adaptar o desenho.
 
-const imageCache = new Map<string, HTMLImageElement>();
+Ordem que eu faria agora
+Commit 1 — suavizar movimento remoto
+feat: interpolate remote player movement
 
-Se 10 knights usam a mesma sprite, carrega uma vez só.
+Mudanças:
 
-5. Movimento por tile, não pixel livre
+RemotePlayerSpriteManager
+  - guardar visualX/visualY
+  - detectar mudança de tile
+  - interpolar no tick
+  - expor estado visual para desenho
 
-Continue usando movimento por tile. É muito mais barato e mais fácil de validar.
+playApp/depthSortDraw
+  - usar visualX/visualY para desenhar remoto
 
-O cliente pode animar suave visualmente, mas a posição oficial é:
+Esse commit resolve o “pulo de SQM”.
 
-tileX
-tileY
-z
-6. JSON está ok agora
+Commit 2 — walk loop do remoto
+feat: animate remote player walk cycle
 
-Para MVP, JSON no WebSocket está ótimo.
+Mudanças:
 
-Só pense em binário depois que tiver muitos jogadores online. Agora seria complexidade desnecessária.
+SpriteAnimationController
+  - setMoving(true/false)
+  - tocar walk frames quando moving
+  - idle quando parado
 
-O que eu faria agora
+RemotePlayerSpriteManager
+  - setMoving(true) ao iniciar interpolação
+  - setMoving(false) ao terminar
 
-Eu faria um commit focado só nisso:
+Esse commit resolve o “outfit andando”.
 
-feat: sync remote player appearance over websocket
+Commit 3 — walk loop do local, se ainda não estiver completo
+feat: animate local player walk cycle from grid movement
 
-Com estas mudanças:
+Se o local já anima, ótimo. Se não, aplique a mesma regra:
 
-1. Adicionar PlayerAppearance no protocol.ts
-2. Incluir appearance no ws-ticket
-3. Guardar appearance no ConnectedPlayer
-4. Enviar appearance em PlayerSnapshot
-5. Enviar direction no player_moved
-6. Cliente criar sprite controller para remote players
-7. Cachear spriteSheetUrl
-
-Depois disso, quando você abrir duas abas, o esperado é:
-
-Aba 1 vê o player 2 com outfit correta
-Aba 2 vê o player 1 com outfit correta
-nomes aparecem corretamente
-movimento sincronizado
-direção muda corretamente
+gridMovement ativo → controller moving true
+gridMovement parado → controller moving false
