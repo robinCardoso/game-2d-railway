@@ -30,6 +30,7 @@ export interface PlayerMovementController {
     }): { editingFloor: number };
     teleportPlayer(options: {
         player: any;
+        gridMovement: any;
         camera: { x: number; y: number };
         canvas: HTMLCanvasElement;
         x: number;
@@ -71,7 +72,7 @@ export const PlayerMovement: PlayerMovementController = {
             refreshPlayerMovementSpeed(nowMs);
         }
 
-        primeMovementFacingKeys(keys);
+        primeMovementFacingKeys(gridMovement, keys);
         const keyState = buildMovementKeyState(keys);
 
         // 1. Grid primeiro — novo passo/direção só após deslize anterior concluir
@@ -94,7 +95,7 @@ export const PlayerMovement: PlayerMovementController = {
 
         // 2. Sprite — face travada durante deslize; teclas novas só após concluir
         const lockedFacing = getActiveStepFacing(gridMovement);
-        const spriteDir = lockedFacing ?? resolveSpriteDirection(keys);
+        const spriteDir = lockedFacing ?? resolveSpriteDirection(gridMovement, keys);
         if (spriteDir) {
             const animDirMap = {
                 north: 'up',
@@ -146,6 +147,7 @@ export const PlayerMovement: PlayerMovementController = {
     teleportPlayer(options) {
         const {
             player,
+            gridMovement,
             camera,
             canvas,
             x,
@@ -165,7 +167,7 @@ export const PlayerMovement: PlayerMovementController = {
         const clampedY = Math.max(0, Math.min(MAP_SIZE - 1, Math.floor(y)));
         const clampedZ = Math.max(ENGINE_CONFIG.MIN_FLOOR_Z, Math.min(ENGINE_CONFIG.MAX_FLOOR_Z, Math.floor(z)));
 
-        resetGridMovementInputState();
+        resetGridMovementInputState(gridMovement);
 
         // 2. Atualiza os dados físicos tridimensionais do jogador
         player.tileX = clampedX;

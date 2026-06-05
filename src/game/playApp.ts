@@ -752,7 +752,8 @@ function setupNetwork(char: CharacterRow, accountId: string): void {
             z: player.worldZ,
             direction: getPlayerDirection(),
             appearance: localAppearance,
-            stepDurationMs: gridMovement.stepDurationMs,
+            stepDurationMs:
+                gridMovement.lastCompletedStepDurationMs || gridMovement.stepDurationMs,
         }),
         isMovementStepping: () => gridMovement.stepping,
         onPositionCorrection: (pos) => {
@@ -762,7 +763,7 @@ function setupNetwork(char: CharacterRow, accountId: string): void {
             player.worldZ = clampFloorZ(pos.z);
             gridMovement.stepping = false;
             gridMovement.activeStepFacing = null;
-            resetGridMovementInputState();
+            resetGridMovementInputState(gridMovement);
             syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
         },
     });

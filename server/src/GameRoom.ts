@@ -7,6 +7,7 @@ import type {
 } from '../../shared/protocol.js';
 import {
     isValidTile,
+    MIN_SERVER_STEP_DURATION_MS,
     parseClientMessage,
     parseStepDurationMs,
     PROTOCOL_VERSION,
@@ -19,6 +20,9 @@ import type { MapInstanceStore } from './MapInstanceStore.js';
 import { isInstancedMap } from './mapRegistry.js';
 import { verifyEnterTicket } from './enterTicket.js';
 import { PositionPersistence } from './game/PositionPersistence.js';
+
+/** Tolerância de jitter de rede no intervalo mínimo entre passos (0.85 = 15% mais rápido que o step). */
+const MOVE_RATE_LIMIT_TOLERANCE = 0.85;
 
 const DEFAULT_APPEARANCE: PlayerAppearance = {
     outfitId: 'knight',
@@ -41,6 +45,10 @@ interface ConnectedPlayer {
     z: number;
     /** Última duração de passo reportada pelo cliente (interpolação remota). */
     lastStepDurationMs?: number;
+    /** 0 = primeiro passo após join sempre aceito. */
+    lastMoveAcceptedAtMs: number;
+    /** Intervalo real entre os últimos passos aceitos (ms) — calibra rate limit. */
+    lastObservedMoveIntervalMs: number;
     socket: WebSocket;
 }
 
@@ -285,6 +293,8 @@ export class GameRoom {
             tileX: joinTileX,
             tileY: joinTileY,
             z: joinZ,
+            lastMoveAcceptedAtMs: 0,
+            lastObservedMoveIntervalMs: 0,
             socket,
         };
 
@@ -399,6 +409,45 @@ export class GameRoom {
                 this.sendPositionCorrection(player);
                 return;
             }
+
+            const tileChanged =
+                from.tileX !== to.tileX ||
+                from.tileY !== to.tileY ||
+                from.z !== to.z;
+            if (tileChanged) {
+                const now = Date.now();
+                const stepMs =
+                    parseStepDurationMs(msg.stepDurationMs) ??
+                    player.lastStepDurationMs ??
+                    MIN_SERVER_STEP_DURATION_MS;
+                const claimedMin = Math.round(stepMs * MOVE_RATE_LIMIT_TOLERANCE);
+                const floorMin = Math.round(
+                    MIN_SERVER_STEP_DURATION_MS * MOVE_RATE_LIMIT_TOLERANCE
+                );
+                let minInterval = Math.max(1, claimedMin);
+                if (player.lastObservedMoveIntervalMs > 0) {
+                    const observedMin = Math.round(
+                        player.lastObservedMoveIntervalMs * MOVE_RATE_LIMIT_TOLERANCE
+                    );
+                    // Não exigir mais que o ritmo real do cliente; floorMin impede speed hack
+                    minInterval = Math.min(claimedMin, Math.max(floorMin, observedMin));
+                }
+                const elapsed = now - player.lastMoveAcceptedAtMs;
+                if (player.lastMoveAcceptedAtMs > 0 && elapsed < minInterval) {
+                    console.warn(
+                        `[GameRoom] movimento rápido demais: ${player.name} ` +
+                            `${elapsed}ms < ${minInterval}ms (step ${stepMs}ms, obs ${player.lastObservedMoveIntervalMs}ms)`
+                    );
+                    this.send(socket, {
+                        type: 'error',
+                        v: PROTOCOL_VERSION,
+                        code: 'MOVEMENT_TOO_FAST',
+                        message: 'Movimento rejeitado: aguarde o intervalo do passo.',
+                    });
+                    this.sendPositionCorrection(player);
+                    return;
+                }
+            }
         }
 
         const oldRoom = this.roomKey(player);
@@ -470,6 +519,18 @@ export class GameRoom {
             );
         } else {
             this.broadcastToRoom(newRoom, payload, player.id);
+        }
+
+        const acceptedAt = Date.now();
+        if (isMapChange || mapChanged) {
+            player.lastMoveAcceptedAtMs = 0;
+            player.lastObservedMoveIntervalMs = 0;
+        } else {
+            if (player.lastMoveAcceptedAtMs > 0) {
+                player.lastObservedMoveIntervalMs =
+                    acceptedAt - player.lastMoveAcceptedAtMs;
+            }
+            player.lastMoveAcceptedAtMs = acceptedAt;
         }
     }
 

@@ -40,6 +40,10 @@ Documento de referência para humanos e agentes IA. **Atualizar este arquivo** q
 | **Doc escala multiplayer** | Roadmap para muitos players online não estava centralizado | [docs/multiplayer-remote-players.md](./multiplayer-remote-players.md) — estado atual + Fases A–D |
 | **Diagonal no Play (WS)** | `isAdjacentStep` só aceitava ortogonal; servidor rejeitava W+D e `position_correction` puxava o jogador | `canAdjacentStep` em `shared/tileWalkable.ts` + reset `gridMovement.stepping` na correção |
 | **Pulo ao mudar direção** | Sprite/rede mudavam de face antes do deslize terminar → `position_correction` | `activeStepFacing` trava sprite no passo; grid tick antes do sprite; rede adia sync só de direção durante deslize |
+| **Clamp stepDuration servidor** | Cliente podia mandar 16ms; GPT sugeriu 80ms mas conflita com speed 55ms | `MIN_SERVER_STEP_DURATION_MS` 55 em `shared/protocol.ts` |
+| **Input movimento global** | `chordHeldSinceMs` / facing em módulo — risco Play+Studio/reload | Estado no `GridMovementController`; `resetGridMovementInputState(ctrl)` |
+| **Rate limit movimento WS** | Cliente podia floodar `move` mesmo com clamp de duração | `GameRoom`: `lastMoveAcceptedAtMs` + intervalo `stepMs × 0.85`; código `MOVEMENT_TOO_FAST` |
+| **Rate limit falso positivo** | Sync mandava duração do *próximo* passo (terreno lento) ≠ ritmo real (~331ms vs 453ms) | `lastCompletedStepDurationMs` no cliente + `lastObservedMoveIntervalMs` no servidor |
 
 ---
 

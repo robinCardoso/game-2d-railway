@@ -61,13 +61,14 @@ sequenceDiagram
 | `PlayerAppearance` | `welcome`, `player_joined`, `state_sync`, ticket WS |
 | `direction` | `player_moved`, snapshots |
 | `stepDurationMs` | `move`, `map_change` (C→S) → `player_moved` (S→C) |
-| `parseStepDurationMs()` | Clamp **16–600 ms** |
+| `parseStepDurationMs()` | Clamp **55–600 ms** (`MIN_SERVER_STEP_DURATION_MS` = `AT_MAX_SPEED`) |
 
 **Não reenviar** `appearance` nem `stepDurationMs` em todo frame — só em join e a cada passo.
 
 ### 2.2 Servidor (`server/src/GameRoom.ts`)
 
 - Valida tile, passo adjacente, walkable, sala `mapId@instanceId`.
+- **Rate limit:** `lastMoveAcceptedAtMs` — intervalo mínimo `stepDurationMs × 0.85` entre passos (`MOVEMENT_TOO_FAST`).
 - Guarda `lastStepDurationMs` do cliente e repassa em `player_moved`.
 - Kick por `characterId` duplicado na mesma conexão.
 

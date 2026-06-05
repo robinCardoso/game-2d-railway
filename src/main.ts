@@ -747,6 +747,7 @@ teleportConfirmBtn?.addEventListener('click', () => {
 
     const result = PlayerMovement.teleportPlayer({
         player,
+        gridMovement,
         camera,
         canvas,
         x: tx,
@@ -1352,6 +1353,7 @@ spawnEditorController = initSpawnEditor({
 function focusEditorOnTile(tileX: number, tileY: number, tileZ: number): void {
     const result = PlayerMovement.teleportPlayer({
         player,
+        gridMovement,
         camera,
         canvas,
         x: tileX,

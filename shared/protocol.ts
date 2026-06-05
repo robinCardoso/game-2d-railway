@@ -184,11 +184,23 @@ export function playerRoomKey(p: Pick<PlayerSnapshot, 'mapId' | 'instanceId'>): 
     return buildRoomKey(p.mapId, p.instanceId);
 }
 
-/** Duração de passo em ms — clamp alinhado ao grid local (16–600ms). */
+/**
+ * Duração mínima aceita no servidor (ms).
+ * 55 = `STEP_DURATION_BY_SPEED.AT_MAX_SPEED` — não subir sem atualizar a curva de speed.
+ */
+export const MIN_SERVER_STEP_DURATION_MS = 55;
+
+/** Duração máxima aceita no servidor (ms), inclui diagonal (√2 × passo rápido). */
+export const MAX_SERVER_STEP_DURATION_MS = 600;
+
+/** Duração de passo em ms — clamp servidor/rede (55–600ms). */
 export function parseStepDurationMs(raw: unknown): number | undefined {
     const n = Number(raw);
     if (!Number.isFinite(n)) return undefined;
-    return Math.max(16, Math.min(600, Math.round(n)));
+    return Math.max(
+        MIN_SERVER_STEP_DURATION_MS,
+        Math.min(MAX_SERVER_STEP_DURATION_MS, Math.round(n))
+    );
 }
 
 export function parsePlayerAppearance(raw: unknown): PlayerAppearance | undefined {
