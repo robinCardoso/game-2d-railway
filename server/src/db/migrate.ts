@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import { getPool, isDatabaseConfigured } from './pool.js';
+import { paths } from '../config/paths.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const migrationsDir = path.resolve(__dirname, '../../../database/migrations');
+const migrationsDir = path.join(paths.projectRoot, 'database', 'migrations');
 
 export async function runMigrations(): Promise<void> {
     if (!isDatabaseConfigured()) {
