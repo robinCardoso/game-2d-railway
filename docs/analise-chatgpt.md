@@ -1,51 +1,53 @@
-Agora você está exatamente no próximo problema natural:
+“anda e trava” acontece porque o remoto está fazendo isso:
 
-O servidor manda “o player foi do tile A para o tile B”, mas o cliente remoto está desenhando direto no tile B.
-Então parece teleporte/pulo, não caminhada.
+recebe tile novo
+anda visualmente até o tile
+chega no destino
+entra em idle
+espera próximo pacote
+recebe próximo tile
+anda de novo
+entra em idle
 
-Você precisa de duas coisas separadas:
+No seu commit, o RemotePlayerSpriteManager usa interpolação visual e quando t >= 1 ele faz:
 
-1. Interpolação visual entre SQMs
-2. Animação walk loop da outfit
+state.moving = false;
+state.controller.setState('idle');
 
-Não mexa no servidor agora. O servidor já deve continuar mandando estado discreto por tile. A suavização deve ser no cliente.
+Além disso, a duração remota está fixa em pelo menos 200ms:
 
-Como deve funcionar
+const REMOTE_STEP_DURATION_MS = Math.max(DEFAULT_GRID_STEP_DURATION_MS, 200);
 
-O servidor continua sendo autoritativo:
+Então, se o próximo pacote de movimento demora um pouco mais que o tempo da interpolação, o remoto chega no tile, para, toca idle e depois volta a andar. É exatamente essa sensação de anda → trava → anda → trava.
 
-player saiu de x=50,y=50
-player foi para x=51,y=50
-servidor valida
-servidor envia player_moved
+O GameNetClient também só envia movimento quando a posição lógica muda (tileX, tileY, z, direction). Isso está correto para performance, mas significa que o remoto recebe “passos discretos”, não fluxo contínuo.
 
-O cliente remoto não deve desenhar imediatamente em x=51,y=50.
+O que eu faria agora
 
-Ele deve fazer:
+Eu não mudaria o servidor ainda.
+Eu ajustaria o cliente remoto com uma técnica simples:
 
-posição visual atual: x=50,y=50
-posição alvo: x=51,y=50
-durante 180ms/250ms/300ms:
-  interpolar worldX/worldY até o alvo
-quando terminar:
-  trava exatamente no tile alvo
+não colocar o remoto em idle imediatamente quando chega no tile.
 
-E enquanto está interpolando:
+Em vez disso, mantenha a animação de caminhada por uma pequena janela de tempo, esperando o próximo passo.
 
-sprite remote = walking
-frame 1 → frame 2 → frame 3 → frame 4
+Algo como:
 
-Quando termina:
+chegou no tile
+continua em walk por mais 120ms
+se vier outro movimento dentro desse tempo, continua andando
+se não vier, aí sim muda para idle
 
-sprite remote = idle
-frame parado
-Estrutura recomendada
+Isso remove a sensação de travadinha.
 
-Hoje o RemotePlayerSpriteManager carrega a sprite e guarda SpriteAnimationController por player. Ele já atualiza direção no ensurePlayer e chama ctrl.update(nowMs) no tick.
+Correção 1 — adicionar “grace time” antes do idle
 
-Agora você precisa evoluir ele para guardar também estado visual de movimento.
+No RemoteVisualState, adicione:
 
-Eu criaria um novo tipo:
+idleAfterMs: number;
+lastMovePacketAt: number;
+
+Ficaria assim:
 
 type RemoteVisualState = {
   playerId: string;
@@ -66,271 +68,186 @@ type RemoteVisualState = {
   moveDurationMs: number;
   moving: boolean;
 
-  lastDirection: 'north' | 'south' | 'east' | 'west';
+  idleAfterMs: number;
+  lastMovePacketAt: number;
+
   controller: SpriteAnimationController;
 };
 
-Ou seja: o player remoto passa a ter duas posições:
+Crie uma constante:
 
-posição lógica:
-  tileX, tileY
+const REMOTE_IDLE_GRACE_MS = 140;
 
-posição visual:
-  visualX, visualY
+Quando iniciar movimento:
 
-A posição lógica vem do servidor.
-A posição visual é interpolada no cliente.
+state.lastMovePacketAt = nowMs;
+state.idleAfterMs = nowMs + duration + REMOTE_IDLE_GRACE_MS;
+state.moving = true;
+state.controller.setState('walk');
 
-Implementação prática
-1. Criar movimento remoto dentro de RemotePlayerSpriteManager
+No tick, mude esta parte:
 
-Em vez de o playApp desenhar o remoto direto pelo tileX/tileY, o manager deve expor algo como:
-
-remoteSprites.getDrawableState(playerId)
-
-retornando:
-
-{
-  worldX: visualX,
-  worldY: visualY,
-  worldZ: z,
-  controller
-}
-Função de update
-
-Dentro de RemotePlayerSpriteManager, no sync(players):
-
-sync(players: PlayerSnapshot[]): void {
-  const now = performance.now();
-
-  for (const player of players) {
-    void this.ensurePlayer(player);
-
-    const state = this.states.get(player.playerId);
-    if (!state) continue;
-
-    this.applyNetworkPosition(state, player, now);
-  }
+if (t >= 1) {
+  state.visualX = state.toX;
+  state.visualY = state.toY;
+  state.moving = false;
+  state.controller.setState('idle');
 }
 
-A função applyNetworkPosition:
+Para:
 
-private applyNetworkPosition(
-  state: RemoteVisualState,
-  player: PlayerSnapshot,
-  now: number
-): void {
-  const targetWorldX = player.tileX * TILE_SIZE_SCREEN;
-  const targetWorldY = player.tileY * TILE_SIZE_SCREEN;
-
-  const changed =
-    player.tileX !== state.tileX ||
-    player.tileY !== state.tileY ||
-    player.z !== state.z;
-
-  if (!changed) {
-    state.lastDirection = player.direction;
-    state.controller.setDirection(protocolDirectionToSprite(player.direction));
-    return;
-  }
-
-  state.fromX = state.visualX;
-  state.fromY = state.visualY;
-  state.toX = targetWorldX;
-  state.toY = targetWorldY;
-
-  state.tileX = player.tileX;
-  state.tileY = player.tileY;
-  state.z = player.z;
-
-  state.moveStartedAt = now;
-  state.moveDurationMs = 220;
-  state.moving = true;
-  state.lastDirection = player.direction;
-
-  state.controller.setDirection(protocolDirectionToSprite(player.direction));
-  state.controller.setMoving?.(true);
+if (t >= 1) {
+  state.visualX = state.toX;
+  state.visualY = state.toY;
+  state.moving = false;
 }
 
-Se o seu SpriteAnimationController ainda não tiver setMoving, aí precisa adicionar.
+E depois, fora do bloco de interpolação:
 
-2. Interpolar no tick
-
-No tick(nowMs) do manager:
-
-tick(nowMs: number): void {
-  for (const state of this.states.values()) {
-    if (state.moving) {
-      const t = Math.min(
-        1,
-        (nowMs - state.moveStartedAt) / state.moveDurationMs
-      );
-
-      const eased = t; // depois pode usar easeOut
-
-      state.visualX = state.fromX + (state.toX - state.fromX) * eased;
-      state.visualY = state.fromY + (state.toY - state.fromY) * eased;
-
-      if (t >= 1) {
-        state.visualX = state.toX;
-        state.visualY = state.toY;
-        state.moving = false;
-        state.controller.setMoving?.(false);
-      }
-    }
-
-    state.controller.update(nowMs);
-  }
+if (!state.moving && nowMs >= state.idleAfterMs) {
+  state.controller.setState('idle');
 }
 
-Para começar, use linear. Depois você pode melhorar com:
+Assim o personagem não “pisa no freio” imediatamente entre um SQM e outro.
 
-const eased = t < 0.5
-  ? 2 * t * t
-  : 1 - Math.pow(-2 * t + 2, 2) / 2;
+Correção 2 — usar duração remota um pouco maior que o passo real
 
-Mas linear já resolve o “pulo”.
+Hoje o remoto usa duração fixa de 200ms. Isso pode ser pouco se o personagem local estiver andando com passo real de 230ms, 260ms, 300ms, dependendo de speed/terreno.
 
-3. Walk loop da outfit
-
-O SpriteAnimationController precisa saber quando tocar animação.
-
-A ideia correta:
-
-local player:
-  andando pelo input → walking true
-  parado → walking false
-
-remote player:
-  interpolando entre tiles → walking true
-  chegou no alvo → walking false
-
-Se hoje o controller troca frame sempre ou só usa idle, adicione estado:
-
-private moving = false;
-
-setMoving(value: boolean): void {
-  this.moving = value;
-  if (!value) {
-    this.currentFrame = this.getIdleFrameForDirection();
-  }
-}
-
-No update(nowMs):
-
-update(nowMs: number): void {
-  if (!this.moving) {
-    this.frameIndex = 0;
-    return;
-  }
-
-  if (nowMs - this.lastFrameAt >= this.frameDurationMs) {
-    this.frameIndex = (this.frameIndex + 1) % this.walkFrames.length;
-    this.lastFrameAt = nowMs;
-  }
-}
-
-O importante: a animação não deve depender de chegar mensagem nova do servidor. Ela deve depender do estado moving.
-
-Duração do movimento
-
-Para agora, eu usaria:
-
-remote move duration: 220ms
-walk frame duration: 80ms a 120ms
-
-Por quê?
-
-Se ficar muito rápido:
-
-parece teleporte
-
-Se ficar muito lento:
-
-remote fica atrasado demais
-
-Como o seu jogo é por grid, algo entre 180ms e 260ms costuma ficar bom.
-
-Mais para frente, isso deve vir do servidor:
+O ideal é que o servidor envie junto no player_moved:
 
 stepDurationMs
 
-Porque knight, mage, buff de speed, terreno lento etc. podem mudar o tempo do passo.
+Mas para não mexer em protocolo agora, você pode melhorar só no cliente:
 
-Mas agora pode ser fixo.
+const REMOTE_STEP_DURATION_MS = 240;
 
-Importante: não sincronizar pixel por rede
+ou:
 
-Não faça o servidor mandar:
+const REMOTE_STEP_DURATION_MS = 260;
 
-worldX/worldY a cada frame
+Minha sugestão prática:
 
-Isso seria pior para performance.
+const REMOTE_STEP_DURATION_MS = 240;
+const REMOTE_IDLE_GRACE_MS = 120;
 
-O certo é:
+Isso geralmente fica mais fluido do que:
 
-servidor manda tile discreto
-cliente interpola visualmente
+200ms + idle imediato
 
-Esse é o modelo ideal para seu tipo de jogo.
+Porque o remoto fica levemente atrasado, mas visualmente contínuo.
 
-Cuidado com o depth sort
+Melhor solução: estimar intervalo entre pacotes
 
-Quando você interpolar o remoto, o desenho deve usar:
+A solução mais inteligente é o remoto medir quanto tempo passa entre um movimento e outro.
 
-visualX / visualY
+No applyNetworkPosition, quando chega tile novo:
 
-mas a ordenação de profundidade pode usar:
+const packetInterval = nowMs - state.lastMovePacketAt;
 
-visualY + altura do sprite
+Depois calcula:
 
-ou pode continuar usando tileY no começo.
+const estimatedDuration = Math.max(
+  160,
+  Math.min(320, packetInterval + 40)
+);
 
-Para ficar bonito, eu recomendo:
+E usa:
 
-sortY = visualY + TILE_SIZE_SCREEN;
+state.moveDurationMs = estimatedDuration;
+state.lastMovePacketAt = nowMs;
+state.idleAfterMs = nowMs + estimatedDuration + REMOTE_IDLE_GRACE_MS;
 
-Assim, enquanto o player anda, ele passa na frente/atrás de objetos com mais naturalidade.
+Com isso:
 
-Como você já usa collectRemoteDepthDrawables e drawDepthSorted, a mudança deve ficar concentrada ali: em vez de usar player.tileX * tileSize, usar a posição visual do manager. O commit mostra que você já mexeu no depthSortDraw.ts para desenhar remotos com sprite real, então esse é o lugar certo para adaptar o desenho.
+se o outro player manda passo a cada 180ms → remoto anda em ~220ms
+se manda a cada 250ms → remoto anda em ~290ms
+se tem pequena latência → suaviza melhor
 
-Ordem que eu faria agora
-Commit 1 — suavizar movimento remoto
-feat: interpolate remote player movement
+Exemplo:
 
-Mudanças:
+const MIN_REMOTE_STEP_MS = 160;
+const MAX_REMOTE_STEP_MS = 320;
+const REMOTE_SMOOTHING_EXTRA_MS = 40;
+const REMOTE_IDLE_GRACE_MS = 120;
 
-RemotePlayerSpriteManager
-  - guardar visualX/visualY
-  - detectar mudança de tile
-  - interpolar no tick
-  - expor estado visual para desenho
+function clamp(v: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, v));
+}
 
-playApp/depthSortDraw
-  - usar visualX/visualY para desenhar remoto
+Dentro de applyNetworkPosition:
 
-Esse commit resolve o “pulo de SQM”.
+const packetInterval =
+  state.lastMovePacketAt > 0
+    ? nowMs - state.lastMovePacketAt
+    : REMOTE_STEP_DURATION_MS;
 
-Commit 2 — walk loop do remoto
-feat: animate remote player walk cycle
+const duration = clamp(
+  packetInterval + REMOTE_SMOOTHING_EXTRA_MS,
+  MIN_REMOTE_STEP_MS,
+  MAX_REMOTE_STEP_MS
+);
 
-Mudanças:
+state.lastMovePacketAt = nowMs;
+state.moveDurationMs = duration;
+state.idleAfterMs = nowMs + duration + REMOTE_IDLE_GRACE_MS;
 
-SpriteAnimationController
-  - setMoving(true/false)
-  - tocar walk frames quando moving
-  - idle quando parado
+Essa é a melhor opção para o seu caso agora.
 
-RemotePlayerSpriteManager
-  - setMoving(true) ao iniciar interpolação
-  - setMoving(false) ao terminar
+Correção 3 — não reiniciar walk se já está andando
 
-Esse commit resolve o “outfit andando”.
+Quando o remoto recebe um novo tile enquanto ainda está interpolando, isso aqui está certo:
 
-Commit 3 — walk loop do local, se ainda não estiver completo
-feat: animate local player walk cycle from grid movement
+state.fromX = state.visualX;
+state.fromY = state.visualY;
 
-Se o local já anima, ótimo. Se não, aplique a mesma regra:
+Mas cuidado para não resetar frame de animação toda hora, dependendo de como setState('walk') funciona.
 
-gridMovement ativo → controller moving true
-gridMovement parado → controller moving false
+Se setState('walk') reinicia o frame para o primeiro frame, o personagem pode parecer “engasgado”.
+
+O ideal é:
+
+if (!state.moving) {
+  state.controller.setState('walk');
+}
+
+Ou no SpriteAnimationController.setState, garantir:
+
+if (this.state === nextState) return;
+
+Assim ele não reinicia o frame de walk a cada pacote.
+
+O que eu implementaria agora
+
+Eu faria um commit pequeno:
+
+fix: smooth continuous remote player movement
+
+Com:
+
+1. Adicionar idle grace no RemotePlayerSpriteManager
+2. Não chamar idle imediatamente ao chegar no tile
+3. Estimar duração pelo intervalo entre pacotes
+4. Evitar resetar animação walk se já estiver andando
+
+Resultado esperado:
+
+antes:
+anda → para → anda → para
+
+depois:
+anda → continua fluindo → continua fluindo → para só quando realmente parou
+Depois disso: solução mais profissional
+
+Quando você quiser deixar perfeito, aí sim mexe no protocolo:
+
+player_moved {
+  tileX,
+  tileY,
+  z,
+  direction,
+  stepDurationMs,
+  serverTime
+}
+
+Aí o remoto usa a duração real do passo. Mas agora eu não mexeria nisso ainda.

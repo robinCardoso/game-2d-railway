@@ -2,10 +2,7 @@ import { ENGINE_CONFIG } from '../engine/config';
 import type { RemotePlayerDepthEntry } from '../engine/depthSortDraw';
 import type { PlayerSnapshot } from '../../shared/protocol';
 import { SpriteAnimationController } from '../character/spriteAnimation';
-import {
-    DIAGONAL_STEP_DURATION_FACTOR,
-    DEFAULT_GRID_STEP_DURATION_MS,
-} from '../movement/gridMovement';
+import { DIAGONAL_STEP_DURATION_FACTOR } from '../movement/gridMovement';
 import {
     loadOutfitSpriteConfig,
     protocolDirectionToSprite,
@@ -13,8 +10,18 @@ import {
 
 const TILE_SIZE = ENGINE_CONFIG.TILE_SIZE;
 
-/** Duração do deslize visual entre tiles (autoridade continua discreta no servidor). */
-const REMOTE_STEP_DURATION_MS = Math.max(DEFAULT_GRID_STEP_DURATION_MS, 200);
+/** Fallback quando ainda não há histórico de pacotes. */
+const REMOTE_STEP_DURATION_MS = 240;
+const MIN_REMOTE_STEP_MS = 160;
+const MAX_REMOTE_STEP_MS = 320;
+/** Compensa latência de rede sobre o intervalo medido entre `player_moved`. */
+const REMOTE_SMOOTHING_EXTRA_MS = 40;
+/** Mantém walk após chegar no tile, esperando o próximo passo (evita “anda → trava”). */
+const REMOTE_IDLE_GRACE_MS = 120;
+
+function clamp(v: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, v));
+}
 
 type RemoteVisualState = {
     playerId: string;
@@ -30,11 +37,15 @@ type RemoteVisualState = {
     moveStartedAt: number;
     moveDurationMs: number;
     moving: boolean;
+    /** Momento em que pode voltar a idle (após grace). */
+    idleAfterMs: number;
+    /** Timestamp do último pacote de movimento recebido. */
+    lastMovePacketAt: number;
     controller: SpriteAnimationController;
 };
 
 /**
- * Estado visual dos jogadores remotos: interpolação entre SQMs + walk/idle.
+ * Estado visual dos jogadores remotos: interpolação entre SQMs + walk/idle contínuo.
  * O servidor manda tile discreto; o cliente suaviza o deslize e anima a outfit.
  */
 export class RemotePlayerSpriteManager {
@@ -91,11 +102,17 @@ export class RemotePlayerSpriteManager {
                     state.visualX = state.toX;
                     state.visualY = state.toY;
                     state.moving = false;
-                    state.controller.setState('idle');
                 }
             }
 
-            const stepDuration = state.moving ? state.moveDurationMs : undefined;
+            const walking = state.moving || nowMs < state.idleAfterMs;
+            if (walking) {
+                state.controller.setState('walk');
+            } else if (nowMs >= state.idleAfterMs) {
+                state.controller.setState('idle');
+            }
+
+            const stepDuration = walking ? state.moveDurationMs : undefined;
             state.controller.update(nowMs, stepDuration);
         }
     }
@@ -105,13 +122,23 @@ export class RemotePlayerSpriteManager {
         this.loading.clear();
     }
 
+    private estimateStepDuration(state: RemoteVisualState, nowMs: number, isDiagonal: boolean): number {
+        const packetInterval =
+            state.lastMovePacketAt > 0 ? nowMs - state.lastMovePacketAt : REMOTE_STEP_DURATION_MS;
+        const base = clamp(
+            packetInterval + REMOTE_SMOOTHING_EXTRA_MS,
+            MIN_REMOTE_STEP_MS,
+            MAX_REMOTE_STEP_MS
+        );
+        return isDiagonal ? base * DIAGONAL_STEP_DURATION_FACTOR : base;
+    }
+
     private applyNetworkPosition(
         state: RemoteVisualState,
         player: PlayerSnapshot,
         nowMs: number
     ): void {
-        const dir = protocolDirectionToSprite(player.direction);
-        state.controller.setDirection(dir);
+        state.controller.setDirection(protocolDirectionToSprite(player.direction));
 
         const targetWorldX = player.tileX * TILE_SIZE;
         const targetWorldY = player.tileY * TILE_SIZE;
@@ -127,9 +154,7 @@ export class RemotePlayerSpriteManager {
         const dx = Math.abs(player.tileX - state.tileX);
         const dy = Math.abs(player.tileY - state.tileY);
         const isDiagonal = dx === 1 && dy === 1;
-        const duration = isDiagonal
-            ? REMOTE_STEP_DURATION_MS * DIAGONAL_STEP_DURATION_FACTOR
-            : REMOTE_STEP_DURATION_MS;
+        const duration = this.estimateStepDuration(state, nowMs, isDiagonal);
 
         state.fromX = state.visualX;
         state.fromY = state.visualY;
@@ -140,8 +165,9 @@ export class RemotePlayerSpriteManager {
         state.z = player.z;
         state.moveStartedAt = nowMs;
         state.moveDurationMs = duration;
+        state.lastMovePacketAt = nowMs;
+        state.idleAfterMs = nowMs + duration + REMOTE_IDLE_GRACE_MS;
         state.moving = true;
-        state.controller.setState('walk');
     }
 
     private createState(
@@ -150,6 +176,7 @@ export class RemotePlayerSpriteManager {
     ): RemoteVisualState {
         const worldX = player.tileX * TILE_SIZE;
         const worldY = player.tileY * TILE_SIZE;
+        const nowMs = performance.now();
         controller.setDirection(protocolDirectionToSprite(player.direction));
         controller.setState('idle');
 
@@ -167,6 +194,8 @@ export class RemotePlayerSpriteManager {
             moveStartedAt: 0,
             moveDurationMs: REMOTE_STEP_DURATION_MS,
             moving: false,
+            idleAfterMs: nowMs,
+            lastMovePacketAt: 0,
             controller,
         };
     }

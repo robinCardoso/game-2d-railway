@@ -34,6 +34,7 @@ Documento de referência para humanos e agentes IA. **Atualizar este arquivo** q
 | **Itens altos somem de repente** | `collectItemDepthDrawables` só iterava tiles visíveis; árvore 64×64 sumia quando o SQM do pé saía da tela | Margem + cull por bounding box do sprite + fade 28px na borda (`depthSortDraw.ts`) |
 | **Outfit de jogador remoto** | WS sincronizava só posição/nome; remoto desenhado como quadrado rosa | `PlayerAppearance` no protocolo + ticket + `RemotePlayerSpriteManager` no Play |
 | **Movimento remoto “pulo”** | Remoto desenhado direto no tile do servidor, sem walk | `RemotePlayerSpriteManager` interpola `visualX/Y` + `walk`/`idle` como o grid local |
+| **Remoto “anda e trava”** | Idle imediato ao chegar no tile + duração fixa 200ms | Grace 120ms + duração estimada pelo intervalo entre pacotes |
 
 ---
 
