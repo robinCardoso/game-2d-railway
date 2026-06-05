@@ -1,10 +1,15 @@
 import { CreatureSpawn } from '../engine/types';
 import {
+    getCreatureConfigForSpawn,
     getCreaturePreset,
     getCreaturePresets,
     getSpawnDisplayColor,
     type CreaturePreset,
 } from './creaturePresets';
+import {
+    drawCreaturePresetThumbnail,
+    drawCreatureThumbnailFallback,
+} from './creaturePresetThumbnail';
 import { toast } from '../utils/popup';
 
 export type { CreaturePreset as SpawnPreset } from './creaturePresets';
@@ -66,11 +71,10 @@ export function initSpawnEditor(options: SpawnEditorOptions) {
         if (visiblePresets.length === 0) {
             const empty = document.createElement('p');
             empty.className = 'flyout-hint';
-            empty.style.gridColumn = '1 / -1';
             empty.style.margin = '4px 0';
             empty.style.textAlign = 'center';
             empty.innerHTML =
-                'Nenhuma criatura carregada.<br>Edite <code style="font-size:9px">public/creature_presets.json</code> e recarregue a página.<br><span style="color:#8b949e">Veja creature_presets.example.json</span>';
+                'Nenhuma criatura na paleta.<br>Cadastre em <strong>Criar → Criar Mobs</strong> ou <strong>Criar NPCs</strong> e salve com <em>Registrar na paleta</em>.';
             container.appendChild(empty);
             selectedPreset = null;
             return;
@@ -82,52 +86,56 @@ export function initSpawnEditor(options: SpawnEditorOptions) {
 
         visiblePresets.forEach((preset) => {
             const div = document.createElement('div');
-            div.className = `tile-option ${selectedPreset?.name === preset.name ? 'active' : ''}`;
-            div.style.padding = '8px';
-            div.style.display = 'flex';
-            div.style.flexDirection = 'column';
-            div.style.alignItems = 'center';
-            div.style.justifyContent = 'center';
-            div.style.border = '1px solid #2d3139';
-            div.style.borderRadius = '6px';
-            div.style.cursor = 'pointer';
-            div.style.textAlign = 'center';
-            div.style.background = '#111318';
+            div.className = `spawn-preset-card ${selectedPreset?.name === preset.name ? 'active' : ''}`;
+            div.title = preset.description?.trim() || preset.name;
 
             const color = preset.color ?? (preset.type === 'monster' ? '#fb7185' : '#10b981');
+            const emoji = preset.type === 'monster' ? '👾' : '👤';
+            const typeLabel = preset.type === 'monster' ? '👾 Monstro' : '👤 NPC';
 
-            const indicator = document.createElement('div');
-            indicator.style.width = '24px';
-            indicator.style.height = '24px';
-            indicator.style.borderRadius = '50%';
-            indicator.style.background = color;
-            indicator.style.marginBottom = '6px';
-            indicator.style.boxShadow = `0 0 8px ${color}aa`;
-            indicator.style.display = 'flex';
-            indicator.style.alignItems = 'center';
-            indicator.style.justifyContent = 'center';
-            indicator.style.color = '#fff';
-            indicator.style.fontSize = '12px';
-            indicator.innerText = preset.type === 'monster' ? '👾' : '👤';
+            const thumbWrap = document.createElement('div');
+            thumbWrap.className = 'spawn-preset-card__thumb-wrap';
+            thumbWrap.style.border = `1px solid ${color}55`;
 
-            const nameEl = document.createElement('span');
-            nameEl.style.fontSize = '10px';
-            nameEl.style.fontWeight = 'bold';
-            nameEl.style.display = 'block';
-            nameEl.innerText = preset.name;
+            const thumb = document.createElement('canvas');
+            thumb.className = 'spawn-preset-card__thumb';
+            thumb.width = 48;
+            thumb.height = 48;
 
-            const descEl = document.createElement('span');
-            descEl.style.fontSize = '8px';
-            descEl.style.color = '#8b949e';
-            descEl.style.marginTop = '2px';
-            descEl.innerText = preset.description ?? '';
+            const thumbCtx = thumb.getContext('2d');
+            if (thumbCtx) {
+                drawCreatureThumbnailFallback(thumbCtx, thumb.width, thumb.height, color, emoji);
+            }
+            const config = getCreatureConfigForSpawn(preset.name);
+            if (config) {
+                void drawCreaturePresetThumbnail(thumb, config);
+            }
+            thumbWrap.appendChild(thumb);
 
-            div.appendChild(indicator);
-            div.appendChild(nameEl);
-            div.appendChild(descEl);
+            const body = document.createElement('div');
+            body.className = 'spawn-preset-card__body';
+
+            const nameEl = document.createElement('div');
+            nameEl.className = 'spawn-preset-card__name';
+            nameEl.textContent = preset.name;
+
+            const descEl = document.createElement('div');
+            descEl.className = 'spawn-preset-card__desc';
+            descEl.textContent = preset.description?.trim() || 'Sem descrição';
+
+            const typeEl = document.createElement('div');
+            typeEl.className = 'spawn-preset-card__type';
+            typeEl.textContent = typeLabel;
+
+            body.appendChild(nameEl);
+            body.appendChild(descEl);
+            body.appendChild(typeEl);
+
+            div.appendChild(thumbWrap);
+            div.appendChild(body);
 
             div.addEventListener('click', () => {
-                container.querySelectorAll('.tile-option').forEach((el) => el.classList.remove('active'));
+                container.querySelectorAll('.spawn-preset-card').forEach((el) => el.classList.remove('active'));
                 div.classList.add('active');
                 selectedPreset = preset;
             });
@@ -153,24 +161,64 @@ export function initSpawnEditor(options: SpawnEditorOptions) {
         listEl.innerHTML = '';
         visible.forEach((spawn) => {
             const preset = getCreaturePreset(spawn.name);
-            const icon = spawn.type === 'monster' ? '👾' : '👤';
             const typeLabel = spawn.type === 'monster' ? 'Monstro' : 'NPC';
             const color = preset?.color ?? getSpawnDisplayColor(spawn);
+            const emoji = spawn.type === 'monster' ? '👾' : '👤';
 
             const row = document.createElement('div');
             row.className = 'portal-list-row spawn-list-row';
             row.dataset.sid = spawn.id;
             row.title = 'Passe o mouse para destacar · Clique para ir até o spawn';
-            row.innerHTML = `
-                <div class="portal-list-row__info">
-                    <div class="portal-list-row__coords" style="display:flex;align-items:center;gap:6px;">
-                        <span style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0;"></span>
-                        ${icon} ${spawn.name} <span style="color:#8b949e;font-weight:400;">(${typeLabel})</span>
-                    </div>
-                    <div class="portal-list-row__target">📍 (${spawn.x}, ${spawn.y}, ${spawn.z})</div>
-                </div>
-                <button type="button" class="floor-btn spawn-del-btn" data-sid="${spawn.id}" title="Remover spawn">🗑️</button>
-            `;
+
+            const info = document.createElement('div');
+            info.className = 'portal-list-row__info';
+
+            const coords = document.createElement('div');
+            coords.className = 'portal-list-row__coords';
+            coords.style.display = 'flex';
+            coords.style.alignItems = 'center';
+            coords.style.gap = '6px';
+
+            const miniThumb = document.createElement('canvas');
+            miniThumb.width = 20;
+            miniThumb.height = 20;
+            miniThumb.style.width = '20px';
+            miniThumb.style.height = '20px';
+            miniThumb.style.imageRendering = 'pixelated';
+            miniThumb.style.flexShrink = '0';
+            miniThumb.style.borderRadius = '3px';
+            miniThumb.style.background = '#1a1d24';
+            const miniCtx = miniThumb.getContext('2d');
+            if (miniCtx) {
+                drawCreatureThumbnailFallback(miniCtx, miniThumb.width, miniThumb.height, color, emoji);
+            }
+            const spawnConfig = getCreatureConfigForSpawn(spawn.name);
+            if (spawnConfig) {
+                void drawCreaturePresetThumbnail(miniThumb, spawnConfig);
+            }
+
+            const label = document.createElement('span');
+            label.innerHTML = `${spawn.name} <span style="color:#8b949e;font-weight:400;">(${typeLabel})</span>`;
+
+            coords.appendChild(miniThumb);
+            coords.appendChild(label);
+
+            const target = document.createElement('div');
+            target.className = 'portal-list-row__target';
+            target.textContent = `📍 (${spawn.x}, ${spawn.y}, ${spawn.z})`;
+
+            info.appendChild(coords);
+            info.appendChild(target);
+
+            const delBtn = document.createElement('button');
+            delBtn.type = 'button';
+            delBtn.className = 'floor-btn spawn-del-btn';
+            delBtn.dataset.sid = spawn.id;
+            delBtn.title = 'Remover spawn';
+            delBtn.textContent = '🗑️';
+
+            row.appendChild(info);
+            row.appendChild(delBtn);
 
             row.addEventListener('mouseenter', () => onSpawnHighlight?.(spawn));
             row.addEventListener('mouseleave', () => onSpawnHighlight?.(null));

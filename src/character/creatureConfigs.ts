@@ -1,5 +1,7 @@
 import {
+    computeCreatureDrawScale,
     getCreatureConfigForSpawn,
+    getCreaturePreset,
 } from '../editor/creaturePresets';
 import type { CharacterSpriteConfig } from './spriteAnimation';
 import { createDefaultCharacterConfig } from './characterSerializer';
@@ -10,7 +12,16 @@ export type { CreatureVisualSize, CreaturePreset } from '../editor/creaturePrese
 export function createCreatureConfigForSpawn(spawnName: string): CharacterSpriteConfig {
     const cached = getCreatureConfigForSpawn(spawnName);
     if (cached) {
-        return { ...cached, name: spawnName };
+        const config = { ...cached, name: spawnName };
+        const preset = getCreaturePreset(spawnName);
+        if (preset?.visualSize) {
+            config.drawScale = computeCreatureDrawScale(
+                config.frameWidth,
+                config.frameHeight,
+                preset.visualSize
+            );
+        }
+        return config;
     }
 
     const config = createDefaultCharacterConfig();

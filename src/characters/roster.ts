@@ -7,6 +7,7 @@ import {
 } from '../shared/characterStore';
 import type { CharacterRow } from '../shared/types';
 import { track } from '../shared/analytics';
+import { resolveAnimationSourceRect } from '../character/sheetFrameLayout';
 
 const session = await requireAuth();
 const errEl = document.getElementById('rosterError') as HTMLElement;
@@ -121,21 +122,36 @@ async function drawCharacterPreview(canvas: HTMLCanvasElement, spriteSheetUrl: s
     const sheetLayout = config?.sheetLayout ?? 'horizontal';
 
     // Procura animação de idle_down ou walk_down
-    const anim = config?.animations?.['idle_down'] 
-        || config?.animations?.['walk_down'] 
-        || { row: 0, startFrame: 0 };
-    
-    const startFrame = anim.startFrame ?? 0;
+    const rawAnim = (config?.animations?.['idle_down'] || config?.animations?.['walk_down']) as
+        | { row: number; startFrame?: number; frames?: number; speedFps?: number; loop?: boolean }
+        | undefined;
+    const anim = {
+        row: rawAnim?.row ?? 0,
+        startFrame: rawAnim?.startFrame ?? 0,
+        frames: rawAnim?.frames ?? 1,
+        speedFps: rawAnim?.speedFps ?? 5,
+        loop: rawAnim?.loop ?? true,
+    };
 
-    // Calcula coordenadas do frame no spritesheet
-    let sx: number, sy: number;
-    if (sheetLayout === 'vertical') {
-        sx = anim.row * (frameWidth + gapX) + offsetX;
-        sy = startFrame * (frameHeight + gapY) + offsetY;
-    } else {
-        sx = startFrame * (frameWidth + gapX) + offsetX;
-        sy = anim.row * (frameHeight + gapY) + offsetY;
-    }
+    const { sx, sy } = resolveAnimationSourceRect(
+        {
+            name: '',
+            spriteSheetUrl: '',
+            frameWidth,
+            frameHeight,
+            defaultDirection: 'down',
+            animations: {},
+            offsetX,
+            offsetY,
+            gapX,
+            gapY,
+            sheetLayout,
+        },
+        anim,
+        0,
+        img.naturalWidth || img.width,
+        img.naturalHeight || img.height
+    );
 
     // Limpa canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);

@@ -203,6 +203,12 @@ function respawnEntities(): void {
     });
 }
 
+/** Recarrega presets (visualSize/drawScale) e respawna NPCs — útil após editar mob no Studio. */
+async function reloadCreaturePresetsForPlay(): Promise<void> {
+    await loadCreaturePresets();
+    if (worldSpawns.length > 0) respawnEntities();
+}
+
 function applyLoadedMap(loaded: ReturnType<typeof loadMapFromJson>): void {
     const mapEntry = loaded.mapId ? getMapById(loaded.mapId) : undefined;
     if (!mapEntry?.instanced) {
@@ -646,7 +652,7 @@ function draw(): void {
                 mapSize: activeMapSize,
                 edgeFadePx: DEFAULT_ITEM_EDGE_FADE_PX,
             }),
-            ...collectNpcDepthDrawables(npcs, z, camState, TILE_SIZE_SCREEN),
+            ...collectNpcDepthDrawables(npcs, z, camState, TILE_SIZE_SCREEN, { drawNames: true }),
         ];
 
         if (currentMapId && gameNet) {
@@ -668,9 +674,8 @@ function draw(): void {
             getSourceRect: () => activeCharacterController.getSourceRect(),
             image: activeCharacterController.image,
             isLoaded: activeCharacterController.isLoaded,
-            name: activeCharacterController.config.name,
+            name: activeCharacter?.name || activeCharacterController.config.name || 'Jogador',
             zoom,
-            nameStyle: 'play',
         });
         if (localDrawable) depthDrawables.push(localDrawable);
 
@@ -812,7 +817,7 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
         : undefined;
 
     showLoading('Carregando mundo…');
-    await loadCreaturePresets();
+    await reloadCreaturePresetsForPlay();
     await loadPlayBorderConfig();
     TILE_TYPES = await prepareTileRegistry();
     const loaded = await loadWorldMap(entry, TILE_TYPES);
@@ -842,6 +847,12 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
 
     setupLocationAutosave();
     setupPlayZoomControls();
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            void reloadCreaturePresetsForPlay();
+        }
+    });
 
     setupNetwork(character, accountId);
     loop();

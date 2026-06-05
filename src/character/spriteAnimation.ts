@@ -1,4 +1,5 @@
 import { removeChromaKey } from '../utils/imageProcessor';
+import { resolveAnimationSourceRect } from './sheetFrameLayout';
 
 export type CharacterState = 'idle' | 'walk' | 'attack' | 'sit' | 'dead' | 'cast';
 export type Direction = 'up' | 'down' | 'left' | 'right';
@@ -173,26 +174,28 @@ export class SpriteAnimationController {
             };
         }
 
-        const startFrame = anim.startFrame ?? 0;
-        const currentFrame = startFrame + this.currentFrameIndex;
-        
-        let sx = ox;
-        let sy = oy;
-        if (this.config.sheetLayout === 'vertical') {
-            sx = ox + anim.row * (w + gx);
-            sy = oy + currentFrame * (h + gy);
-        } else {
-            sx = ox + currentFrame * (w + gx);
-            sy = oy + anim.row * (h + gy);
-        }
+        const imageW = this.image?.naturalWidth ?? this.image?.width ?? 0;
+        const imageH = this.image?.naturalHeight ?? this.image?.height ?? 0;
+        const rect =
+            imageW > 0 && imageH > 0
+                ? resolveAnimationSourceRect(this.config, anim, this.currentFrameIndex, imageW, imageH)
+                : {
+                      sx:
+                          this.config.sheetLayout === 'vertical'
+                              ? ox + anim.row * (w + gx)
+                              : ox + ((anim.startFrame ?? 0) + this.currentFrameIndex) * (w + gx),
+                      sy:
+                          this.config.sheetLayout === 'vertical'
+                              ? oy + ((anim.startFrame ?? 0) + this.currentFrameIndex) * (h + gy)
+                              : oy + anim.row * (h + gy),
+                      sw: w,
+                      sh: h,
+                  };
 
         return {
-            sx,
-            sy,
-            sw: w,
-            sh: h,
+            ...rect,
             ax: this.config.anchorX ?? 0,
-            ay: this.config.anchorY ?? 0
+            ay: this.config.anchorY ?? 0,
         };
     }
 }

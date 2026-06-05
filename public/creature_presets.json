@@ -1,1 +1,10 @@
-[]
+[
+  {
+    "name": "Magao Bruto",
+    "type": "monster",
+    "configPath": "tiles/characters/monstros/trolls/magao_bruto.json",
+    "description": "Magao bruto testando ele",
+    "color": "#fb7185",
+    "visualSize": "boss"
+  }
+]

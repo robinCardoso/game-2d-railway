@@ -1,8 +1,8 @@
 {
-  "name": "Knight",
-  "spriteSheetUrl": "tiles/characters/vocations/male/knight.png",
-  "frameWidth": 32,
-  "frameHeight": 32,
+  "name": "Magao Bruto",
+  "spriteSheetUrl": "tiles/characters/monstros/trolls/magao_bruto.png",
+  "frameWidth": 64,
+  "frameHeight": 64,
   "defaultDirection": "down",
   "animations": {
     "idle_up": {
@@ -20,11 +20,11 @@
       "startFrame": 0
     },
     "idle_left": {
-      "row": 0,
+      "row": 1,
       "frames": 1,
       "speedFps": 1,
       "loop": true,
-      "startFrame": 9
+      "startFrame": 1
     },
     "idle_right": {
       "row": 0,
@@ -48,11 +48,11 @@
       "startFrame": 1
     },
     "walk_left": {
-      "row": 0,
+      "row": 1,
       "frames": 2,
       "speedFps": 5,
       "loop": true,
-      "startFrame": 10
+      "startFrame": 2
     },
     "walk_right": {
       "row": 0,
@@ -86,15 +86,15 @@
       "loop": false
     }
   },
+  "category": "monstros/trolls",
   "offsetX": 0,
   "offsetY": 0,
   "gapX": 0,
   "gapY": 0,
-  "anchorX": -10,
-  "anchorY": -10,
+  "anchorX": 0,
+  "anchorY": 0,
   "chromaKey": true,
   "chromaKeyTolerance": 50,
-  "category": "vocations/male",
   "sheetLayout": "horizontal",
   "vocation": "knight",
   "gender": "male",

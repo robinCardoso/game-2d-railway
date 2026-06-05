@@ -1,15 +1,27 @@
 import { serializeCharacterConfig, parseCharacterConfig, createDefaultCharacterConfig } from '../character/characterSerializer';
 import type { SpriteAnimationController } from '../character/spriteAnimation';
 import type { CharacterState, Direction } from '../character/spriteAnimation';
+import { resolveAnimationSourceRect } from '../character/sheetFrameLayout';
 import { openCharacterCalibrator } from './characterCalibratorModal';
 import { apiFetch } from '../shared/apiFetch';
 import { toast, popup } from '../utils/popup';
 import { upscalePixelArtDataUrl } from '../utils/imageProcessor';
 import { renderFolderTree } from './folderTree';
 import { buildConfigPathFromSave, upsertCreaturePreset } from './creaturePresetRegistry';
-import type { CreatureVisualSize } from './creaturePresets';
+import {
+    computeCreatureDrawScale,
+    getCreaturePreset,
+    type CreatureVisualSize,
+} from './creaturePresets';
 
 const CHARACTERS_DIR_LABEL = 'tiles/characters';
+const NEW_DRAFT_OPTION = '__new__';
+
+function profileEntityLabel(profile: SpriteEditorProfile): string {
+    if (profile.id === 'npc') return 'NPC';
+    if (profile.id === 'monster') return 'Mob';
+    return 'Outfit';
+}
 
 export type SpriteProfileId = 'player' | 'npc' | 'monster';
 
@@ -150,6 +162,12 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
     const importBtn = document.getElementById('importCharBtn');
     const saveServerBtn = document.getElementById('saveServerBtn');
     const deleteServerBtn = document.getElementById('deleteServerBtn');
+    const charNewBtn = document.getElementById('charNewBtn');
+    const charRefreshListBtn = document.getElementById('charRefreshListBtn');
+    const charCategoryLabelEl = document.getElementById('charCategoryLabel');
+    const charSpawnDescriptionLabelEl = document.getElementById('charSpawnDescriptionLabel');
+    const charVisualSizeHintEl = document.getElementById('charVisualSizeHint');
+    const upscaleSpriteHintEl = document.getElementById('upscaleSpriteHint');
     const importInput = document.getElementById('importCharInput') as HTMLInputElement;
     const loadSpriteBtn = document.getElementById('loadSpriteBtn');
     const importSpriteInput = document.getElementById('importSpriteInput') as HTMLInputElement;
@@ -212,6 +230,10 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
                 monster: '-- Selecionar Mob --',
             };
             charServerSelectEl.innerHTML = `<option value="">${placeholders[profile.id]}</option>`;
+            const newOpt = document.createElement('option');
+            newOpt.value = NEW_DRAFT_OPTION;
+            newOpt.textContent = `✨ Novo ${profileEntityLabel(profile)}`;
+            charServerSelectEl.appendChild(newOpt);
             const categories: Record<string, ServerCharacterEntry[]> = {};
             filtered.forEach((char) => {
                 const catName = char.category || categoryFromRelativePath(char.relativePath) || 'Raiz';
@@ -235,31 +257,130 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
     }
 
     function updateDeleteButtonVisibility(): void {
-        if (deleteServerBtn) {
-            deleteServerBtn.style.display = charServerSelectEl?.value ? 'block' : 'none';
-        }
+        if (!deleteServerBtn || !charServerSelectEl) return;
+        const path = charServerSelectEl.value;
+        const canDelete = !!path && path !== NEW_DRAFT_OPTION;
+        deleteServerBtn.style.display = canDelete ? '' : 'none';
+        deleteServerBtn.innerText = `🗑️ Excluir ${profileEntityLabel(getProfile())}`;
     }
 
     function applyProfileUi(): void {
         const profile = getProfile();
+        const entity = profileEntityLabel(profile);
         if (charNameLabelEl) {
-            charNameLabelEl.textContent = profile.id === 'player' ? 'Nome do Visual (Outfit)' : profile.id === 'npc' ? 'Nome do NPC' : 'Nome do Mob';
+            charNameLabelEl.textContent =
+                profile.id === 'player' ? 'Nome do Visual (Outfit) *' : profile.id === 'npc' ? 'Nome do NPC *' : 'Nome do Mob *';
         }
         if (charServerLabelEl) {
             charServerLabelEl.textContent = profile.id === 'player' ? 'Carregar Outfit do Servidor' : 'Carregar existente';
         }
         if (creatureMetaSectionEl) creatureMetaSectionEl.style.display = profile.creatureType ? 'block' : 'none';
-        
+        if (charSpawnDescriptionLabelEl) {
+            charSpawnDescriptionLabelEl.textContent = profile.creatureType ? 'Descrição *' : 'Descrição';
+        }
+        if (charCategoryLabelEl) {
+            charCategoryLabelEl.textContent = profile.creatureType
+                ? 'Subpasta em tiles/characters *'
+                : 'Subpasta em tiles/characters';
+        }
+
         const playerMetaSectionEl = document.getElementById('charPlayerMetaSection');
         if (playerMetaSectionEl) playerMetaSectionEl.style.display = profile.id === 'player' ? 'block' : 'none';
 
-        if (charCategoryInputEl && !charCategoryInputEl.value.trim()) charCategoryInputEl.value = profile.defaultCategory;
+        if (charNameInputEl) {
+            charNameInputEl.placeholder =
+                profile.id === 'monster' ? 'Obrigatório — ex: Rato' : profile.id === 'npc' ? 'Obrigatório — ex: Vendedor' : 'Obrigatório — ex: Knight Custom';
+        }
+        if (charCategoryInputEl) {
+            charCategoryInputEl.placeholder = profile.creatureType
+                ? `Obrigatório — ex: ${profile.defaultCategory || 'monstros'}`
+                : 'Opcional — ex: vocations/male';
+        }
         if (visualSizeEl && profile.defaultVisualSize) visualSizeEl.value = profile.defaultVisualSize;
         if (spawnColorEl && profile.defaultColor) spawnColorEl.value = profile.defaultColor;
         if (registerInPaletteEl) registerInPaletteEl.checked = !!profile.creatureType;
+        updateVisualSizeHint();
+        if (charNewBtn) {
+            charNewBtn.textContent = `✨ Novo ${entity}`;
+            charNewBtn.title = `Limpar formulário e começar um ${entity.toLowerCase()} do zero`;
+        }
         void reloadServerCharactersList();
         syncControllerToUI();
         updateDeleteButtonVisibility();
+    }
+
+    function resetToNewDraft(options?: { silent?: boolean }): void {
+        const ctrl = getController();
+        const profile = getProfile();
+        ctrl.config = {
+            ...createDefaultCharacterConfig(),
+            name: '',
+            category: '',
+            spriteSheetUrl: '',
+        };
+        ctrl.currentState = 'idle';
+        ctrl.currentDirection = 'down';
+        ctrl.isLoaded = false;
+        ctrl.image = null;
+
+        if (charNameInputEl) charNameInputEl.value = '';
+        if (charCategoryInputEl) charCategoryInputEl.value = '';
+        if (spawnDescriptionEl) spawnDescriptionEl.value = '';
+        if (charServerSelectEl) charServerSelectEl.value = '';
+        if (importSpriteInput) importSpriteInput.value = '';
+        if (templateSelectEl) templateSelectEl.value = 'custom';
+
+        syncControllerToUI();
+        saveConfigToLocalStorage();
+        updateDeleteButtonVisibility();
+        if (!options?.silent) {
+            toast.info(`Formulário limpo — pronto para um novo ${profileEntityLabel(profile).toLowerCase()}.`);
+        }
+    }
+
+    function updateVisualSizeHint(): void {
+        if (!charVisualSizeHintEl || !visualSizeEl) return;
+        const profile = getProfile();
+        if (!profile.creatureType) {
+            charVisualSizeHintEl.textContent = '';
+            return;
+        }
+        const ctrl = getController();
+        const vs = (visualSizeEl.value || 'medium') as CreatureVisualSize;
+        const fw = ctrl.config.frameWidth || 32;
+        const fh = ctrl.config.frameHeight || 32;
+        const scale = computeCreatureDrawScale(fw, fh, vs);
+        const displayPx = Math.round(Math.max(fw, fh) * scale);
+        const native = Math.max(fw, fh);
+        const playerPx = 32;
+        const sameAsPlayer = native > playerPx && vs === 'medium';
+        charVisualSizeHintEl.textContent =
+            `Não altera a PNG. Frame ${fw}×${fh}px → ~${displayPx}px no mapa (escala ${Math.round(scale * 100)}%).` +
+            (sameAsPlayer
+                ? ` Com arte ${native}px, Medium reduz para ~${playerPx}px (altura do tile do player). Se parecer menor que o knight, tente Large/Boss — o desenho pode não preencher a célula.`
+                : ' Calibre a grade no tamanho real da arte; use ⚡2x só se a arte foi desenhada em 32px.');
+    }
+
+    function validateBeforeSave(): string | null {
+        syncUIToController();
+        const profile = getProfile();
+        const name = charNameInputEl?.value.trim() ?? '';
+        if (!name) {
+            return profile.creatureType
+                ? `Informe o nome do ${profileEntityLabel(profile).toLowerCase()}.`
+                : 'Informe o nome do outfit.';
+        }
+        if (profile.creatureType) {
+            const category = charCategoryInputEl?.value.trim() ?? '';
+            if (!category) {
+                return 'Informe a subpasta (ex: monstros ou npcs).';
+            }
+            const description = spawnDescriptionEl?.value.trim() ?? '';
+            if (!description) {
+                return 'Informe a descrição para a paleta de spawns.';
+            }
+        }
+        return null;
     }
 
     function setProfile(id: SpriteProfileId): void {
@@ -285,7 +406,9 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
             const fw = config.frameWidth;
             const show2x = ctrl.isLoaded && fw < 64;
             const show3x = ctrl.isLoaded && fw <= 48;
-            upscaleSpriteRow.style.display = show2x || show3x ? 'flex' : 'none';
+            const showUpscale = show2x || show3x;
+            upscaleSpriteRow.style.display = showUpscale ? 'flex' : 'none';
+            if (upscaleSpriteHintEl) upscaleSpriteHintEl.style.display = showUpscale ? 'block' : 'none';
             upscaleSprite2xBtn.style.display = show2x ? 'block' : 'none';
             upscaleSprite3xBtn.style.display = show3x ? 'block' : 'none';
             if (show2x) {
@@ -327,6 +450,7 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
         if (playerVocationEl) playerVocationEl.value = (config as any).vocation || 'knight';
         if (playerGenderEl) playerGenderEl.value = (config as any).gender || 'male';
         if (playerShowInCreationEl) playerShowInCreationEl.checked = (config as any).showInCreation !== false;
+        updateVisualSizeHint();
     }
 
     function syncUIToController(): void {
@@ -354,8 +478,8 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
         ctrl.setState(ctrl.currentState);
         if (chromaKeyToggleEl) config.chromaKey = chromaKeyToggleEl.checked;
         if (chromaKeyToleranceEl) config.chromaKeyTolerance = parseInt(chromaKeyToleranceEl.value, 10) || 50;
-        if (charNameInputEl) config.name = charNameInputEl.value;
-        if (charCategoryInputEl) config.category = charCategoryInputEl.value;
+        if (charNameInputEl) config.name = charNameInputEl.value.trim();
+        if (charCategoryInputEl) config.category = charCategoryInputEl.value.trim();
         if (sheetLayoutEl) config.sheetLayout = sheetLayoutEl.value as 'horizontal' | 'vertical';
 
         const playerVocationEl = document.getElementById('charPlayerVocation') as HTMLSelectElement | null;
@@ -384,6 +508,11 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
 
     async function saveActiveCharacterToServer(showToastOnSuccess = true): Promise<void> {
         const ctrl = getController();
+        const validationError = validateBeforeSave();
+        if (validationError) {
+            toast.error(validationError);
+            return;
+        }
         if (!ctrl.isLoaded || !ctrl.image) {
             toast.error('Nenhuma imagem de spritesheet carregada para salvar.');
             return;
@@ -544,9 +673,20 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
     });
     charNameInputEl?.addEventListener('input', syncUIToController);
     charCategoryInputEl?.addEventListener('input', syncUIToController);
+    visualSizeEl?.addEventListener('change', () => {
+        updateVisualSizeHint();
+    });
+    frameWidthEl?.addEventListener('input', () => updateVisualSizeHint());
+    frameHeightEl?.addEventListener('input', () => updateVisualSizeHint());
     sheetLayoutEl?.addEventListener('change', () => { syncUIToController(); getController().setState(getController().currentState); });
 
     charServerSelectEl?.addEventListener('change', () => {
+        if (charServerSelectEl.value === NEW_DRAFT_OPTION) {
+            resetToNewDraft({ silent: true });
+            charServerSelectEl.value = '';
+            updateDeleteButtonVisibility();
+            return;
+        }
         updateDeleteButtonVisibility();
         const charData = serverCharactersList.find((c) => c.relativePath === charServerSelectEl.value);
         if (!charData?.config) return;
@@ -554,6 +694,12 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
         ctrl.config = charData.config as unknown as typeof ctrl.config;
         ctrl.currentState = 'idle';
         ctrl.currentDirection = (charData.config.defaultDirection as Direction) || 'down';
+        if (getProfile().creatureType) {
+            const preset = getCreaturePreset(charData.name);
+            if (spawnDescriptionEl) spawnDescriptionEl.value = preset?.description ?? '';
+            if (spawnColorEl && preset?.color) spawnColorEl.value = preset.color;
+            if (visualSizeEl && preset?.visualSize) visualSizeEl.value = preset.visualSize;
+        }
         ctrl.loadImage();
         const wait = () => {
             if (ctrl.isLoaded) { if (templateSelectEl) templateSelectEl.value = 'custom'; syncControllerToUI(); saveConfigToLocalStorage(); toast.success(`"${charData.name}" carregado!`); }
@@ -586,10 +732,9 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
             previewFrameIndex = (previewFrameIndex + 1) % anim.frames;
             previewLastTime = nowMs;
         }
-        const currentFrame = (anim.startFrame ?? 0) + previewFrameIndex;
-        const ox = config.offsetX ?? 0, oy = config.offsetY ?? 0, gx = config.gapX ?? 0, gy = config.gapY ?? 0;
-        const sx = config.sheetLayout === 'vertical' ? ox + anim.row * (config.frameWidth + gx) : ox + currentFrame * (config.frameWidth + gx);
-        const sy = config.sheetLayout === 'vertical' ? oy + currentFrame * (config.frameHeight + gy) : oy + anim.row * (config.frameHeight + gy);
+        const imageW = ctrl.image.naturalWidth || ctrl.image.width;
+        const imageH = ctrl.image.naturalHeight || ctrl.image.height;
+        const { sx, sy } = resolveAnimationSourceRect(config, anim, previewFrameIndex, imageW, imageH);
 
         // 1. Desenha a célula de referência 32x32 centralizada
         const baseTileSize = 32;
@@ -612,16 +757,28 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
 
         // 2. Calcula posição do personagem com âncoras aplicadas
         // Posição de repouso padrão: Centralizado no X, Alinhado ao bottom no Y
-        const charBaseX = tileX + ((baseTileSize - config.frameWidth) / 2) * scale;
-        const charBaseY = tileY + (baseTileSize - config.frameHeight) * scale;
+        const profile = getProfile();
+        const mapDrawScale =
+            profile.creatureType && visualSizeEl
+                ? computeCreatureDrawScale(
+                      config.frameWidth,
+                      config.frameHeight,
+                      (visualSizeEl.value || 'medium') as CreatureVisualSize
+                  )
+                : 1;
+        const displayFw = config.frameWidth * mapDrawScale;
+        const displayFh = config.frameHeight * mapDrawScale;
 
-        const anchorX = config.anchorX ?? 0;
-        const anchorY = config.anchorY ?? 0;
+        const charBaseX = tileX + ((baseTileSize - displayFw) / 2) * scale;
+        const charBaseY = tileY + (baseTileSize - displayFh) * scale;
+
+        const anchorX = (config.anchorX ?? 0) * mapDrawScale;
+        const anchorY = (config.anchorY ?? 0) * mapDrawScale;
 
         const drawX = charBaseX + anchorX * scale;
         const drawY = charBaseY + anchorY * scale;
-        const drawW = config.frameWidth * scale;
-        const drawH = config.frameHeight * scale;
+        const drawW = displayFw * scale;
+        const drawH = displayFh * scale;
 
         // Desenha o sprite com pixel-art perfeita
         previewCtx.imageSmoothingEnabled = false;
@@ -654,11 +811,17 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
         a.download = `${ctrl.config.name.toLowerCase().replace(/ /g, '_')}.json`;
         document.body.appendChild(a); a.click(); a.remove();
     });
+    charNewBtn?.addEventListener('click', () => resetToNewDraft());
+    charRefreshListBtn?.addEventListener('click', async () => {
+        await reloadServerCharactersList();
+        toast.success('Lista atualizada.');
+    });
     saveServerBtn?.addEventListener('click', () => void saveActiveCharacterToServer(true));
     deleteServerBtn?.addEventListener('click', async () => {
         const relativePath = charServerSelectEl?.value;
-        if (!relativePath) {
-            toast.error('Nenhum personagem selecionado para exclusão.');
+        const entity = profileEntityLabel(getProfile());
+        if (!relativePath || relativePath === NEW_DRAFT_OPTION) {
+            toast.error(`Selecione um ${entity.toLowerCase()} existente para excluir.`);
             return;
         }
 
@@ -666,8 +829,10 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
         const displayName = charData ? charData.name : relativePath;
 
         const confirmed = await popup.confirm(
-            `Excluir o personagem "${displayName}" permanentemente?<br><br>Esta ação remove o arquivo JSON de configuração e a imagem PNG correspondente no servidor.`,
-            '🗑️ Confirmar Exclusão'
+            `Excluir o ${entity.toLowerCase()} "<strong>${displayName}</strong>" permanentemente?<br><br>Remove o JSON, a PNG no servidor` +
+                (getProfile().creatureType ? ' e a entrada em creature_presets.json' : '') +
+                '.',
+            `🗑️ Excluir ${entity}`
         );
         if (!confirmed) return;
 
@@ -690,7 +855,7 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
 
                 await popup.alert(
                     `Não é possível excluir "${displayName}".<br><br>Em uso em ${conflict.maps.length} mapa${conflict.maps.length === 1 ? '' : 's'} (${conflict.totalSpawns} spawn${conflict.totalSpawns === 1 ? '' : 's'} no total):<br><br>${mapLines.replace(/\n/g, '<br>')}<br><br>Remova os spawns do mapa antes de excluir.`,
-                    '⚠️ Personagem em Uso'
+                    `⚠️ ${entity} em Uso`
                 );
                 return;
             }
@@ -700,7 +865,7 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
                 throw new Error(err.error || 'Erro desconhecido ao excluir.');
             }
 
-            toast.success(`Personagem "${displayName}" excluído!`);
+            toast.success(`${entity} "${displayName}" excluído!`);
             await finalizeDeletion();
 
         } catch (err: any) {
@@ -708,32 +873,13 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
         } finally {
             if (deleteServerBtn) {
                 (deleteServerBtn as HTMLButtonElement).disabled = false;
-                deleteServerBtn.innerText = '🗑️ Excluir';
+                updateDeleteButtonVisibility();
             }
         }
     });
 
     async function finalizeDeletion() {
-        const ctrl = getController();
-        const profile = getProfile();
-        
-        ctrl.config = {
-            ...createDefaultCharacterConfig(),
-            name: profile.id === 'player' ? 'Novo Personagem' : profile.id === 'npc' ? 'Novo NPC' : 'Novo Mob',
-            category: profile.defaultCategory
-        };
-        ctrl.currentState = 'idle';
-        ctrl.currentDirection = 'down';
-        ctrl.loadImage();
-        
-        if (charNameInputEl) charNameInputEl.value = ctrl.config.name;
-        if (charCategoryInputEl) charCategoryInputEl.value = ctrl.config.category || '';
-        if (charServerSelectEl) charServerSelectEl.value = '';
-        
-        syncControllerToUI();
-        saveConfigToLocalStorage();
-        updateDeleteButtonVisibility();
-        
+        resetToNewDraft({ silent: true });
         await reloadServerCharactersList();
         await onCatalogChanged?.();
     }

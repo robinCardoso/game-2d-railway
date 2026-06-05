@@ -1,8 +1,8 @@
 {
-  "name": "Knight",
-  "spriteSheetUrl": "tiles/characters/vocations/male/knight.png",
-  "frameWidth": 32,
-  "frameHeight": 32,
+  "name": "knight 64",
+  "spriteSheetUrl": "tiles/characters/vocations/female/knight_64.png",
+  "frameWidth": 64,
+  "frameHeight": 64,
   "defaultDirection": "down",
   "animations": {
     "idle_up": {
@@ -10,7 +10,7 @@
       "frames": 1,
       "speedFps": 1,
       "loop": true,
-      "startFrame": 6
+      "startFrame": 0
     },
     "idle_down": {
       "row": 0,
@@ -24,35 +24,35 @@
       "frames": 1,
       "speedFps": 1,
       "loop": true,
-      "startFrame": 9
+      "startFrame": 0
     },
     "idle_right": {
       "row": 0,
       "frames": 1,
-      "speedFps": 1,
+      "speedFps": 5,
       "loop": true,
-      "startFrame": 3
+      "startFrame": 0
     },
     "walk_up": {
       "row": 0,
-      "frames": 2,
+      "frames": 1,
       "speedFps": 5,
       "loop": true,
-      "startFrame": 7
+      "startFrame": 0
     },
     "walk_down": {
       "row": 0,
-      "frames": 2,
+      "frames": 1,
       "speedFps": 5,
       "loop": true,
-      "startFrame": 1
+      "startFrame": 0
     },
     "walk_left": {
       "row": 0,
       "frames": 2,
       "speedFps": 5,
       "loop": true,
-      "startFrame": 10
+      "startFrame": 1
     },
     "walk_right": {
       "row": 0,
@@ -86,17 +86,17 @@
       "loop": false
     }
   },
-  "offsetX": 0,
-  "offsetY": 0,
+  "category": "vocations/female",
+  "offsetX": -1,
+  "offsetY": 9,
   "gapX": 0,
   "gapY": 0,
-  "anchorX": -10,
-  "anchorY": -10,
+  "anchorX": -20,
+  "anchorY": 0,
   "chromaKey": true,
   "chromaKeyTolerance": 50,
-  "category": "vocations/male",
   "sheetLayout": "horizontal",
   "vocation": "knight",
-  "gender": "male",
+  "gender": "female",
   "showInCreation": true
 }

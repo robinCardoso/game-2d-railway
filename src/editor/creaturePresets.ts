@@ -1,5 +1,6 @@
 import { parseCharacterConfig } from '../character/characterSerializer';
 import type { CharacterSpriteConfig } from '../character/spriteAnimation';
+import { invalidateCreatureThumbnailCache } from './creaturePresetThumbnail';
 
 /** Tamanho visual no tile; movimento permanece no grid 32×32. */
 export type CreatureVisualSize = 'tiny' | 'small' | 'medium' | 'large' | 'boss';
@@ -19,15 +20,13 @@ const VALID_VISUAL_SIZES = new Set<CreatureVisualSize>([
     'tiny', 'small', 'medium', 'large', 'boss',
 ]);
 
-const VISUAL_SIZE_DEFAULTS: Record<
-    CreatureVisualSize,
-    Pick<CharacterSpriteConfig, 'frameWidth' | 'frameHeight' | 'drawScale'>
-> = {
-    tiny: { frameWidth: 16, frameHeight: 16, drawScale: 1 },
-    small: { frameWidth: 24, frameHeight: 24, drawScale: 1 },
-    medium: { frameWidth: 32, frameHeight: 32, drawScale: 1 },
-    large: { frameWidth: 48, frameHeight: 48, drawScale: 1 },
-    boss: { frameWidth: 64, frameHeight: 64, drawScale: 1 },
+/** Altura/largura alvo no tile (px) — não altera o recorte da spritesheet. */
+export const CREATURE_VISUAL_SIZE_PX: Record<CreatureVisualSize, number> = {
+    tiny: 16,
+    small: 24,
+    medium: 32,
+    large: 48,
+    boss: 64,
 };
 
 let presets: CreaturePreset[] = [];
@@ -64,15 +63,32 @@ function sanitizePreset(raw: unknown): CreaturePreset | null {
     };
 }
 
+/**
+ * Aplica tamanho visual no tile via `drawScale`.
+ * `frameWidth` / `frameHeight` do JSON permanecem = célula real da spritesheet (ex. 64×64).
+ */
+/** Escala de desenho no tile (1 = tamanho nativo do frame na sheet). */
+export function computeCreatureDrawScale(
+    frameWidth: number,
+    frameHeight: number,
+    visualSize: CreatureVisualSize | undefined
+): number {
+    if (!visualSize) return 1;
+    const targetPx = CREATURE_VISUAL_SIZE_PX[visualSize];
+    const native = Math.max(1, frameWidth, frameHeight);
+    return targetPx / native;
+}
+
 function applyVisualSize(
     config: CharacterSpriteConfig,
     visualSize: CreatureVisualSize | undefined
 ): void {
     if (!visualSize) return;
-    const defaults = VISUAL_SIZE_DEFAULTS[visualSize];
-    config.frameWidth = defaults.frameWidth;
-    config.frameHeight = defaults.frameHeight;
-    config.drawScale = defaults.drawScale;
+    config.drawScale = computeCreatureDrawScale(
+        config.frameWidth,
+        config.frameHeight,
+        visualSize
+    );
 }
 
 export function getCreaturePresets(): readonly CreaturePreset[] {
@@ -132,6 +148,7 @@ export async function loadCreaturePresets(): Promise<void> {
         }
 
         console.log(`[CreaturePresets] ${presets.length} criatura(s) na paleta.`);
+        invalidateCreatureThumbnailCache();
     } catch (err) {
         console.warn('[CreaturePresets] Falha ao carregar lista:', err);
     }

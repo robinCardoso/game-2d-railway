@@ -15,6 +15,41 @@ export const DEFAULT_ITEM_EDGE_FADE_PX = 28;
 /** Alpha mínimo durante clip na borda — legível, não “fantasma”. */
 export const ITEM_EDGE_FADE_MIN_ALPHA = 0.65;
 
+/** Fonte com contorno preto (estilo Tibia) — compartilhada por player, mobs e remotos. */
+export const ENTITY_NAME_FONT = "bold 11px 'Outfit', 'Courier New', monospace";
+
+export const ENTITY_NAME_COLORS = {
+    creature: '#4ade80',
+    localPlayer: '#38bdf8',
+    remotePlayer: '#fda4af',
+} as const;
+
+export function drawOutlinedEntityName(
+    drawCtx: CanvasRenderingContext2D,
+    text: string,
+    x: number,
+    y: number,
+    fillColor: string
+): void {
+    if (!text.trim()) return;
+    drawCtx.font = ENTITY_NAME_FONT;
+    drawCtx.textAlign = 'center';
+    drawCtx.textBaseline = 'bottom';
+    drawCtx.strokeStyle = '#000000';
+    drawCtx.lineWidth = 2.5;
+    drawCtx.lineJoin = 'round';
+    drawCtx.strokeText(text, x, y);
+    drawCtx.fillStyle = fillColor;
+    drawCtx.fillText(text, x, y);
+}
+
+function nameTagPosition(placement: SpriteTilePlacement, offsetY = 8): { x: number; y: number } {
+    return {
+        x: placement.drawX + placement.drawW / 2,
+        y: placement.drawY - offsetY,
+    };
+}
+
 export interface FootSortKey {
     sortY: number;
     sortX: number;
@@ -268,12 +303,11 @@ export function collectNpcDepthDrawables(
     z: number,
     camera: DepthSortCamera,
     tileSize: number,
-    options?: { drawNames?: boolean; nameStyle?: 'play' | 'studio' }
+    options?: { drawNames?: boolean }
 ): DepthDrawable[] {
     const drawables: DepthDrawable[] = [];
     const zoom = camera.zoom ?? 1;
-    const drawNames = options?.drawNames ?? false;
-    const nameStyle = options?.nameStyle ?? 'play';
+    const drawNames = options?.drawNames ?? true;
 
     for (const npc of npcs) {
         if (npc.worldZ !== z) continue;
@@ -297,23 +331,8 @@ export function collectNpcDepthDrawables(
                 if (!drawNames) return;
 
                 const placement = npc.getDrawPlacement({ ...camera, zoom }, tileSize);
-                const nameX = placement.drawX + placement.drawW / 2 - 10;
-                const nameY = placement.drawY - 6;
-
-                if (nameStyle === 'studio') {
-                    drawCtx.font = "bold 11px 'Outfit', 'Courier New', monospace";
-                    drawCtx.textAlign = 'center';
-                    drawCtx.strokeStyle = '#000000';
-                    drawCtx.lineWidth = 2.5;
-                    drawCtx.strokeText(npc.name, nameX, nameY);
-                    drawCtx.fillStyle = '#4ade80';
-                    drawCtx.fillText(npc.name, nameX, nameY);
-                } else {
-                    drawCtx.fillStyle = '#4ade80';
-                    drawCtx.font = 'bold 8px sans-serif';
-                    drawCtx.textAlign = 'center';
-                    drawCtx.fillText(npc.name, nameX, nameY);
-                }
+                const { x, y } = nameTagPosition(placement);
+                drawOutlinedEntityName(drawCtx, npc.name, x, y, ENTITY_NAME_COLORS.creature);
             },
         });
     }
@@ -326,11 +345,8 @@ export function collectRemoteDepthDrawables(
     z: number,
     camera: DepthSortCamera,
     tileSize: number,
-    options?: { nameStyle?: 'play' | 'studio' }
 ): DepthDrawable[] {
     const drawables: DepthDrawable[] = [];
-    const nameStyle = options?.nameStyle ?? 'play';
-
     const zoom = camera.zoom ?? 1;
 
     for (const remote of remotes) {
@@ -357,6 +373,7 @@ export function collectRemoteDepthDrawables(
                         drawScale,
                         zoom
                     );
+                    drawCtx.imageSmoothingEnabled = false;
                     drawCtx.drawImage(
                         ctrl.image!,
                         rect.sx,
@@ -369,22 +386,8 @@ export function collectRemoteDepthDrawables(
                         placement.drawH
                     );
 
-                    const nameX = placement.drawX + placement.drawW / 2;
-                    const nameY = placement.drawY - (nameStyle === 'studio' ? 6 : 4);
-                    if (nameStyle === 'studio') {
-                        drawCtx.font = "bold 11px 'Outfit', 'Courier New', monospace";
-                        drawCtx.textAlign = 'center';
-                        drawCtx.strokeStyle = '#000000';
-                        drawCtx.lineWidth = 2.5;
-                        drawCtx.strokeText(remote.name, nameX - 10, nameY);
-                        drawCtx.fillStyle = '#fda4af';
-                        drawCtx.fillText(remote.name, nameX - 10, nameY);
-                    } else {
-                        drawCtx.fillStyle = '#fda4af';
-                        drawCtx.font = 'bold 8px sans-serif';
-                        drawCtx.textAlign = 'center';
-                        drawCtx.fillText(remote.name, nameX, nameY);
-                    }
+                    const { x, y } = nameTagPosition(placement);
+                    drawOutlinedEntityName(drawCtx, remote.name, x, y, ENTITY_NAME_COLORS.remotePlayer);
                 },
             });
             continue;
@@ -409,20 +412,13 @@ export function collectRemoteDepthDrawables(
                 drawCtx.lineWidth = 2;
                 drawCtx.strokeRect(rx + 10, ry + 10, tileSize - 20, tileSize - 20);
 
-                if (nameStyle === 'studio') {
-                    drawCtx.font = "bold 11px 'Outfit', 'Courier New', monospace";
-                    drawCtx.textAlign = 'center';
-                    drawCtx.strokeStyle = '#000000';
-                    drawCtx.lineWidth = 2.5;
-                    drawCtx.strokeText(remote.name, rx + tileSize / 2 - 10, ry - 6);
-                    drawCtx.fillStyle = '#fda4af';
-                    drawCtx.fillText(remote.name, rx + tileSize / 2 - 10, ry - 6);
-                } else {
-                    drawCtx.fillStyle = '#fda4af';
-                    drawCtx.font = 'bold 8px sans-serif';
-                    drawCtx.textAlign = 'center';
-                    drawCtx.fillText(remote.name, rx + tileSize / 2, ry - 4);
-                }
+                drawOutlinedEntityName(
+                    drawCtx,
+                    remote.name,
+                    rx + tileSize / 2,
+                    ry - 4,
+                    ENTITY_NAME_COLORS.remotePlayer
+                );
             },
         });
     }
@@ -442,7 +438,7 @@ export interface LocalPlayerDepthOptions {
     isLoaded: boolean;
     name: string;
     zoom?: number;
-    nameStyle?: 'play' | 'studio';
+    drawScale?: number;
     fallbackTile?: RegistryTile;
 }
 
@@ -461,7 +457,7 @@ export function collectLocalPlayerDepthDrawable(
         isLoaded,
         name,
         zoom = 1,
-        nameStyle = 'play',
+        drawScale = 1,
         fallbackTile,
     } = options;
 
@@ -482,9 +478,10 @@ export function collectLocalPlayerDepthDrawable(
                     camera.y,
                     tileSize,
                     rect,
-                    1,
+                    drawScale,
                     zoom
                 );
+                drawCtx.imageSmoothingEnabled = false;
                 drawCtx.drawImage(
                     image,
                     rect.sx,
@@ -497,23 +494,8 @@ export function collectLocalPlayerDepthDrawable(
                     placement.drawH
                 );
 
-                const nameX = placement.drawX + placement.drawW / 2 - (nameStyle === 'studio' ? 10 : 0);
-                const nameY = placement.drawY - (nameStyle === 'studio' ? 6 : 4);
-
-                if (nameStyle === 'studio') {
-                    drawCtx.font = "bold 11px 'Outfit', 'Courier New', monospace";
-                    drawCtx.textAlign = 'center';
-                    drawCtx.strokeStyle = '#000000';
-                    drawCtx.lineWidth = 2.5;
-                    drawCtx.strokeText(name, nameX, nameY);
-                    drawCtx.fillStyle = '#38bdf8';
-                    drawCtx.fillText(name, nameX, nameY);
-                } else {
-                    drawCtx.fillStyle = '#38bdf8';
-                    drawCtx.font = 'bold 8px sans-serif';
-                    drawCtx.textAlign = 'center';
-                    drawCtx.fillText(name, nameX, nameY);
-                }
+                const { x, y } = nameTagPosition(placement);
+                drawOutlinedEntityName(drawCtx, name, x, y, ENTITY_NAME_COLORS.localPlayer);
             },
         };
     }

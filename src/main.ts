@@ -169,6 +169,7 @@ import { ZoneType, ZONE_COLORS } from './engine/zones';
 import { initHouseManager } from './editor/houseManager';
 import { initSpawnEditor, getSpawnDisplayColor } from './editor/spawnEditor';
 import { loadCreaturePresets } from './editor/creaturePresets';
+import { getPlayBorderConfig, loadPlayBorderConfig } from './game/playBorderConfig';
 import { initPortalEditor } from './editor/portalEditor';
 import { loadMapFile } from './engine/worldLoader';
 import { MAP_REGISTRY, registerMap, type MapEntry } from './engine/mapRegistry';
@@ -663,6 +664,12 @@ async function refreshCreatureCatalog(): Promise<void> {
     respawnEntities();
 }
 
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        void refreshCreatureCatalog();
+    }
+});
+
 function parseSpriteProfile(value: string | undefined): SpriteProfileId {
     if (value === 'npc' || value === 'monster') return value;
     return 'player';
@@ -969,15 +976,16 @@ function buildAutoBorderContext(borderSetId: string, fillTerrain: string): AutoB
     };
 }
 
+/** Contexto de auto-borda para desenho no viewport — alinhado ao Play (não usa toggle do editor). */
 function getBorderDrawContext(): Parameters<typeof collectBorderDrawTileIdsCached>[0] {
-    const set = getActiveBorderSet();
+    const borderConfig = getPlayBorderConfig();
     return {
         worldMap,
         grassOverlay: grassOverlayMap,
         borderOverlay: borderOverlayMap,
         registry: TILE_TYPES,
-        fillTerrain: set?.fillTerrain ?? 'grass',
-        borderSetId: set?.id ?? 'grass_edges',
+        fillTerrain: borderConfig.fillTerrain,
+        borderSetId: borderConfig.borderSetId,
     };
 }
 
@@ -2580,7 +2588,6 @@ function draw() {
             }),
             ...collectNpcDepthDrawables(npcs, z, { x: camX, y: camY, zoom }, TILE_SIZE_SCREEN, {
                 drawNames: true,
-                nameStyle: 'studio',
             }),
         ];
 
@@ -2599,8 +2606,7 @@ function draw() {
                     remoteEntries,
                     z,
                     { x: camX, y: camY, zoom },
-                    TILE_SIZE_SCREEN,
-                    { nameStyle: 'studio' }
+                    TILE_SIZE_SCREEN
                 )
             );
         }
@@ -2617,9 +2623,8 @@ function draw() {
                 getSourceRect: () => activeCharacterController.getSourceRect(),
                 image: activeCharacterController.image,
                 isLoaded: activeCharacterController.isLoaded,
-                name: activeCharacterController.config.name,
+                name: activeCharacterController.config.name || 'Jogador',
                 zoom,
-                nameStyle: 'studio',
                 fallbackTile: TILE_TYPES[6],
             });
             if (localDrawable) depthDrawables.push(localDrawable);
@@ -3050,6 +3055,8 @@ async function tryRestoreStudioSession(): Promise<boolean> {
 async function bootstrapApp(): Promise<void> {
     try {
         await tileRegistryReady;
+        await loadPlayBorderConfig();
+        invalidateBorderDrawCache();
         await refreshCreatureCatalog();
 
         if (isStudioMode() && getStudioBoot()?.blankMap) {

@@ -1,4 +1,5 @@
 import type { CharacterSpriteConfig } from '../character/spriteAnimation';
+import { getAnimationFrameIndexAtCell } from '../character/sheetFrameLayout';
 import { computeFrameDimensionsFromGrid } from './calibratorGrid';
 import { createBorderSetCalibratorUi, type BorderSetCellAssignment } from './borderSetCalibratorUi';
 import { inferBorderSlotGrid } from './borderSetExport';
@@ -681,10 +682,19 @@ export function openCharacterCalibrator(
                     }
                 }
 
-                // Destaque da animação ativa
-                const isActive = localSheetLayout === 'vertical'
-                    ? (activeAnim && c === activeAnim.row && r >= (activeAnim.startFrame ?? 0) && r < (activeAnim.startFrame ?? 0) + activeAnim.frames)
-                    : (activeAnim && r === activeAnim.row && c >= (activeAnim.startFrame ?? 0) && c < (activeAnim.startFrame ?? 0) + activeAnim.frames);
+                // Destaque da animação ativa (com wrap para a linha/coluna seguinte)
+                const animFrameIndex =
+                    activeAnim && !isMapMode
+                        ? getAnimationFrameIndexAtCell(
+                              c,
+                              r,
+                              activeAnim,
+                              localSheetLayout,
+                              cols,
+                              rows
+                          )
+                        : null;
+                const isActive = animFrameIndex !== null;
 
                 if (isActive && !isMapMode) {
                     // Desenha borda verde brilhante
@@ -703,10 +713,7 @@ export function openCharacterCalibrator(
                     // Adiciona o número do frame da animação no topo-esquerdo do bloco
                     ctx.fillStyle = '#4ade80';
                     ctx.font = 'bold 12px sans-serif';
-                    const frameIndex = localSheetLayout === 'vertical' 
-                        ? r - (activeAnim.startFrame ?? 0)
-                        : c - (activeAnim.startFrame ?? 0);
-                    ctx.fillText(`F${frameIndex + 1}`, x + 6, y + 18);
+                    ctx.fillText(`F${animFrameIndex! + 1}`, x + 6, y + 18);
                     
                     // Restaura estilos padrão para os próximos retângulos da grade
                     ctx.strokeStyle = 'rgba(255, 60, 60, 0.7)';

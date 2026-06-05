@@ -225,7 +225,7 @@
 
                 <!-- Aba 5: Spawns -->
                 <div id="mapTabContent_spawns" class="map-tab-content" style="display: none;">
-                  <p class="flyout-hint">Coloque monstros/NPCs no mapa. Cadastre criaturas em <code style="font-size:10px">public/creature_presets.json</code> (veja <code style="font-size:10px">creature_presets.example.json</code>) e recarregue a página.</p>
+                  <p class="flyout-hint">Coloque monstros/NPCs no mapa. Cadastre em <strong>Criar → Criar Mobs</strong> ou <strong>Criar NPCs</strong>, marque <em>Registrar na paleta de spawns</em> e salve — a paleta abaixo atualiza sozinha.</p>
                   <div class="spawn-editor-tools map-editor-actions" style="display: flex; gap: 6px; margin-bottom: 8px;">
                     <button type="button" class="floor-btn spawn-tool-btn active" data-spawn-tool="pencil" title="Atalho: P">✏️ Colocar</button>
                     <button type="button" class="floor-btn spawn-tool-btn" data-spawn-tool="eraser" title="Atalho: E">🧽 Remover</button>
@@ -235,7 +235,7 @@
                     <button class="cat-btn" id="spawnFilterMonster" style="flex: 1; font-size: 10px; padding: 4px 0;">👾 Monstros</button>
                     <button class="cat-btn" id="spawnFilterNpc" style="flex: 1; font-size: 10px; padding: 4px 0;">👤 NPCs</button>
                   </div>
-                  <div class="tile-grid" id="spawnSelector" style="max-height: 160px; overflow-y: auto; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; padding: 4px;">
+                  <div id="spawnSelector" class="spawn-preset-grid">
                     <!-- Preenchido dinamicamente via JS -->
                   </div>
                   <label class="flyout-label" style="margin-top: 10px;">Spawns neste mapa</label>
@@ -321,17 +321,22 @@
               <section class="flyout-section" data-panel="character">
                 <div class="character-editor-panel">
                   <label class="flyout-label" id="charServerLabel">Carregar do Servidor</label>
-                  <select id="charServerSelect" class="select-full" style="margin-bottom: 12px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 4px; font-size: 11px;">
+                  <select id="charServerSelect" class="select-full" style="margin-bottom: 6px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 4px; font-size: 11px;">
                     <option value="">-- Selecionar Outfit --</option>
                   </select>
+                  <div class="floor-controls" style="margin-bottom: 12px; gap: 6px; flex-wrap: wrap;">
+                    <button type="button" class="floor-btn" id="charRefreshListBtn" style="flex: 1; min-width: 90px; font-size: 10px;">Atualizar lista</button>
+                    <button type="button" class="floor-btn" id="deleteServerBtn" style="flex: 1; min-width: 90px; display: none; font-size: 10px; border-color: #ef4444; color: #ef4444; background: rgba(239, 68, 68, 0.05);">🗑️ Excluir</button>
+                    <button type="button" class="floor-btn" id="charNewBtn" style="flex: 1; min-width: 90px; font-size: 10px; border-color: var(--accent-color); color: var(--accent-color);" title="Limpar formulário e começar do zero">✨ Novo</button>
+                  </div>
 
                   <label class="flyout-label" id="charNameLabel">Nome do Personagem</label>
-                  <input type="text" id="charNameInput" value="Default Warrior" style="width: 100%; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 4px 8px; margin-bottom: 12px; font-size: 11px;" />
+                  <input type="text" id="charNameInput" value="" placeholder="Obrigatório" style="width: 100%; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 4px 8px; margin-bottom: 12px; font-size: 11px;" />
 
                   <div id="charCreatureMetaSection" style="display: none; margin-bottom: 12px; padding: 8px; border: 1px solid #3f4452; border-radius: 6px; background: #111318;">
                     <label class="flyout-label">Paleta de Spawns (mapa)</label>
                     <div class="info-row" style="margin-bottom: 6px;">
-                      <span class="info-label">Tamanho visual</span>
+                      <span class="info-label" title="Tamanho no tile no jogo; não altera a grade da PNG">Tamanho no mapa</span>
                       <select id="charVisualSize" style="width: 90px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px; font-size: 11px;">
                         <option value="tiny">Tiny (16px)</option>
                         <option value="small">Small (24px)</option>
@@ -340,12 +345,17 @@
                         <option value="boss">Boss (64px)</option>
                       </select>
                     </div>
+                    <p id="charVisualSizeHint" class="flyout-hint" style="margin: 0 0 8px; font-size: 9px; line-height: 1.35;"></p>
                     <div class="info-row" style="margin-bottom: 6px;">
                       <span class="info-label">Cor no editor</span>
                       <input type="color" id="charSpawnColor" value="#10b981" style="width: 40px; height: 24px; border: none; background: transparent; cursor: pointer;" />
                     </div>
-                    <label class="flyout-label">Descrição</label>
-                    <input type="text" id="charSpawnDescription" placeholder="Ex: Rato pequeno da caverna" style="width: 100%; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 4px 8px; margin-bottom: 6px; font-size: 11px;" />
+                    <label class="flyout-label" id="charSpawnDescriptionLabel">Descrição</label>
+                    <input type="text" id="charSpawnDescription" placeholder="Obrigatório — ex: Rato pequeno da caverna" style="width: 100%; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 4px 8px; margin-bottom: 6px; font-size: 11px;" />
+                    <label class="check-row" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; font-size: 11px; color: var(--text-dim); margin-top: 4px;">
+                      <span>Registrar na paleta de spawns ao salvar</span>
+                      <input type="checkbox" id="charRegisterInPalette" checked style="accent-color: var(--accent-color);" />
+                    </label>
                   </div>
 
                   <div id="charPlayerMetaSection" style="display: none; margin-bottom: 12px; padding: 8px; border: 1px solid #3f4452; border-radius: 6px; background: #111318;">
@@ -371,8 +381,8 @@
                     </label>
                   </div>
 
-                  <label class="flyout-label">Subpasta em tiles/characters</label>
-                  <input type="text" id="charCategoryInput" list="charCategoryList" placeholder="ex: npcs ou monstros/bosses" autocomplete="off" style="width: 100%; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 4px 8px; margin-bottom: 6px; font-size: 11px;" />
+                  <label class="flyout-label" id="charCategoryLabel">Subpasta em tiles/characters</label>
+                  <input type="text" id="charCategoryInput" list="charCategoryList" placeholder="Obrigatório — ex: monstros ou npcs" autocomplete="off" style="width: 100%; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 4px 8px; margin-bottom: 6px; font-size: 11px;" />
                   <datalist id="charCategoryList"></datalist>
                   <div id="charCategoryTree" class="char-folder-tree" aria-label="Estrutura de pastas de personagens"></div>
 
@@ -383,16 +393,16 @@
                   </div>
                   <div class="floor-controls" style="margin-bottom: 12px; gap: 8px;">
                     <button type="button" class="floor-btn" id="saveServerBtn" style="border: 1px solid var(--accent-color); color: var(--accent-color); background: transparent; flex: 1;">💾 Salvar no Servidor</button>
-                    <button type="button" class="floor-btn" id="deleteServerBtn" style="border: 1px solid #ef4444; color: #ef4444; background: transparent; flex: 1; display: none;">🗑️ Excluir</button>
                   </div>
                   <input type="file" id="importCharInput" accept=".json,application/json" hidden />
 
                   <label class="flyout-label">Imagem da Spritesheet (PNG)</label>
                   <button type="button" class="menu-dropdown-item block-btn" id="loadSpriteBtn" style="margin-bottom: 8px;">Carregar PNG</button>
-                  <div id="upscaleSpriteRow" class="floor-controls" style="margin-bottom: 8px; gap: 8px; display: none;">
+                  <div id="upscaleSpriteRow" class="floor-controls" style="margin-bottom: 4px; gap: 8px; display: none;">
                     <button type="button" class="menu-dropdown-item block-btn" id="upscaleSprite2xBtn" style="flex: 1; border: 1px solid #eab308; color: #eab308; background: rgba(234, 179, 8, 0.05); text-align: center;">⚡ 2x</button>
                     <button type="button" class="menu-dropdown-item block-btn" id="upscaleSprite3xBtn" style="flex: 1; border: 1px solid #eab308; color: #eab308; background: rgba(234, 179, 8, 0.05); text-align: center;">⚡ 3x</button>
                   </div>
+                  <p id="upscaleSpriteHint" class="flyout-hint" style="margin: 0 0 8px; font-size: 9px; line-height: 1.35; display: none;">⚡ Upscale <strong>regrava a PNG</strong> e multiplica frame/gap no JSON. Use se a arte foi desenhada em 32px; se a PNG já é 64px/célula, calibre a grade em 64×64 em vez de upscale.</p>
                   <button type="button" class="menu-dropdown-item block-btn" id="openCalibratorBtn" style="margin-bottom: 8px; background: var(--accent-color); color: #fff; text-align: center;">🔍 Calibrar Grade</button>
                   <div class="info-row" style="margin-bottom: 8px;">
                     <span class="info-label">Orientação</span>

@@ -4,6 +4,7 @@ import { createCharacter, validateCharacterName } from '../shared/characterStore
 import { track } from '../shared/analytics';
 import type { Gender, VocationId } from '../../shared/types/character';
 import { loadOutfitPresets, filterOutfitsByVocationAndGender, findOutfitPreset, type OutfitPreset } from '../game-data/default/loadOutfitPresets';
+import { resolveAnimationSourceRect } from '../character/sheetFrameLayout';
 
 const session = await requireAuth();
 const errEl = document.getElementById('createError') as HTMLElement;
@@ -115,7 +116,6 @@ async function startAnimatedPreview(outfit: OutfitPreset): Promise<void> {
         ?? { row: 0, startFrame: 0, frames: 1, speedFps: 5, loop: true };
 
     const totalFrames = Math.max(1, anim.frames);
-    const startFrame = anim.startFrame ?? 0;
     const fps = Math.max(1, anim.speedFps);
     const msPerFrame = 1000 / fps;
 
@@ -146,17 +146,25 @@ async function startAnimatedPreview(outfit: OutfitPreset): Promise<void> {
         if (timestamp - lastFrameTime >= msPerFrame) {
             lastFrameTime = timestamp;
 
-            const frameIndex = startFrame + currentFrame;
-
-            // Calcula posição do frame no spritesheet
-            let sx: number, sy: number;
-            if (sheetLayout === 'vertical') {
-                sx = anim.row * (frameWidth + gapX) + offsetX;
-                sy = frameIndex * (frameHeight + gapY) + offsetY;
-            } else {
-                sx = frameIndex * (frameWidth + gapX) + offsetX;
-                sy = anim.row * (frameHeight + gapY) + offsetY;
-            }
+            const { sx, sy } = resolveAnimationSourceRect(
+                {
+                    name: '',
+                    spriteSheetUrl: '',
+                    frameWidth,
+                    frameHeight,
+                    defaultDirection: 'down',
+                    animations: {},
+                    offsetX,
+                    offsetY,
+                    gapX,
+                    gapY,
+                    sheetLayout,
+                },
+                anim,
+                currentFrame,
+                img.naturalWidth || img.width,
+                img.naturalHeight || img.height
+            );
 
             previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
 

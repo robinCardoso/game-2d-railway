@@ -45,6 +45,13 @@ Documento de referência para humanos e agentes IA. **Atualizar este arquivo** q
 | **Rate limit movimento WS** | Cliente podia floodar `move` mesmo com clamp de duração | `GameRoom`: `lastMoveAcceptedAtMs` + intervalo `stepMs × 0.85`; código `MOVEMENT_TOO_FAST` |
 | **Rate limit falso positivo** | Sync mandava duração do *próximo* passo (terreno lento) ≠ ritmo real (~331ms vs 453ms) | `lastCompletedStepDurationMs` no cliente + `lastObservedMoveIntervalMs` no servidor |
 | **Spam rejeição movimento** | Cliente malicioso podia floodar `error` + `position_correction` + log | `rejectMove()` + `lastMoveRejectionSentAtMs`; throttle 400ms; silent drop no intervalo |
+| **Paleta spawns após salvar mob** | `#charRegisterInPalette` ausente no HTML → `creature_presets.json` nunca atualizava | Checkbox em `studio.html`; hint aba Spawns aponta para Criar Mobs/NPCs |
+| **Animação wrap no calibrador** | `startFrame` no fim da linha + `frames>1` não destacava célula na linha seguinte | `sheetFrameLayout.ts` — índice linear com wrap; calibrador, preview e runtime |
+| **Criar Mob — campos e exclusão** | Nome/subpasta/descrição vinham preenchidos (`Novo Mob`); sem botão Novo; excluir pouco visível | Campos vazios + validação no save; `✨ Novo Mob` + Excluir na lista (como Criar Sprites); preset ao carregar existente |
+| **Paleta spawns — preview sprite** | Só círculo colorido + emoji na aba Spawns | `creaturePresetThumbnail.ts` — canvas com frame idle/walk do JSON; lista de spawns no mapa também |
+| **Layout paleta spawns** | `.tile-option` altura 56px truncava nome/descrição | Cards `.spawn-preset-card` em coluna única; thumb + texto legível |
+| **Nome sobre entidades** | Player no Play usava fonte 8px sem contorno | `drawOutlinedEntityName` — bold 11px + stroke preto; player azul, mob verde, remoto rosa |
+| **visualSize mob** | `applyVisualSize` sobrescrevia `frameWidth` (recorte errado na sheet 64px) | Só `drawScale` = alvo ÷ frame nativo; `imageSmoothingEnabled` false em entidades |
 
 ---
 

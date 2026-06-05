@@ -8,13 +8,22 @@ import {
     type SpriteSheetEditorHandle,
 } from './spriteSheetEditor';
 
+function createEmptySpriteDraftConfig() {
+    return {
+        ...createDefaultCharacterConfig(),
+        name: '',
+        category: '',
+        spriteSheetUrl: '',
+    };
+}
+
 export const npcDraftController = new SpriteAnimationController(
-    { ...createDefaultCharacterConfig(), name: 'Novo NPC', category: 'npcs' },
+    createEmptySpriteDraftConfig(),
     { autoLoad: false }
 );
 
 export const mobDraftController = new SpriteAnimationController(
-    { ...createDefaultCharacterConfig(), name: 'Novo Mob', category: 'monstros' },
+    createEmptySpriteDraftConfig(),
     { autoLoad: false }
 );
 

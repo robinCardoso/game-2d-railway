@@ -88,6 +88,7 @@ export class GameEntity {
         );
         
         ctx.globalAlpha = 1.0;
+        ctx.imageSmoothingEnabled = false;
         ctx.drawImage(
             this.animController.image,
             rect.sx, rect.sy, rect.sw, rect.sh - 0.5,
