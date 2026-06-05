@@ -53,6 +53,8 @@ import {
 } from '../engine/mapInstance';
 import { DEFAULT_WS_PORT } from '../../shared/protocol';
 import { GameNetClient } from '../net/gameNetClient';
+import { RemotePlayerSpriteManager } from '../net/remotePlayerSprites';
+import { appearanceFromCharacter } from '../world/playerAppearance';
 import { createEnterTicket } from '../shared/enterTicket';
 import type { CharacterRow } from '../shared/types';
 import { updateCharacterLocation } from '../shared/characterStore';
@@ -93,6 +95,7 @@ const characterSpeed: CharacterSpeedState = createDefaultCharacterSpeed();
 
 let activeCharacterController: SpriteAnimationController;
 let gameNet: GameNetClient | null = null;
+const remoteSprites = new RemotePlayerSpriteManager();
 
 const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -260,6 +263,7 @@ async function resolveEnterTicket(char: CharacterRow, accountId: string): Promis
         tileY: char.position?.y ?? player.tileY,
         z: char.position?.z ?? player.worldZ,
         direction: char.direction ?? 'south',
+        appearance: appearanceFromCharacter(char),
     });
 }
 
@@ -464,6 +468,12 @@ function update(): void {
 
     if (statusPosEl) statusPosEl.textContent = `${player.tileX}, ${player.tileY}`;
     if (statusZEl) statusZEl.textContent = String(player.worldZ);
+    if (gameNet && currentMapId) {
+        remoteSprites.sync(
+            gameNet.getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId())
+        );
+        remoteSprites.tick(nowMs);
+    }
     gameNet?.syncPositionIfChanged();
 }
 
@@ -569,6 +579,8 @@ function draw(): void {
     );
 
     const { startX, endX, startY, endY } = computePlayViewportBounds(camX, camY, zoom);
+    const viewW = canvas.width / zoom;
+    const viewH = canvas.height / zoom;
 
     getAllFloorZs().forEach((z) => {
         const isAbove = z > player.worldZ;
@@ -627,18 +639,27 @@ function draw(): void {
                 registry: TILE_TYPES,
                 camera: camState,
                 tileSize: TILE_SIZE_SCREEN,
+                viewWidth: viewW,
+                viewHeight: viewH,
+                mapSize: activeMapSize,
+                edgeFadePx: 28,
             }),
             ...collectNpcDepthDrawables(npcs, z, camState, TILE_SIZE_SCREEN),
         ];
 
         if (currentMapId && gameNet) {
+            const remoteEntries = gameNet
+                .getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId())
+                .map((remote) => ({
+                    tileX: remote.tileX,
+                    tileY: remote.tileY,
+                    z: remote.z,
+                    name: remote.name,
+                    direction: remote.direction,
+                    controller: remoteSprites.get(remote.playerId),
+                }));
             depthDrawables.push(
-                ...collectRemoteDepthDrawables(
-                    gameNet.getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId()),
-                    z,
-                    camState,
-                    TILE_SIZE_SCREEN
-                )
+                ...collectRemoteDepthDrawables(remoteEntries, z, camState, TILE_SIZE_SCREEN)
             );
         }
 
@@ -709,6 +730,7 @@ function resolveGameServerUrl(): string | null {
 function setupNetwork(char: CharacterRow, accountId: string): void {
     const url = resolveGameServerUrl();
     if (!url) return;
+    const localAppearance = appearanceFromCharacter(char);
     let ticket: string | undefined;
 
     const refreshTicket = async (): Promise<string | undefined> => {
@@ -734,6 +756,7 @@ function setupNetwork(char: CharacterRow, accountId: string): void {
             tileY: player.tileY,
             z: player.worldZ,
             direction: getPlayerDirection(),
+            appearance: localAppearance,
         }),
         onPositionCorrection: (pos) => {
             if (pos.mapId !== (currentMapId ?? char.spawnMapId)) return;

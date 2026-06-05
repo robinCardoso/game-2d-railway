@@ -1,5 +1,6 @@
 import type {
     ClientMessage,
+    PlayerAppearance,
     PlayerSnapshot,
     ServerMessage,
 } from '../../shared/protocol';
@@ -26,6 +27,7 @@ export interface GameNetClientOptions {
         tileY: number;
         z: number;
         direction?: 'north' | 'south' | 'east' | 'west';
+        appearance?: PlayerAppearance;
     };
     onStatusChange?: (status: NetStatus) => void;
     /** Servidor atribuiu instanceId (dungeon instanciada). */
@@ -281,6 +283,7 @@ export class GameNetClient {
             tileY: state.tileY,
             z: state.z,
             direction: state.direction,
+            appearance: state.appearance,
         });
     }
 
@@ -346,6 +349,9 @@ export class GameNetClient {
                     existing.z = msg.z;
                     existing.mapId = msg.mapId;
                     existing.instanceId = msg.instanceId;
+                    if (msg.direction) {
+                        existing.direction = msg.direction;
+                    }
                 } else {
                     this.remotePlayers.set(msg.playerId, {
                         playerId: msg.playerId,

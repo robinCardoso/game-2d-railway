@@ -2504,6 +2504,8 @@ function draw() {
     );
 
     const { startX, endX, startY, endY } = computeViewportTileBounds(camX, camY, zoom);
+    const viewW = canvas.width / zoom;
+    const viewH = canvas.height / zoom;
     const tilesPerFloor = Math.max(0, endX - startX + 1) * Math.max(0, endY - startY + 1);
     let floorsDrawn = 0;
 
@@ -2567,6 +2569,10 @@ function draw() {
                 registry: TILE_TYPES,
                 camera: { x: camX, y: camY, zoom },
                 tileSize: TILE_SIZE_SCREEN,
+                viewWidth: viewW,
+                viewHeight: viewH,
+                mapSize: activeMapSize,
+                edgeFadePx: 28,
                 shouldIncludeTile: (tid) => tid !== -1 && !isVariantBrush(tid),
             }),
             ...collectNpcDepthDrawables(npcs, z, { x: camX, y: camY, zoom }, TILE_SIZE_SCREEN, {
@@ -2576,9 +2582,18 @@ function draw() {
         ];
 
         if (currentMapId && gameNet) {
+            const remoteEntries = gameNet
+                .getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId())
+                .map((remote) => ({
+                    tileX: remote.tileX,
+                    tileY: remote.tileY,
+                    z: remote.z,
+                    name: remote.name,
+                    direction: remote.direction,
+                }));
             depthDrawables.push(
                 ...collectRemoteDepthDrawables(
-                    gameNet.getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId()),
+                    remoteEntries,
                     z,
                     { x: camX, y: camY, zoom },
                     TILE_SIZE_SCREEN,

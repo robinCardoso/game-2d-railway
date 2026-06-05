@@ -1,4 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import type { PlayerAppearance } from '../../shared/protocol.js';
+import { parsePlayerAppearance } from '../../shared/protocol.js';
 import { env } from './config/env.js';
 
 export interface EnterTicketPayload {
@@ -10,6 +12,7 @@ export interface EnterTicketPayload {
     tileY: number;
     z: number;
     direction: 'north' | 'south' | 'east' | 'west';
+    appearance?: PlayerAppearance;
     exp: number;
 }
 
@@ -68,9 +71,11 @@ export function verifyEnterTicket(ticket: string): EnterTicketPayload | null {
         }
         const dir = payload.direction;
         if (dir && !['north', 'south', 'east', 'west'].includes(dir)) return null;
+        const appearance = parsePlayerAppearance(payload.appearance);
         return {
             ...payload,
             direction: dir ?? 'south',
+            appearance,
         };
     } catch {
         return null;

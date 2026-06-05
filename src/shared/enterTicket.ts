@@ -3,6 +3,8 @@
  * Em produção o ticket é assinado somente no backend (Fase C).
  */
 
+import type { PlayerAppearance } from '../../shared/protocol';
+
 export interface EnterTicketPayload {
     characterId: string;
     accountId: string;
@@ -12,6 +14,7 @@ export interface EnterTicketPayload {
     tileY: number;
     z: number;
     direction: 'north' | 'south' | 'east' | 'west';
+    appearance?: PlayerAppearance;
     exp: number;
 }
 
@@ -40,6 +43,7 @@ export interface CreateEnterTicketOptions {
     tileY?: number;
     z?: number;
     direction?: 'north' | 'south' | 'east' | 'west';
+    appearance?: PlayerAppearance;
     ttlMs?: number;
 }
 
@@ -58,6 +62,7 @@ export async function createEnterTicket(
         tileY: options.tileY ?? 50,
         z: options.z ?? 0,
         direction: options.direction ?? 'south',
+        appearance: options.appearance,
         exp: Date.now() + (options.ttlMs ?? 120_000),
     };
     const body = base64UrlEncode(JSON.stringify(payload));

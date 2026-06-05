@@ -4,6 +4,7 @@
  */
 
 import { buildRoomKey } from './roomKey.js';
+import type { Gender } from './types/character.js';
 
 export const PROTOCOL_VERSION = 1;
 export const DEFAULT_WS_PORT = 8787;
@@ -31,6 +32,13 @@ export type ServerMessage =
     | ErrorMessage
     | PongMessage;
 
+export interface PlayerAppearance {
+    outfitId: string;
+    spriteSheetUrl: string;
+    gender: Gender;
+    vocationId: string;
+}
+
 export interface PlayerSnapshot {
     playerId: string;
     name: string;
@@ -41,6 +49,8 @@ export interface PlayerSnapshot {
     tileX: number;
     tileY: number;
     z: number;
+    direction?: 'north' | 'south' | 'east' | 'west';
+    appearance?: PlayerAppearance;
 }
 
 export interface JoinMessage {
@@ -56,6 +66,8 @@ export interface JoinMessage {
     tileY: number;
     z: number;
     direction?: 'north' | 'south' | 'east' | 'west';
+    /** Usado em dev sem ticket; em prod vem do ticket assinado. */
+    appearance?: PlayerAppearance;
 }
 
 export interface MoveMessage {
@@ -129,6 +141,7 @@ export interface PlayerMovedMessage {
     z: number;
     mapId: string;
     instanceId?: string;
+    direction?: 'north' | 'south' | 'east' | 'west';
 }
 
 export interface StateSyncMessage {
@@ -162,6 +175,19 @@ export interface PongMessage {
 
 export function playerRoomKey(p: Pick<PlayerSnapshot, 'mapId' | 'instanceId'>): string {
     return buildRoomKey(p.mapId, p.instanceId);
+}
+
+export function parsePlayerAppearance(raw: unknown): PlayerAppearance | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const o = raw as Record<string, unknown>;
+    const spriteSheetUrl =
+        typeof o.spriteSheetUrl === 'string' ? o.spriteSheetUrl.trim().slice(0, 200) : '';
+    const outfitId = typeof o.outfitId === 'string' ? o.outfitId.trim().slice(0, 64) : '';
+    const gender = o.gender === 'male' || o.gender === 'female' ? o.gender : undefined;
+    const vocationId =
+        typeof o.vocationId === 'string' ? o.vocationId.trim().slice(0, 32) : '';
+    if (!spriteSheetUrl || !outfitId || !gender || !vocationId) return undefined;
+    return { outfitId, spriteSheetUrl, gender, vocationId };
 }
 
 export function parseClientMessage(raw: unknown): ClientMessage | null {
@@ -199,6 +225,7 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
                 tileY: Number(m.tileY),
                 z: Number(m.z),
                 direction,
+                appearance: parsePlayerAppearance(m.appearance),
             };
         case 'move':
             return {

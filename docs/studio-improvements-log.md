@@ -31,6 +31,8 @@ Documento de referência para humanos e agentes IA. **Atualizar este arquivo** q
 | **Studio preso em “CARREGANDO…” (dev)** | Proxy Vite `/tiles` → Express devolvia 404 em `?import` / `?url` (`import.meta.glob`, JSON) | Plugin `tilesDevPlugin` no Vite serve `tiles/` localmente; proxy só `/api` e `/health` |
 | **Play sem mapa (canvas vazio)** | `playApp` só conhecia 3 mapas em `DEFAULT_GAME_DATA.maps`; custom (`meu_mapa`, etc.) ignorados | Play usa `MAP_REGISTRY` + `hydrateRegistryFromPublicMapFiles()` como o Studio |
 | **Play spawn em área vazia** | Personagem em `10,10` (default) mas Rookgaard tem tiles só ~33–50; mapa “carregava” mas canvas preto | `resolveEffectiveSpawn()` + `game.config` start `50,50`; módulo compartilhado `src/world/worldBoot.ts` |
+| **Itens altos somem de repente** | `collectItemDepthDrawables` só iterava tiles visíveis; árvore 64×64 sumia quando o SQM do pé saía da tela | Margem + cull por bounding box do sprite + fade 28px na borda (`depthSortDraw.ts`) |
+| **Outfit de jogador remoto** | WS sincronizava só posição/nome; remoto desenhado como quadrado rosa | `PlayerAppearance` no protocolo + ticket + `RemotePlayerSpriteManager` no Play |
 
 ---
 

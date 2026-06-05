@@ -1,6 +1,7 @@
 import type { WebSocket } from 'ws';
 import type {
     ClientMessage,
+    PlayerAppearance,
     PlayerSnapshot,
     ServerMessage,
 } from '../../shared/protocol.js';
@@ -18,12 +19,20 @@ import { isInstancedMap } from './mapRegistry.js';
 import { verifyEnterTicket } from './enterTicket.js';
 import { PositionPersistence } from './game/PositionPersistence.js';
 
+const DEFAULT_APPEARANCE: PlayerAppearance = {
+    outfitId: 'knight',
+    spriteSheetUrl: 'tiles/characters/vocations/male/knight.png',
+    gender: 'male',
+    vocationId: 'knight',
+};
+
 interface ConnectedPlayer {
     id: string;
     name: string;
     characterId?: string;
     accountId?: string;
     direction: 'north' | 'south' | 'east' | 'west';
+    appearance: PlayerAppearance;
     mapId: string;
     instanceId?: string;
     tileX: number;
@@ -96,6 +105,8 @@ export class GameRoom {
             tileX: p.tileX,
             tileY: p.tileY,
             z: p.z,
+            direction: p.direction,
+            appearance: p.appearance,
         };
     }
 
@@ -189,6 +200,7 @@ export class GameRoom {
         let characterId: string | undefined;
         let accountId: string | undefined;
         let direction: ConnectedPlayer['direction'] = msg.direction ?? 'south';
+        let appearance: PlayerAppearance = msg.appearance ?? DEFAULT_APPEARANCE;
         let joinMapId = msg.mapId;
         let joinTileX = msg.tileX;
         let joinTileY = msg.tileY;
@@ -213,6 +225,9 @@ export class GameRoom {
             joinTileX = ticket.tileX;
             joinTileY = ticket.tileY;
             joinZ = ticket.z;
+            if (ticket.appearance) {
+                appearance = ticket.appearance;
+            }
         }
 
         if (characterId) {
@@ -261,6 +276,7 @@ export class GameRoom {
             characterId,
             accountId,
             direction,
+            appearance,
             mapId: joinMapId,
             instanceId,
             tileX: joinTileX,
@@ -419,6 +435,7 @@ export class GameRoom {
             z: player.z,
             mapId: player.mapId,
             instanceId: player.instanceId,
+            direction: player.direction,
         };
 
         if (mapChanged || oldRoom !== newRoom) {

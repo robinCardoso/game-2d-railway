@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, type AuthenticatedRequest } from '../auth/requireAuth.js';
 import { createEnterTicket } from '../enterTicket.js';
+import { appearanceFromCharacterRow } from '../api/playerAppearance.js';
 import { env } from '../config/env.js';
 import { isDatabaseConfigured } from '../db/pool.js';
 import { getCharacterForAccount } from '../db/repositories/characters.repo.js';
@@ -49,6 +50,7 @@ export function createWsTicketRouter(): Router {
                 tileY: character.position_y,
                 z: character.position_z,
                 direction: character.direction,
+                appearance: appearanceFromCharacterRow(character),
             });
 
             res.json({ ticket, expiresAt: Date.now() + env.wsTicketTtlMs });
