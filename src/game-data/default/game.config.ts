@@ -5,8 +5,8 @@ export const DEFAULT_GAME_CONFIG = {
   start: {
     mapId: 'rookgaard',
     position: {
-      x: 10,
-      y: 10,
+      x: 50,
+      y: 50,
       z: 0,
     },
     direction: 'south' as const,

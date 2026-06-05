@@ -28,6 +28,9 @@ Documento de referência para humanos e agentes IA. **Atualizar este arquivo** q
 | **Auto-borda Dinâmico** | O sistema só ativava auto-borda para o grupo de variação estático `grass` | `autoBorderUi.ts` busca dinamicamente conjuntos cujo `fillTerrain` corresponda ao `variantGroup` selecionado |
 | **Terrenos/Grupos Dropdowns** | Campos de texto para `fillTerrain` e `variantGroup` propícios a erros de digitação e esquecimentos | Substituídos por `<select>` dinâmicos com opção de escolher existentes ou criar novos grupos na hora |
 | **Play auto-borda errada** | `playApp.ts` usava `grass_edges` / `grass` fixos; mapas com `terra_edges` e grupos `*-grass-random` renderizavam filetes quebrados na base | `playBorderConfig.ts` carrega manifest; `isMapBorderTile` ignora bordas na camada base; `isGrassTile` reconhece grupos `*-grass-random` |
+| **Studio preso em “CARREGANDO…” (dev)** | Proxy Vite `/tiles` → Express devolvia 404 em `?import` / `?url` (`import.meta.glob`, JSON) | Plugin `tilesDevPlugin` no Vite serve `tiles/` localmente; proxy só `/api` e `/health` |
+| **Play sem mapa (canvas vazio)** | `playApp` só conhecia 3 mapas em `DEFAULT_GAME_DATA.maps`; custom (`meu_mapa`, etc.) ignorados | Play usa `MAP_REGISTRY` + `hydrateRegistryFromPublicMapFiles()` como o Studio |
+| **Play spawn em área vazia** | Personagem em `10,10` (default) mas Rookgaard tem tiles só ~33–50; mapa “carregava” mas canvas preto | `resolveEffectiveSpawn()` + `game.config` start `50,50`; módulo compartilhado `src/world/worldBoot.ts` |
 
 ---
 
