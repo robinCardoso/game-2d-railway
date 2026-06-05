@@ -146,7 +146,9 @@ export class GameRoom {
 
     /**
      * Rejeita movimento com `error` + `position_correction`.
-     * Dentro do throttle, ignora silenciosamente (sem log nem WS).
+     * Throttle é **por jogador**, não por código — ex.: `MOVEMENT_TOO_FAST` seguido de
+     * `NOT_WALKABLE` em <400ms também é ignorado. Intencional: anti-spam de rejeições.
+     * Debug granular futuro: `lastMoveRejectionCode` ou contador por código.
      */
     private rejectMove(
         player: ConnectedPlayer,
