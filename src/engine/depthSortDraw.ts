@@ -9,6 +9,12 @@ import type { RegistryTile, TileRegistry } from './types';
 /** Margem em tiles para itens altos (ex. árvore 64×64) cujo pé sai do viewport antes da copa. */
 const DEFAULT_ITEM_VIEWPORT_MARGIN_TILES = 2;
 
+/** Fade só quando parte do sprite já saiu da tela (px). 0 = desliga. */
+export const DEFAULT_ITEM_EDGE_FADE_PX = 28;
+
+/** Alpha mínimo durante clip na borda — legível, não “fantasma”. */
+export const ITEM_EDGE_FADE_MIN_ALPHA = 0.65;
+
 export interface FootSortKey {
     sortY: number;
     sortX: number;
@@ -142,7 +148,10 @@ function placementIntersectsView(
     return right > 0 && placement.drawX < viewW && bottom > 0 && placement.drawY < viewH;
 }
 
-/** Alpha 0–1: suaviza itens que estão saindo pela borda da tela (0 = desliga fade). */
+/**
+ * Alpha 0–1: fade apenas quando o sprite **já está saindo** da tela (overflow).
+ * Não escurece árvores inteiras só por estarem perto do topo da viewport.
+ */
 function computeEdgeFadeAlpha(
     placement: SpriteTilePlacement,
     viewW: number,
@@ -150,16 +159,22 @@ function computeEdgeFadeAlpha(
     fadePx: number
 ): number {
     if (fadePx <= 0) return 1;
-    const insetLeft = placement.drawX;
-    const insetRight = viewW - (placement.drawX + placement.drawW);
-    const insetTop = placement.drawY;
-    const insetBottom = viewH - (placement.drawY + placement.drawH);
-    const minInset = Math.min(insetLeft, insetRight, insetTop, insetBottom);
-    if (minInset >= fadePx) return 1;
-    if (minInset <= 0) {
-        return placementIntersectsView(placement, viewW, viewH) ? 0.35 : 0;
-    }
-    return minInset / fadePx;
+
+    const right = placement.drawX + placement.drawW;
+    const bottom = placement.drawY + placement.drawH;
+    const overflow = Math.max(
+        Math.max(0, -placement.drawX),
+        Math.max(0, -placement.drawY),
+        Math.max(0, right - viewW),
+        Math.max(0, bottom - viewH)
+    );
+
+    if (overflow <= 0) return 1;
+    if (!placementIntersectsView(placement, viewW, viewH)) return 0;
+
+    const minA = ITEM_EDGE_FADE_MIN_ALPHA;
+    if (overflow >= fadePx) return minA;
+    return 1 - (1 - minA) * (overflow / fadePx);
 }
 
 export function collectItemDepthDrawables(options: {

@@ -15,6 +15,7 @@ import {
 } from '../engine';
 import {
     collectItemDepthDrawables,
+    DEFAULT_ITEM_EDGE_FADE_PX,
     collectLocalPlayerDepthDrawable,
     collectNpcDepthDrawables,
     collectRemoteDepthDrawables,
@@ -643,7 +644,7 @@ function draw(): void {
                 viewWidth: viewW,
                 viewHeight: viewH,
                 mapSize: activeMapSize,
-                edgeFadePx: 28,
+                edgeFadePx: DEFAULT_ITEM_EDGE_FADE_PX,
             }),
             ...collectNpcDepthDrawables(npcs, z, camState, TILE_SIZE_SCREEN),
         ];

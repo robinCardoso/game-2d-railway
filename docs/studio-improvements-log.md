@@ -32,6 +32,7 @@ Documento de referência para humanos e agentes IA. **Atualizar este arquivo** q
 | **Play sem mapa (canvas vazio)** | `playApp` só conhecia 3 mapas em `DEFAULT_GAME_DATA.maps`; custom (`meu_mapa`, etc.) ignorados | Play usa `MAP_REGISTRY` + `hydrateRegistryFromPublicMapFiles()` como o Studio |
 | **Play spawn em área vazia** | Personagem em `10,10` (default) mas Rookgaard tem tiles só ~33–50; mapa “carregava” mas canvas preto | `resolveEffectiveSpawn()` + `game.config` start `50,50`; módulo compartilhado `src/world/worldBoot.ts` |
 | **Itens altos somem de repente** | `collectItemDepthDrawables` só iterava tiles visíveis; árvore 64×64 sumia quando o SQM do pé saía da tela | Margem + cull por bounding box do sprite + fade 28px na borda (`depthSortDraw.ts`) |
+| **Árvore “fantasma” ao andar** | Fade usava distância até a borda mesmo com sprite inteiro na tela (copa perto do topo → alpha ~0.35) | Fade só com overflow (parte fora da tela); mínimo `ITEM_EDGE_FADE_MIN_ALPHA` 0.65 |
 | **Outfit de jogador remoto** | WS sincronizava só posição/nome; remoto desenhado como quadrado rosa | `PlayerAppearance` no protocolo + ticket + `RemotePlayerSpriteManager` no Play |
 | **Movimento remoto “pulo”** | Remoto desenhado direto no tile do servidor, sem walk | `RemotePlayerSpriteManager` interpola `visualX/Y` + `walk`/`idle` como o grid local |
 | **Remoto “anda e trava”** | Idle imediato ao chegar no tile + duração fixa 200ms | Grace 120ms + duração estimada pelo intervalo entre pacotes |
