@@ -23,7 +23,7 @@ export type GridDirection =
     | 'southeast';
 
 /** Duração do deslize entre dois tiles (ms). Menor = mais rápido. */
-export const DEFAULT_GRID_STEP_DURATION_MS = 50;
+export const DEFAULT_GRID_STEP_DURATION_MS = 55;
 
 /** Passo diagonal percorre √2× mais pixels — mesma duração × este fator = velocidade visual igual. */
 export const DIAGONAL_STEP_DURATION_FACTOR = Math.SQRT2;

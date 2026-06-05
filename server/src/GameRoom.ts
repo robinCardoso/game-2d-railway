@@ -23,6 +23,8 @@ import { PositionPersistence } from './game/PositionPersistence.js';
 
 /** Tolerância de jitter de rede no intervalo mínimo entre passos (0.85 = 15% mais rápido que o step). */
 const MOVE_RATE_LIMIT_TOLERANCE = 0.85;
+/** Intervalo mínimo entre `error` + `position_correction` por rejeição de movimento (anti-spam). */
+const MOVE_REJECTION_THROTTLE_MS = 400;
 
 const DEFAULT_APPEARANCE: PlayerAppearance = {
     outfitId: 'knight',
@@ -49,6 +51,8 @@ interface ConnectedPlayer {
     lastMoveAcceptedAtMs: number;
     /** Intervalo real entre os últimos passos aceitos (ms) — calibra rate limit. */
     lastObservedMoveIntervalMs: number;
+    /** Última rejeição de movimento com resposta ao cliente (throttle de spam). */
+    lastMoveRejectionSentAtMs: number;
     socket: WebSocket;
 }
 
@@ -138,6 +142,36 @@ export class GameRoom {
             tileY: player.tileY,
             z: player.z,
         });
+    }
+
+    /**
+     * Rejeita movimento com `error` + `position_correction`.
+     * Dentro do throttle, ignora silenciosamente (sem log nem WS).
+     */
+    private rejectMove(
+        player: ConnectedPlayer,
+        code: string,
+        message: string,
+        logDetail?: string
+    ): void {
+        const now = Date.now();
+        if (
+            player.lastMoveRejectionSentAtMs > 0 &&
+            now - player.lastMoveRejectionSentAtMs < MOVE_REJECTION_THROTTLE_MS
+        ) {
+            return;
+        }
+        player.lastMoveRejectionSentAtMs = now;
+        if (logDetail) {
+            console.warn(`[GameRoom] ${logDetail}`);
+        }
+        this.send(player.socket, {
+            type: 'error',
+            v: PROTOCOL_VERSION,
+            code,
+            message,
+        });
+        this.sendPositionCorrection(player);
     }
 
     private persistPlayerPosition(player: ConnectedPlayer, immediate = false): void {
@@ -295,6 +329,7 @@ export class GameRoom {
             z: joinZ,
             lastMoveAcceptedAtMs: 0,
             lastObservedMoveIntervalMs: 0,
+            lastMoveRejectionSentAtMs: 0,
             socket,
         };
 
@@ -349,13 +384,11 @@ export class GameRoom {
         if (!player) return;
 
         if (!isValidTile(msg.mapId, msg.tileX, msg.tileY, msg.z)) {
-            this.send(socket, {
-                type: 'error',
-                v: PROTOCOL_VERSION,
-                code: 'INVALID_TILE',
-                message: 'Movimento rejeitado: coordenadas fora dos limites.',
-            });
-            this.sendPositionCorrection(player);
+            this.rejectMove(
+                player,
+                'INVALID_TILE',
+                'Movimento rejeitado: coordenadas fora dos limites.'
+            );
             return;
         }
 
@@ -372,13 +405,11 @@ export class GameRoom {
         }
 
         if (!this.isWalkable(msg.mapId, msg.tileX, msg.tileY, msg.z)) {
-            this.send(socket, {
-                type: 'error',
-                v: PROTOCOL_VERSION,
-                code: 'NOT_WALKABLE',
-                message: 'Movimento rejeitado: tile bloqueado.',
-            });
-            this.sendPositionCorrection(player);
+            this.rejectMove(
+                player,
+                'NOT_WALKABLE',
+                'Movimento rejeitado: tile bloqueado.'
+            );
             return;
         }
 
@@ -399,14 +430,11 @@ export class GameRoom {
                     this.isWalkable(msg.mapId, x, y, z)
                 )
             ) {
-                this.send(socket, {
-                    type: 'error',
-                    v: PROTOCOL_VERSION,
-                    code: 'INVALID_STEP',
-                    message:
-                        'Movimento rejeitado: passo inválido (adjacente, diagonal ou canto bloqueado).',
-                });
-                this.sendPositionCorrection(player);
+                this.rejectMove(
+                    player,
+                    'INVALID_STEP',
+                    'Movimento rejeitado: passo inválido (adjacente, diagonal ou canto bloqueado).'
+                );
                 return;
             }
 
@@ -434,17 +462,13 @@ export class GameRoom {
                 }
                 const elapsed = now - player.lastMoveAcceptedAtMs;
                 if (player.lastMoveAcceptedAtMs > 0 && elapsed < minInterval) {
-                    console.warn(
-                        `[GameRoom] movimento rápido demais: ${player.name} ` +
+                    this.rejectMove(
+                        player,
+                        'MOVEMENT_TOO_FAST',
+                        'Movimento rejeitado: aguarde o intervalo do passo.',
+                        `movimento rápido demais: ${player.name} ` +
                             `${elapsed}ms < ${minInterval}ms (step ${stepMs}ms, obs ${player.lastObservedMoveIntervalMs}ms)`
                     );
-                    this.send(socket, {
-                        type: 'error',
-                        v: PROTOCOL_VERSION,
-                        code: 'MOVEMENT_TOO_FAST',
-                        message: 'Movimento rejeitado: aguarde o intervalo do passo.',
-                    });
-                    this.sendPositionCorrection(player);
                     return;
                 }
             }

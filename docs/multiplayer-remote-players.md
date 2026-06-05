@@ -69,6 +69,7 @@ sequenceDiagram
 
 - Valida tile, passo adjacente, walkable, sala `mapId@instanceId`.
 - **Rate limit:** `lastMoveAcceptedAtMs` — intervalo mínimo `stepDurationMs × 0.85` entre passos (`MOVEMENT_TOO_FAST`).
+- **Anti-spam rejeição:** `rejectMove()` — no máximo um par `error` + `position_correction` a cada 400ms por jogador; demais `move` inválidos são ignorados silenciosamente.
 - Guarda `lastStepDurationMs` do cliente e repassa em `player_moved`.
 - Kick por `characterId` duplicado na mesma conexão.
 

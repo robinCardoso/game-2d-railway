@@ -44,6 +44,7 @@ Documento de referência para humanos e agentes IA. **Atualizar este arquivo** q
 | **Input movimento global** | `chordHeldSinceMs` / facing em módulo — risco Play+Studio/reload | Estado no `GridMovementController`; `resetGridMovementInputState(ctrl)` |
 | **Rate limit movimento WS** | Cliente podia floodar `move` mesmo com clamp de duração | `GameRoom`: `lastMoveAcceptedAtMs` + intervalo `stepMs × 0.85`; código `MOVEMENT_TOO_FAST` |
 | **Rate limit falso positivo** | Sync mandava duração do *próximo* passo (terreno lento) ≠ ritmo real (~331ms vs 453ms) | `lastCompletedStepDurationMs` no cliente + `lastObservedMoveIntervalMs` no servidor |
+| **Spam rejeição movimento** | Cliente malicioso podia floodar `error` + `position_correction` + log | `rejectMove()` + `lastMoveRejectionSentAtMs`; throttle 400ms; silent drop no intervalo |
 
 ---
 
