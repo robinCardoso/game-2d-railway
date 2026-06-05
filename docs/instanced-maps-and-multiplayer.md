@@ -46,7 +46,7 @@ Documentação completa do sistema de mapas, instâncias (Fase 1 implementada) e
 ### 2.4 Fase 2b — salas + walkable (implementado)
 
 - Salas `mapId@instanceId` (`shared/roomKey.ts`).
-- Servidor valida **walkable** (template JSON) e **passo adjacente** em `move`.
+- Servidor valida **walkable** (template JSON) e **passo adjacente** (ortogonal ou diagonal + anti-corte de canto) em `move` — ver `shared/tileWalkable.ts` (`canAdjacentStep`).
 - Mapas `instanced: true`: servidor agrupa jogadores e retorna `instanceId` no `welcome`.
 - Mensagem `position_correction` quando movimento é rejeitado.
 
@@ -271,8 +271,9 @@ shared/
   protocol.ts       # ✅ tipos v1
 
 src/net/
-  gameNetClient.ts  # ✅ join + sync tile
-  interpolation.ts  # futuro: render suave
+  gameNetClient.ts           # ✅ join + sync tile + stepDurationMs
+  remotePlayerSprites.ts     # ✅ interpolação visual + walk remoto
+  # Ver docs/multiplayer-remote-players.md — buffer snapshots / AOI = backlog
 ```
 
 ### 7.3 Protocolo futuro (além do MVP)

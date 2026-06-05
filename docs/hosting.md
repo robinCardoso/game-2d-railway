@@ -346,3 +346,4 @@ pg_dump "$DATABASE_URL" > backup-db-$(date +%Y%m%d).sql
 - [server/README.md](../server/README.md) — servidor unificado
 - [database/migrations/](../database/migrations/) — schema PostgreSQL
 - [docs/instanced-maps-and-multiplayer.md](./instanced-maps-and-multiplayer.md) — protocolo WS
+- [docs/multiplayer-remote-players.md](./multiplayer-remote-players.md) — jogadores remotos + roadmap de escala

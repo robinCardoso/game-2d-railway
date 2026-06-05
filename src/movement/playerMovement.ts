@@ -1,4 +1,11 @@
-import { buildMovementKeyState, resolveSpriteDirection, tickGridMovement } from './gridMovement';
+import {
+    buildMovementKeyState,
+    getActiveStepFacing,
+    primeMovementFacingKeys,
+    resetGridMovementInputState,
+    resolveSpriteDirection,
+    tickGridMovement,
+} from './gridMovement';
 
 export interface PlayerMovementController {
     updateMovement(options: {
@@ -64,38 +71,10 @@ export const PlayerMovement: PlayerMovementController = {
             refreshPlayerMovementSpeed(nowMs);
         }
 
-        // 1. WASD + setas + Q/E (Q=NO, E=NE, S+A=SO, S+D=SE, W+A, W+D, W+Q, W+E)
+        primeMovementFacingKeys(keys);
         const keyState = buildMovementKeyState(keys);
-        const spriteDir = resolveSpriteDirection(keys);
-        if (spriteDir) {
-            const animDirMap = {
-                north: 'up',
-                south: 'down',
-                west: 'left',
-                east: 'right',
-            } as const;
-            activeCharacterController.setDirection(animDirMap[spriteDir]);
-        }
 
-        // 2. Transições de estados de animação baseadas no movimento do grid
-        if (activeCharacterController.currentState !== 'attack' &&
-            activeCharacterController.currentState !== 'cast' &&
-            activeCharacterController.currentState !== 'sit' &&
-            activeCharacterController.currentState !== 'dead') {
-            if (gridMovement.stepping) {
-                activeCharacterController.setState('walk');
-            } else {
-                activeCharacterController.setState('idle');
-            }
-        } else if (gridMovement.stepping) {
-            // Se começar a andar, cancela os estados especiais e vai para caminhada!
-            activeCharacterController.setState('walk');
-        }
-
-        // 3. Tick de animação do sprite do player
-        activeCharacterController.update(nowMs, gridMovement.stepDurationMs);
-
-        // 4. Executa o avanço físico no grid
+        // 1. Grid primeiro — novo passo/direção só após deslize anterior concluir
         const zBefore = player.worldZ;
         tickGridMovement({
             player,
@@ -112,6 +91,36 @@ export const PlayerMovement: PlayerMovementController = {
                 getStepDurationMs: (tx, ty, z) => options.getStepDurationForTile(tx, ty, z),
             },
         });
+
+        // 2. Sprite — face travada durante deslize; teclas novas só após concluir
+        const lockedFacing = getActiveStepFacing(gridMovement);
+        const spriteDir = lockedFacing ?? resolveSpriteDirection(keys);
+        if (spriteDir) {
+            const animDirMap = {
+                north: 'up',
+                south: 'down',
+                west: 'left',
+                east: 'right',
+            } as const;
+            activeCharacterController.setDirection(animDirMap[spriteDir]);
+        }
+
+        // 3. Transições de estados de animação baseadas no movimento do grid
+        if (activeCharacterController.currentState !== 'attack' &&
+            activeCharacterController.currentState !== 'cast' &&
+            activeCharacterController.currentState !== 'sit' &&
+            activeCharacterController.currentState !== 'dead') {
+            if (gridMovement.stepping) {
+                activeCharacterController.setState('walk');
+            } else {
+                activeCharacterController.setState('idle');
+            }
+        } else if (gridMovement.stepping) {
+            activeCharacterController.setState('walk');
+        }
+
+        // 4. Tick de animação do sprite do player
+        activeCharacterController.update(nowMs, gridMovement.stepDurationMs);
 
         // 5. Se o jogador mudou de andar (Z), sincroniza e atualiza o andar de edição ativo no painel
         if (player.worldZ !== zBefore) {
@@ -155,6 +164,8 @@ export const PlayerMovement: PlayerMovementController = {
         const clampedX = Math.max(0, Math.min(MAP_SIZE - 1, Math.floor(x)));
         const clampedY = Math.max(0, Math.min(MAP_SIZE - 1, Math.floor(y)));
         const clampedZ = Math.max(ENGINE_CONFIG.MIN_FLOOR_Z, Math.min(ENGINE_CONFIG.MAX_FLOOR_Z, Math.floor(z)));
+
+        resetGridMovementInputState();
 
         // 2. Atualiza os dados físicos tridimensionais do jogador
         player.tileX = clampedX;

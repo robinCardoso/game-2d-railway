@@ -1,6 +1,6 @@
 import { ENGINE_CONFIG } from '../engine/config';
 import type { RemotePlayerDepthEntry } from '../engine/depthSortDraw';
-import type { PlayerSnapshot } from '../../shared/protocol';
+import { parseStepDurationMs, type PlayerSnapshot } from '../../shared/protocol';
 import { SpriteAnimationController } from '../character/spriteAnimation';
 import { DIAGONAL_STEP_DURATION_FACTOR } from '../movement/gridMovement';
 import {
@@ -18,6 +18,8 @@ const MAX_REMOTE_STEP_MS = 320;
 const REMOTE_SMOOTHING_EXTRA_MS = 40;
 /** Mantém walk após chegar no tile, esperando o próximo passo (evita “anda → trava”). */
 const REMOTE_IDLE_GRACE_MS = 120;
+/** Máximo com diagonal (√2 × MAX_REMOTE_STEP_MS). */
+const MAX_REMOTE_STEP_WITH_DIAG_MS = 600;
 
 function clamp(v: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, v));
@@ -154,7 +156,11 @@ export class RemotePlayerSpriteManager {
         const dx = Math.abs(player.tileX - state.tileX);
         const dy = Math.abs(player.tileY - state.tileY);
         const isDiagonal = dx === 1 && dy === 1;
-        const duration = this.estimateStepDuration(state, nowMs, isDiagonal);
+        const fromServer = parseStepDurationMs(player.stepDurationMs);
+        const duration =
+            fromServer !== undefined
+                ? clamp(fromServer, MIN_REMOTE_STEP_MS, MAX_REMOTE_STEP_WITH_DIAG_MS)
+                : this.estimateStepDuration(state, nowMs, isDiagonal);
 
         state.fromX = state.visualX;
         state.fromY = state.visualY;

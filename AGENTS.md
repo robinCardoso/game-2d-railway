@@ -19,6 +19,7 @@ Este repositório é um **Studio 2D estilo Tibia** (editor + engine). Leia isto 
 | [docs/architecture.md](docs/architecture.md) | Camadas engine / editor |
 | [docs/ui-menus.md](docs/ui-menus.md) | IDs de UI estáveis |
 | [docs/hosting.md](docs/hosting.md) | Deploy Railway (migração concluída), PostgreSQL, APIs unificadas |
+| [docs/multiplayer-remote-players.md](docs/multiplayer-remote-players.md) | Jogadores remotos (estado atual + roadmap escala) |
 
 ## Invariantes críticas (resumo)
 

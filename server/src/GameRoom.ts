@@ -8,11 +8,12 @@ import type {
 import {
     isValidTile,
     parseClientMessage,
+    parseStepDurationMs,
     PROTOCOL_VERSION,
     SERVER_MAP_SIZE,
 } from '../../shared/protocol.js';
 import { buildRoomKey } from '../../shared/roomKey.js';
-import { isAdjacentStep } from '../../shared/tileWalkable.js';
+import { canAdjacentStep } from '../../shared/tileWalkable.js';
 import type { MapCollisionStore } from './MapCollisionStore.js';
 import type { MapInstanceStore } from './MapInstanceStore.js';
 import { isInstancedMap } from './mapRegistry.js';
@@ -38,6 +39,8 @@ interface ConnectedPlayer {
     tileX: number;
     tileY: number;
     z: number;
+    /** Última duração de passo reportada pelo cliente (interpolação remota). */
+    lastStepDurationMs?: number;
     socket: WebSocket;
 }
 
@@ -380,12 +383,18 @@ export class GameRoom {
             const sameMap =
                 player.mapId === msg.mapId &&
                 player.instanceId === instanceId;
-            if (sameMap && !isAdjacentStep(from, to)) {
+            if (
+                sameMap &&
+                !canAdjacentStep(from, to, (x, y, z) =>
+                    this.isWalkable(msg.mapId, x, y, z)
+                )
+            ) {
                 this.send(socket, {
                     type: 'error',
                     v: PROTOCOL_VERSION,
                     code: 'INVALID_STEP',
-                    message: 'Movimento rejeitado: só um tile adjacente por vez.',
+                    message:
+                        'Movimento rejeitado: passo inválido (adjacente, diagonal ou canto bloqueado).',
                 });
                 this.sendPositionCorrection(player);
                 return;
@@ -403,6 +412,10 @@ export class GameRoom {
         player.z = msg.z;
         if (msg.direction) {
             player.direction = msg.direction;
+        }
+        const stepMs = parseStepDurationMs(msg.stepDurationMs);
+        if (stepMs !== undefined) {
+            player.lastStepDurationMs = stepMs;
         }
 
         const newRoom = this.roomKey(player);
@@ -436,6 +449,7 @@ export class GameRoom {
             mapId: player.mapId,
             instanceId: player.instanceId,
             direction: player.direction,
+            stepDurationMs: player.lastStepDurationMs,
         };
 
         if (mapChanged || oldRoom !== newRoom) {

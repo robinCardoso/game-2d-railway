@@ -28,10 +28,13 @@ export interface GameNetClientOptions {
         z: number;
         direction?: 'north' | 'south' | 'east' | 'west';
         appearance?: PlayerAppearance;
+        stepDurationMs?: number;
     };
     onStatusChange?: (status: NetStatus) => void;
     /** Servidor atribuiu instanceId (dungeon instanciada). */
     onServerInstanceId?: (instanceId: string | undefined) => void;
+    /** Deslize em andamento — adia sync só de direção (tile ainda não mudou). */
+    isMovementStepping?: () => boolean;
     /** Servidor corrigiu posição após movimento inválido. */
     onPositionCorrection?: (pos: {
         mapId: string;
@@ -171,16 +174,27 @@ export class GameNetClient {
 
         const state = this.options.getLocalState();
         const instanceId = state.instanceId ?? this.networkInstanceId ?? undefined;
-        const { mapId, tileX, tileY, z, direction } = state;
+        const { mapId, tileX, tileY, z, direction, stepDurationMs } = state;
         const last = this.lastSynced;
+
+        const tileChanged =
+            last.tileX !== tileX || last.tileY !== tileY || last.z !== z;
+        const directionChanged = last.direction !== direction;
 
         if (
             last.mapId === mapId &&
             last.instanceId === instanceId &&
-            last.tileX === tileX &&
-            last.tileY === tileY &&
-            last.z === z &&
-            last.direction === direction
+            !tileChanged &&
+            !directionChanged
+        ) {
+            return;
+        }
+
+        // Durante deslize: não envia mudança só de direção (evita divergência com servidor)
+        if (
+            this.options.isMovementStepping?.() &&
+            !tileChanged &&
+            directionChanged
         ) {
             return;
         }
@@ -199,6 +213,7 @@ export class GameNetClient {
                 tileY,
                 z,
                 direction,
+                stepDurationMs,
             });
         } else {
             this.send({
@@ -210,6 +225,7 @@ export class GameNetClient {
                 tileY,
                 z,
                 direction,
+                stepDurationMs,
             });
         }
 
@@ -351,6 +367,9 @@ export class GameNetClient {
                     existing.instanceId = msg.instanceId;
                     if (msg.direction) {
                         existing.direction = msg.direction;
+                    }
+                    if (msg.stepDurationMs !== undefined) {
+                        existing.stepDurationMs = msg.stepDurationMs;
                     }
                 } else {
                     this.remotePlayers.set(msg.playerId, {

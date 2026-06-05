@@ -79,17 +79,46 @@ export interface TilePos {
     z: number;
 }
 
-/** Um passo ortogonal no mesmo Z, ou subir/descer escada (|dz| === 1, mesmo tile). */
+/**
+ * Passo adjacente no mesmo Z: ortogonal ou diagonal (distância Chebyshev 1).
+ * Escadas: |dz| === 1 no mesmo tile.
+ */
 export function isAdjacentStep(from: TilePos, to: TilePos): boolean {
     const dx = Math.abs(to.tileX - from.tileX);
     const dy = Math.abs(to.tileY - from.tileY);
     const dz = to.z - from.z;
 
     if (dz === 0) {
-        return dx + dy === 1;
+        return dx <= 1 && dy <= 1 && dx + dy >= 1;
     }
     if (Math.abs(dz) === 1 && dx === 0 && dy === 0) {
         return true;
     }
     return false;
+}
+
+export function isDiagonalStep(from: TilePos, to: TilePos): boolean {
+    return (
+        from.z === to.z &&
+        Math.abs(to.tileX - from.tileX) === 1 &&
+        Math.abs(to.tileY - from.tileY) === 1
+    );
+}
+
+/**
+ * Valida passo adjacente + walkable no destino.
+ * Diagonal exige os dois tiles ortogonais livres (anti “corte de canto”, igual ao cliente).
+ */
+export function canAdjacentStep(
+    from: TilePos,
+    to: TilePos,
+    isWalkableAt: (tileX: number, tileY: number, z: number) => boolean
+): boolean {
+    if (!isAdjacentStep(from, to)) return false;
+    if (!isWalkableAt(to.tileX, to.tileY, to.z)) return false;
+    if (!isDiagonalStep(from, to)) return true;
+    return (
+        isWalkableAt(to.tileX, from.tileY, from.z) &&
+        isWalkableAt(from.tileX, to.tileY, from.z)
+    );
 }

@@ -35,6 +35,10 @@ Documento de referência para humanos e agentes IA. **Atualizar este arquivo** q
 | **Outfit de jogador remoto** | WS sincronizava só posição/nome; remoto desenhado como quadrado rosa | `PlayerAppearance` no protocolo + ticket + `RemotePlayerSpriteManager` no Play |
 | **Movimento remoto “pulo”** | Remoto desenhado direto no tile do servidor, sem walk | `RemotePlayerSpriteManager` interpola `visualX/Y` + `walk`/`idle` como o grid local |
 | **Remoto “anda e trava”** | Idle imediato ao chegar no tile + duração fixa 200ms | Grace 120ms + duração estimada pelo intervalo entre pacotes |
+| **Velocidade remota desalinhada** | Remoto estimava ms pelo intervalo de rede | `stepDurationMs` em `move` / `player_moved` (duração real do passo local) |
+| **Doc escala multiplayer** | Roadmap para muitos players online não estava centralizado | [docs/multiplayer-remote-players.md](./multiplayer-remote-players.md) — estado atual + Fases A–D |
+| **Diagonal no Play (WS)** | `isAdjacentStep` só aceitava ortogonal; servidor rejeitava W+D e `position_correction` puxava o jogador | `canAdjacentStep` em `shared/tileWalkable.ts` + reset `gridMovement.stepping` na correção |
+| **Pulo ao mudar direção** | Sprite/rede mudavam de face antes do deslize terminar → `position_correction` | `activeStepFacing` trava sprite no passo; grid tick antes do sprite; rede adia sync só de direção durante deslize |
 
 ---
 

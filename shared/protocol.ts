@@ -51,6 +51,8 @@ export interface PlayerSnapshot {
     z: number;
     direction?: 'north' | 'south' | 'east' | 'west';
     appearance?: PlayerAppearance;
+    /** Última duração do passo em ms (interpolação remota). */
+    stepDurationMs?: number;
 }
 
 export interface JoinMessage {
@@ -79,6 +81,8 @@ export interface MoveMessage {
     mapId: string;
     instanceId?: string;
     direction?: 'north' | 'south' | 'east' | 'west';
+    /** Duração do passo que acabou de ocorrer (ms), do cliente local. */
+    stepDurationMs?: number;
 }
 
 export interface MapChangeMessage {
@@ -90,6 +94,7 @@ export interface MapChangeMessage {
     tileY: number;
     z: number;
     direction?: 'north' | 'south' | 'east' | 'west';
+    stepDurationMs?: number;
 }
 
 export interface PingMessage {
@@ -142,6 +147,8 @@ export interface PlayerMovedMessage {
     mapId: string;
     instanceId?: string;
     direction?: 'north' | 'south' | 'east' | 'west';
+    /** Duração autoritativa do passo para interpolação nos clientes remotos. */
+    stepDurationMs?: number;
 }
 
 export interface StateSyncMessage {
@@ -175,6 +182,13 @@ export interface PongMessage {
 
 export function playerRoomKey(p: Pick<PlayerSnapshot, 'mapId' | 'instanceId'>): string {
     return buildRoomKey(p.mapId, p.instanceId);
+}
+
+/** Duração de passo em ms — clamp alinhado ao grid local (16–600ms). */
+export function parseStepDurationMs(raw: unknown): number | undefined {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return undefined;
+    return Math.max(16, Math.min(600, Math.round(n)));
 }
 
 export function parsePlayerAppearance(raw: unknown): PlayerAppearance | undefined {
@@ -237,6 +251,7 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
                 mapId: typeof m.mapId === 'string' ? m.mapId.slice(0, 48) : 'mainland',
                 instanceId,
                 direction,
+                stepDurationMs: parseStepDurationMs(m.stepDurationMs),
             };
         case 'map_change':
             return {
@@ -248,6 +263,7 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
                 tileY: Number(m.tileY),
                 z: Number(m.z),
                 direction,
+                stepDurationMs: parseStepDurationMs(m.stepDurationMs),
             };
         case 'ping':
             return {

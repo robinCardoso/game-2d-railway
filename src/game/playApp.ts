@@ -26,6 +26,7 @@ import { SpriteAnimationController } from '../character/spriteAnimation';
 import type { CharacterSpriteConfig } from '../character/spriteAnimation';
 import {
     createGridMovementController,
+    resetGridMovementInputState,
     setGridStepDuration,
     syncGridPlayerVisual,
 } from '../movement/gridMovement';
@@ -750,12 +751,17 @@ function setupNetwork(char: CharacterRow, accountId: string): void {
             z: player.worldZ,
             direction: getPlayerDirection(),
             appearance: localAppearance,
+            stepDurationMs: gridMovement.stepDurationMs,
         }),
+        isMovementStepping: () => gridMovement.stepping,
         onPositionCorrection: (pos) => {
             if (pos.mapId !== (currentMapId ?? char.spawnMapId)) return;
             player.tileX = pos.tileX;
             player.tileY = pos.tileY;
             player.worldZ = clampFloorZ(pos.z);
+            gridMovement.stepping = false;
+            gridMovement.activeStepFacing = null;
+            resetGridMovementInputState();
             syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
         },
     });
