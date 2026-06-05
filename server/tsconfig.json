@@ -5,9 +5,11 @@
     "moduleResolution": "bundler",
     "strict": true,
     "skipLibCheck": true,
-    "noEmit": true,
+    "outDir": "dist",
+    "rootDir": "..",
     "lib": ["ES2022"],
     "types": ["node"]
   },
-  "include": ["src", "../shared"]
+  "include": ["src/**/*.ts", "../shared/**/*.ts"],
+  "exclude": ["src/combat/**"]
 }

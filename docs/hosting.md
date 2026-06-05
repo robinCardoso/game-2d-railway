@@ -147,9 +147,9 @@ Configurados em [`railway.json`](../railway.json):
 
 ```bash
 # Build (Railway)
-npm install && npm run build && npm install --prefix server
+npm install && npm install --prefix server && npm run build
 
-# Start
+# Start (Node — server compilado em server/dist/)
 npm run start --prefix server
 ```
 

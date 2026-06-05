@@ -215,6 +215,15 @@ export class GameRoom {
             joinZ = ticket.z;
         }
 
+        if (characterId) {
+            for (const existing of this.players.values()) {
+                if (existing.characterId === characterId && existing.socket !== socket) {
+                    existing.socket.close();
+                    this.handleDisconnect(existing.socket);
+                }
+            }
+        }
+
         if (!isValidTile(joinMapId, joinTileX, joinTileY, joinZ)) {
             this.send(socket, {
                 type: 'error',

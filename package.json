@@ -8,7 +8,7 @@
     "dev:web": "vite",
     "dev:server": "npm run dev --prefix server",
     "server": "npm run start --prefix server",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && npm run build --prefix server",
     "start": "npm run start --prefix server",
     "start:railway": "npm run build && npm run start",
     "preview": "vite preview"

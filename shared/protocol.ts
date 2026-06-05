@@ -3,7 +3,7 @@
  * Compartilhado entre `server/` e `src/net/` (cliente).
  */
 
-import { buildRoomKey } from './roomKey';
+import { buildRoomKey } from './roomKey.js';
 
 export const PROTOCOL_VERSION = 1;
 export const DEFAULT_WS_PORT = 8787;

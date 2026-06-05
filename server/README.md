@@ -55,9 +55,9 @@ Para testar auth API no dev, rode o servidor em paralelo com `DATABASE_URL` e us
 ### Produção local (servidor unificado)
 
 ```bash
-npm run build             # gera dist/
+npm run build             # raiz: compila frontend + server/dist/
 # .env: DATABASE_URL, JWT_SECRET, ENTER_TICKET_SECRET
-npm run start             # :8787 — static + WS + auth + APIs
+npm run start             # node dist/server/src/index.js — :8787
 ```
 
 Saída esperada:

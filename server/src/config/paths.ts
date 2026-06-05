@@ -3,8 +3,26 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { env } from './env.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const projectRoot = path.resolve(__dirname, '../../..');
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+
+/** Raiz do repo — funciona em dev (tsx) e prod (server/dist/server/src). */
+function findProjectRoot(): string {
+    const starts = [moduleDir, process.cwd()];
+    for (const start of starts) {
+        let dir = start;
+        for (let i = 0; i < 8; i++) {
+            if (fs.existsSync(path.join(dir, 'vite.config.ts'))) {
+                return dir;
+            }
+            const parent = path.dirname(dir);
+            if (parent === dir) break;
+            dir = parent;
+        }
+    }
+    return path.resolve(moduleDir, '../../..');
+}
+
+const projectRoot = findProjectRoot();
 
 export interface AppPaths {
     projectRoot: string;
