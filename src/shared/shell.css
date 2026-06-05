@@ -1,0 +1,164 @@
+@import '../style.css';
+
+.shell-page {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--bg-main, #0a0b0e);
+    color: var(--text-main, #e6edf3);
+    font-family: Inter, system-ui, sans-serif;
+}
+
+.shell-card {
+    width: 100%;
+    max-width: 420px;
+    background: #12141a;
+    border: 1px solid #2d3139;
+    border-radius: 12px;
+    padding: 28px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.shell-card--wide {
+    max-width: 720px;
+}
+
+.shell-logo {
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.shell-logo h1 {
+    font-size: 1.35rem;
+    margin: 0 0 4px;
+    font-weight: 700;
+}
+
+.shell-logo p {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #94a3b8;
+}
+
+.shell-field {
+    margin-bottom: 16px;
+}
+
+.shell-field label {
+    display: block;
+    font-size: 0.8rem;
+    color: #94a3b8;
+    margin-bottom: 6px;
+}
+
+.shell-field input,
+.shell-field select {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #3f4452;
+    background: #0f1115;
+    color: #e6edf3;
+    font-size: 0.95rem;
+    box-sizing: border-box;
+}
+
+.shell-btn {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background: #6366f1;
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.95rem;
+}
+
+.shell-btn:hover {
+    background: #4f46e5;
+}
+
+.shell-btn--ghost {
+    background: transparent;
+    border: 1px solid #3f4452;
+    color: #e6edf3;
+    margin-top: 8px;
+}
+
+.shell-btn--danger {
+    background: #be123c;
+}
+
+.shell-error {
+    color: #f87171;
+    font-size: 0.85rem;
+    margin-bottom: 12px;
+}
+
+.shell-links {
+    text-align: center;
+    margin-top: 16px;
+    font-size: 0.85rem;
+}
+
+.shell-links a {
+    color: #818cf8;
+}
+
+.char-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    margin: 20px 0;
+}
+
+.char-card {
+    border: 1px solid #2d3139;
+    border-radius: 10px;
+    padding: 16px;
+    background: #0f1115;
+    cursor: pointer;
+    transition: border-color 0.15s;
+}
+
+.char-card:hover,
+.char-card.selected {
+    border-color: #6366f1;
+}
+
+.char-card img {
+    width: 64px;
+    height: 64px;
+    image-rendering: pixelated;
+    display: block;
+    margin: 0 auto 8px;
+}
+
+.char-card h3 {
+    margin: 0 0 4px;
+    font-size: 1rem;
+    text-align: center;
+}
+
+.char-card p {
+    margin: 0;
+    font-size: 0.75rem;
+    color: #94a3b8;
+    text-align: center;
+}
+
+.shell-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+}
+
+.shell-actions .shell-btn {
+    flex: 1;
+    min-width: 120px;
+}

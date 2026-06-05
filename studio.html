@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>2D World Builder — GM Studio</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="loadingScreen" class="loading-screen" aria-live="polite" aria-busy="true">
+      <div class="loading-content">
+        <div class="loading-logo">W</div>
+        <div class="loading-title">2D World Builder</div>
+        <div class="loading-bar-container">
+          <div class="loading-bar"></div>
+        </div>
+        <p class="loading-text" id="loadingMsg">Carregando editor…</p>
+      </div>
+    </div>
+
+    <div id="app">
+      <div class="game-container">
+        <!-- Menu superior compacto -->
+        <header class="top-nav">
+          <div class="logo-area">
+            <div class="logo-box">W</div>
+            <div class="logo-text">
+              2D World Builder
+              <span class="logo-version">v0.6</span>
+            </div>
+          </div>
+
+          <div class="menubar-scroll">
+          <nav class="menubar" id="mainMenubar" aria-label="Menu principal">
+            <div class="menu-item" data-requires-edit="true">
+              <button type="button" class="menu-trigger">Arquivo</button>
+              <div class="menu-dropdown">
+                <div class="menu-submenu">
+                  <button type="button" class="menu-dropdown-item menu-submenu-trigger">
+                    Importações
+                    <span class="menu-submenu-caret" aria-hidden="true">▸</span>
+                  </button>
+                  <div class="menu-submenu-panel">
+                    <button type="button" class="menu-dropdown-item" id="exportBtn">Exportar JSON (download)</button>
+                    <button type="button" class="menu-dropdown-item" id="importMapBtn">Importar JSON</button>
+                  </div>
+                </div>
+                <button type="button" class="menu-dropdown-item" id="saveMapDevBtn" title="Grava em public/maps/ — só npm run dev">💾 Salvar em public/maps</button>
+              </div>
+            </div>
+
+            <div class="menu-item" data-requires-edit="true">
+              <button type="button" class="menu-trigger">Mapas</button>
+              <div class="menu-dropdown menu-dropdown--wide">
+                <button type="button" class="menu-dropdown-item" id="newMapBtn">➕ Novo mapa…</button>
+                <button type="button" class="menu-dropdown-item" id="openMapManagerMenubarBtn">🗺️ Gerenciar mapas…</button>
+                <button type="button" class="menu-dropdown-item" id="switchMapMenubarBtn">🔀 Trocar mapa ativo…</button>
+              </div>
+            </div>
+
+            <div class="menu-item" data-requires-edit="true">
+              <button type="button" class="menu-trigger">Editar</button>
+              <div class="menu-dropdown">
+                <button type="button" class="menu-dropdown-item" id="undoBtn" disabled>↩ Desfazer</button>
+                <button type="button" class="menu-dropdown-item" id="redoBtn" disabled>↪ Refazer</button>
+                <button type="button" class="menu-dropdown-item" id="openTeleportBtn">📍 Ir para Posição</button>
+                <button type="button" class="menu-dropdown-item" id="openHouseManagerBtn">🏠 Gerenciar Casas</button>
+                <button type="button" class="menu-dropdown-item" data-open-panel="map_editor" style="border-top: 1px solid var(--border-color); margin-top: 4px; padding-top: 8px;">🗺️ Mapa</button>
+              </div>
+            </div>
+            <div class="menu-item">
+              <button type="button" class="menu-trigger">Criar</button>
+              <div class="menu-dropdown menu-dropdown--wide">
+                <button type="button" class="menu-dropdown-item" data-open-panel="character" data-sprite-profile="player">Visual do Player</button>
+                <button type="button" class="menu-dropdown-item" data-open-panel="sprite_creator">Criar Sprites</button>
+                <button type="button" class="menu-dropdown-item" data-open-panel="character" data-sprite-profile="npc">Criar NPCs</button>
+                <button type="button" class="menu-dropdown-item" data-open-panel="character" data-sprite-profile="monster">Criar Mobs</button>
+              </div>
+            </div>
+
+            <div class="menu-item">
+              <button type="button" class="menu-trigger">Ver</button>
+              <div class="menu-dropdown menu-dropdown--wide">
+                <button type="button" class="menu-dropdown-item" data-open-panel="mechanics">Mecânicas de jogo</button>
+                <button type="button" class="menu-dropdown-item" data-open-panel="stats">Dados técnicos</button>
+                <button type="button" class="menu-dropdown-item" data-open-panel="minimap">Minimap</button>
+              </div>
+            </div>
+
+            <div class="menu-item" data-requires-edit="true">
+              <button type="button" class="menu-trigger">Teste</button>
+              <div class="menu-dropdown">
+                <button type="button" class="menu-dropdown-item" data-open-panel="dev">Buffs e equipamento</button>
+              </div>
+            </div>
+
+            <button type="button" class="menu-pill" data-open-panel="account" title="Tipo de conta (GM / Player)">Conta</button>
+          </nav>
+          </div>
+
+          <div class="top-quick" data-requires-edit="true">
+            <button type="button" class="icon-btn" id="quickUndo" title="Desfazer (Ctrl+Z)" disabled>↩</button>
+            <button type="button" class="icon-btn" id="quickRedo" title="Refazer" disabled>↪</button>
+          </div>
+        </header>
+
+        <input type="file" id="importMapInput" accept=".json,application/json" hidden />
+
+        <!-- Área principal: mapa + painel opcional -->
+        <div class="workspace" id="workspace">
+          <div class="canvas-container" id="canvasContainer">
+            <canvas id="gameCanvas"></canvas>
+            <div class="hint">
+              <span class="accent">Espaço + Arrasto</span> (ou <span class="accent">Botão Meio</span>) mover mapa ·
+              <span class="accent">WASD</span> mover player ·
+              <span class="accent">P/B/E</span> ferramentas ·
+              <span class="accent">Esc</span> fechar painel
+            </div>
+            <div
+              class="paint-brush-size-bar"
+              id="paintBrushSizeBar"
+              hidden
+              aria-hidden="true"
+            >
+              <span class="paint-brush-size-label">Tiles</span>
+              <div class="paint-brush-size-options" id="paintBrushSizeOptions" role="group" aria-label="Tiles por clique"></div>
+            </div>
+          </div>
+
+          <aside class="flyout-panel" id="flyoutPanel" aria-hidden="true">
+            <div class="flyout-header">
+              <span id="flyoutTitle">Painel</span>
+              <button type="button" class="flyout-close" id="flyoutClose" title="Fechar (Esc)">×</button>
+            </div>
+            <div class="flyout-body">
+              <!-- Menu Lateral Unificado de Edição de Mapa -->
+              <section class="flyout-section" data-panel="map_editor">
+                <!-- Abas Submenus Internas -->
+                <div class="category-tabs map-editor-tabs" id="mapEditorTabs">
+                  <button type="button" class="cat-btn active" data-map-tab="paint" title="Pintar e ferramentas">✏️ Pin</button>
+                  <button type="button" class="cat-btn" data-map-tab="tileset" title="Paleta de tiles">🧱 Tile</button>
+                  <button type="button" class="cat-btn" data-map-tab="floors" title="Andares (Z)">🪜 Z</button>
+                  <button type="button" class="cat-btn" data-map-tab="zones" title="Zonas do mapa">🏳️ Zona</button>
+                  <button type="button" class="cat-btn" data-map-tab="spawns" title="Pontos de spawn">👾 Spwn</button>
+                  <button type="button" class="cat-btn" data-map-tab="portals" title="Portais">🚪 Port</button>
+                </div>
+
+                <!-- Conteúdo das Abas Internas -->
+                <!-- Aba 1: Pintar -->
+                <div id="mapTabContent_paint" class="map-tab-content" style="display: block;">
+                  <div class="tool-grid" id="toolGrid">
+                    <button class="tool-btn active" data-tool="pencil" title="Lápis (P)">✏️</button>
+                    <button class="tool-btn" data-tool="bucket" title="Balde (B)">🪣</button>
+                    <button class="tool-btn" data-tool="eraser" title="Borracha (E)">🧽</button>
+                    <button class="tool-btn" data-tool="eyedropper" title="Conta-gotas (I)">🎨</button>
+                    <button class="tool-btn" data-tool="rectangle" title="Retângulo (U)">⬛</button>
+                    <button class="tool-btn" data-tool="line" title="Linha (L)">📏</button>
+                  </div>
+                  <p class="flyout-hint">Atalhos: P · B · E · I · U · L</p>
+                  <p id="paintVariantBrushHint" class="flyout-hint variant-brush-hint" style="display: none; color: var(--accent-color);">
+                    🎲 Pincel ativo: <span id="paintVariantBrushHintLabel"></span> — pinte no mapa para sortear
+                  </p>
+                  <div id="autoBorderToolbar" class="map-editor-panel-box auto-border-toolbar">
+                    <label class="map-editor-checkbox-label">
+                      <input type="checkbox" id="autoBorderEnabledToggle" />
+                      Auto-borda
+                    </label>
+                    <label class="flyout-label">Conjunto ativo</label>
+                    <select id="autoBorderSetSelect" class="select-full map-editor-select" disabled></select>
+                    <p id="autoBorderPaintHint" class="flyout-hint auto-border-hint">
+                      Use <strong>Grama aleatório</strong> na aba Tile. A borda sobrepõe <strong>qualquer chão</strong> vizinho — o piso de baixo não é apagado.
+                    </p>
+                    <button type="button" class="floor-btn" id="autoBorderRecalcFloorBtn" title="Recalcula bordas no andar de edição">↻ Recalcular andar</button>
+                  </div>
+                  <div class="floor-controls map-editor-actions">
+                    <button type="button" class="floor-btn" id="undoBtnFlyout" disabled>↩ Desfazer</button>
+                    <button type="button" class="floor-btn" id="redoBtnFlyout" disabled>↪ Refazer</button>
+                  </div>
+                </div>
+
+                <!-- Aba 2: Tiles -->
+                <div id="mapTabContent_tileset" class="map-tab-content" style="display: none;">
+                  <div class="category-tabs map-editor-category-tabs" id="categoryTabs">
+                    <button class="cat-btn active" data-cat="all">Tudo</button>
+                    <button class="cat-btn" data-cat="ground">Pisos</button>
+                    <button class="cat-btn" data-cat="nature">Natureza</button>
+                    <button class="cat-btn" data-cat="walls">Paredes</button>
+                    <button class="cat-btn" data-cat="items">Itens</button>
+                  </div>
+                  <div style="margin-bottom: 12px; position: relative;">
+                    <input type="text" id="tileSearchInput" placeholder="🔍 Buscar tiles (ex: grass, wall)..." style="width: 100%; background: #111318; color: #fff; border: 1px solid #3f4452; border-radius: 6px; padding: 6px 10px 6px 28px; font-size: 11px; outline: none; transition: border-color 0.2s;" onfocus="this.style.borderColor='var(--accent-color)'" onblur="this.style.borderColor='#3f4452'" />
+                    <span style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); opacity: 0.5; pointer-events: none; font-size: 10px;">🔍</span>
+                  </div>
+                  <p id="tileAutoBorderStatusChip" class="tile-auto-border-chip" style="display: none;" aria-live="polite"></p>
+                  <div class="tile-palette" id="tileSelector"></div>
+                </div>
+
+                <!-- Aba 3: Andar -->
+                <div id="mapTabContent_floors" class="map-tab-content" style="display: none;">
+                  <p class="flyout-hint">PageUp / PageDown — sobe ou desce um andar</p>
+                  <div id="floorSelector" role="group" aria-label="Selecionar andar"></div>
+                </div>
+
+                <!-- Aba 4: Zonas -->
+                <div id="mapTabContent_zones" class="map-tab-content" style="display: none;">
+                  <p class="flyout-hint">Pinte zonas lógicas invisíveis no mapa.</p>
+                  
+                  <label class="flyout-label">Tipo de Zona</label>
+                  <select id="zoneTypeSelect" class="select-full" style="margin-bottom: 12px; background: #111318; border-color: #3f4452;">
+                    <option value="0" selected>🧹 Limpar Zona (Normal)</option>
+                    <option value="1">🛡️ Protection Zone (PZ)</option>
+                    <option value="2">🛑 No Logout Zone</option>
+                    <option value="3">⚔️ PvP Arena</option>
+                    <option value="4">🏠 House Zone (Privada)</option>
+                  </select>
+
+                  <div id="houseIdContainer" style="display: none; margin-bottom: 12px;">
+                    <label class="flyout-label">House ID</label>
+                    <input type="number" id="zoneHouseIdInput" min="1" value="1" style="width: 100%; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 4px 8px; font-size: 11px; outline: none; margin-bottom: 8px;" />
+                    <button type="button" class="floor-btn" id="openHouseManagerBtn2" style="width: 100%; border-color: var(--accent-color); color: var(--accent-color);">🏠 Gerenciar Casas</button>
+                  </div>
+
+                  <p class="flyout-hint" style="color: var(--accent-color);">O Pincel ✏️ aplicará metadados em vez de tiles.</p>
+                </div>
+
+                <!-- Aba 5: Spawns -->
+                <div id="mapTabContent_spawns" class="map-tab-content" style="display: none;">
+                  <p class="flyout-hint">Coloque monstros/NPCs no mapa. Cadastre criaturas em <code style="font-size:10px">public/creature_presets.json</code> (veja <code style="font-size:10px">creature_presets.example.json</code>) e recarregue a página.</p>
+                  <div class="spawn-editor-tools map-editor-actions" style="display: flex; gap: 6px; margin-bottom: 8px;">
+                    <button type="button" class="floor-btn spawn-tool-btn active" data-spawn-tool="pencil" title="Atalho: P">✏️ Colocar</button>
+                    <button type="button" class="floor-btn spawn-tool-btn" data-spawn-tool="eraser" title="Atalho: E">🧽 Remover</button>
+                  </div>
+                  <div class="category-tabs" style="margin-bottom: 8px; display: flex; gap: 4px;">
+                    <button class="cat-btn active" id="spawnFilterAll" style="flex: 1; font-size: 10px; padding: 4px 0;">Todos</button>
+                    <button class="cat-btn" id="spawnFilterMonster" style="flex: 1; font-size: 10px; padding: 4px 0;">👾 Monstros</button>
+                    <button class="cat-btn" id="spawnFilterNpc" style="flex: 1; font-size: 10px; padding: 4px 0;">👤 NPCs</button>
+                  </div>
+                  <div class="tile-grid" id="spawnSelector" style="max-height: 160px; overflow-y: auto; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; padding: 4px;">
+                    <!-- Preenchido dinamicamente via JS -->
+                  </div>
+                  <label class="flyout-label" style="margin-top: 10px;">Spawns neste mapa</label>
+                  <div id="spawnList" style="max-height: 160px; overflow-y: auto; margin-top: 4px;"></div>
+                  <p class="flyout-hint" style="margin-top: 8px;">Passe o mouse na lista para destacar · Clique para ir até o spawn · 🗑️ remove</p>
+                </div>
+
+                <!-- Aba 6: Portais -->
+                <div id="mapTabContent_portals" class="map-tab-content" style="display: none;">
+                  <p class="flyout-hint">Crie portais que teleportam o jogador para outro mapa.</p>
+
+                  <label class="flyout-label">Mapa Destino</label>
+                  <select id="portalTargetMapSelect" class="select-full" style="margin-bottom: 8px; background: #111318; border-color: #3f4452;">
+                    <!-- Populado dinamicamente -->
+                  </select>
+
+                  <label class="flyout-label" style="margin-top:8px;">Chegada X / Y / Z</label>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; margin-bottom: 10px;">
+                    <input type="number" id="portalTargetX" value="50" min="0" max="1023" style="background:#1a1d24;color:#fff;border:1px solid #3f4452;border-radius:4px;padding:4px 6px;font-size:10px;outline:none;" placeholder="X" />
+                    <input type="number" id="portalTargetY" value="50" min="0" max="1023" style="background:#1a1d24;color:#fff;border:1px solid #3f4452;border-radius:4px;padding:4px 6px;font-size:10px;outline:none;" placeholder="Y" />
+                    <input type="number" id="portalTargetZ" value="0" min="-7" max="7" style="background:#1a1d24;color:#fff;border:1px solid #3f4452;border-radius:4px;padding:4px 6px;font-size:10px;outline:none;" placeholder="Z" />
+                  </div>
+
+                  <p class="flyout-hint" style="color: var(--accent-color);">Use o Pincel ✏️ para criar portal · Borracha 🧽 para remover.</p>
+
+                  <div style="margin-top: 10px;">
+                    <label class="flyout-label">Portais neste mapa:</label>
+                    <div id="portalList" style="max-height: 180px; overflow-y: auto; margin-top: 6px;"></div>
+                  </div>
+
+                  <button type="button" class="floor-btn" id="openMapManagerBtn" style="width:100%;margin-top:12px;border-color:#6366f1;color:#6366f1;">🗺️ Gerenciar Mapas</button>
+                </div>
+              </section>
+
+              <!-- Stats -->
+              <section class="flyout-section" data-panel="stats">
+                <div class="info-row"><span class="info-label">Cargo</span> <span id="roleBadge" class="role-badge">GM</span></div>
+                <div class="info-row"><span class="info-label">Tile X</span> <span id="posX">50</span></div>
+                <div class="info-row"><span class="info-label">Tile Y</span> <span id="posY">50</span></div>
+                <div class="info-row"><span class="info-label">Z</span> <span id="posZ">0</span></div>
+                <div class="info-row"><span class="info-label">Speed</span> <span id="posSpeed">1</span></div>
+                <div class="info-row"><span class="info-label">Passo</span> <span><span id="posStepMs">320</span>ms · <span id="posTilesPerSec">3.1</span> t/s</span></div>
+                <div class="info-row info-row--dim">base <span id="posStepBaseMs">320</span>ms · piso ×<span id="posTerrainMod">1</span></div>
+                <div class="info-row"><span class="info-label">Equip</span> <span id="posEquip" class="info-value">—</span></div>
+                <div class="info-row"><span class="info-label">Buffs</span> <span id="posBuffs" class="info-value">—</span></div>
+                <p class="flyout-hint" id="posStepDelta">—</p>
+              </section>
+
+              <!-- Mecânicas -->
+              <section class="flyout-section" data-panel="mechanics">
+                <label class="check-row">
+                  <span>Colisão ativa</span>
+                  <input type="checkbox" id="collisionToggle" checked />
+                </label>
+                <label class="check-row">
+                  <span>Equipar barco</span>
+                  <input type="checkbox" id="boatToggle" />
+                </label>
+              </section>
+
+              <!-- Dev -->
+              <section class="flyout-section" data-panel="dev">
+                <button type="button" id="devEquipHasteBoots" class="menu-dropdown-item block-btn">Botas da Pressa</button>
+                <button type="button" id="devEquipLeatherBoots" class="menu-dropdown-item block-btn">Botas de Couro</button>
+                <button type="button" id="devBuffHaste" class="menu-dropdown-item block-btn">Haste (30s)</button>
+                <button type="button" id="devBuffSlow" class="menu-dropdown-item block-btn">Slow (15s)</button>
+                <button type="button" id="devClearBuffs" class="menu-dropdown-item block-btn">Limpar buffs</button>
+                <p class="flyout-hint">Console (F12) mostra comparação ao clicar.</p>
+              </section>
+
+              <!-- Conta -->
+              <section class="flyout-section" data-panel="account">
+                <label class="flyout-label">Simular cargo</label>
+                <select id="roleSelector" class="select-full">
+                  <option value="GM" selected>Game Master [GM]</option>
+                  <option value="Tutor">Tutor [Staff]</option>
+                  <option value="Player">Jogador [Player]</option>
+                </select>
+                <p class="flyout-hint">Player oculta ferramentas de edição do mapa.</p>
+              </section>
+
+              <!-- Personagem / Editor de Sprites -->
+              <section class="flyout-section" data-panel="character">
+                <div class="character-editor-panel">
+                  <label class="flyout-label" id="charServerLabel">Carregar do Servidor</label>
+                  <select id="charServerSelect" class="select-full" style="margin-bottom: 12px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 4px; font-size: 11px;">
+                    <option value="">-- Selecionar Outfit --</option>
+                  </select>
+
+                  <label class="flyout-label" id="charNameLabel">Nome do Personagem</label>
+                  <input type="text" id="charNameInput" value="Default Warrior" style="width: 100%; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 4px 8px; margin-bottom: 12px; font-size: 11px;" />
+
+                  <div id="charCreatureMetaSection" style="display: none; margin-bottom: 12px; padding: 8px; border: 1px solid #3f4452; border-radius: 6px; background: #111318;">
+                    <label class="flyout-label">Paleta de Spawns (mapa)</label>
+                    <div class="info-row" style="margin-bottom: 6px;">
+                      <span class="info-label">Tamanho visual</span>
+                      <select id="charVisualSize" style="width: 90px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px; font-size: 11px;">
+                        <option value="tiny">Tiny (16px)</option>
+                        <option value="small">Small (24px)</option>
+                        <option value="medium" selected>Medium (32px)</option>
+                        <option value="large">Large (48px)</option>
+                        <option value="boss">Boss (64px)</option>
+                      </select>
+                    </div>
+                    <div class="info-row" style="margin-bottom: 6px;">
+                      <span class="info-label">Cor no editor</span>
+                      <input type="color" id="charSpawnColor" value="#10b981" style="width: 40px; height: 24px; border: none; background: transparent; cursor: pointer;" />
+                    </div>
+                    <label class="flyout-label">Descrição</label>
+                    <input type="text" id="charSpawnDescription" placeholder="Ex: Rato pequeno da caverna" style="width: 100%; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 4px 8px; margin-bottom: 6px; font-size: 11px;" />
+                  </div>
+
+                  <div id="charPlayerMetaSection" style="display: none; margin-bottom: 12px; padding: 8px; border: 1px solid #3f4452; border-radius: 6px; background: #111318;">
+                    <label class="flyout-label">Vínculo com o Jogo (Player)</label>
+                    <div class="info-row" style="margin-bottom: 6px;">
+                      <span class="info-label">Vocação</span>
+                      <select id="charPlayerVocation" style="width: 90px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px; font-size: 11px;">
+                        <option value="knight" selected>Knight</option>
+                        <option value="mage">Mage</option>
+                        <option value="archer">Archer</option>
+                      </select>
+                    </div>
+                    <div class="info-row" style="margin-bottom: 6px;">
+                      <span class="info-label">Gênero</span>
+                      <select id="charPlayerGender" style="width: 90px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px; font-size: 11px;">
+                        <option value="male" selected>Masculino</option>
+                        <option value="female">Feminino</option>
+                      </select>
+                    </div>
+                    <label class="check-row" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; font-size: 11px; color: var(--text-dim);">
+                      <span>Disponível na criação de personagem</span>
+                      <input type="checkbox" id="charPlayerShowInCreation" checked style="accent-color: var(--accent-color);" />
+                    </label>
+                  </div>
+
+                  <label class="flyout-label">Subpasta em tiles/characters</label>
+                  <input type="text" id="charCategoryInput" list="charCategoryList" placeholder="ex: npcs ou monstros/bosses" autocomplete="off" style="width: 100%; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 4px 8px; margin-bottom: 6px; font-size: 11px;" />
+                  <datalist id="charCategoryList"></datalist>
+                  <div id="charCategoryTree" class="char-folder-tree" aria-label="Estrutura de pastas de personagens"></div>
+
+                  <label class="flyout-label">Presets / Exportar</label>
+                  <div class="floor-controls" style="margin-bottom: 8px; gap: 8px;">
+                    <button type="button" class="floor-btn" id="exportCharBtn" style="padding: 6px;">Exportar JSON</button>
+                    <button type="button" class="floor-btn" id="importCharBtn" style="padding: 6px;">Importar JSON</button>
+                  </div>
+                  <div class="floor-controls" style="margin-bottom: 12px; gap: 8px;">
+                    <button type="button" class="floor-btn" id="saveServerBtn" style="border: 1px solid var(--accent-color); color: var(--accent-color); background: transparent; flex: 1;">💾 Salvar no Servidor</button>
+                    <button type="button" class="floor-btn" id="deleteServerBtn" style="border: 1px solid #ef4444; color: #ef4444; background: transparent; flex: 1; display: none;">🗑️ Excluir</button>
+                  </div>
+                  <input type="file" id="importCharInput" accept=".json,application/json" hidden />
+
+                  <label class="flyout-label">Imagem da Spritesheet (PNG)</label>
+                  <button type="button" class="menu-dropdown-item block-btn" id="loadSpriteBtn" style="margin-bottom: 8px;">Carregar PNG</button>
+                  <div id="upscaleSpriteRow" class="floor-controls" style="margin-bottom: 8px; gap: 8px; display: none;">
+                    <button type="button" class="menu-dropdown-item block-btn" id="upscaleSprite2xBtn" style="flex: 1; border: 1px solid #eab308; color: #eab308; background: rgba(234, 179, 8, 0.05); text-align: center;">⚡ 2x</button>
+                    <button type="button" class="menu-dropdown-item block-btn" id="upscaleSprite3xBtn" style="flex: 1; border: 1px solid #eab308; color: #eab308; background: rgba(234, 179, 8, 0.05); text-align: center;">⚡ 3x</button>
+                  </div>
+                  <button type="button" class="menu-dropdown-item block-btn" id="openCalibratorBtn" style="margin-bottom: 8px; background: var(--accent-color); color: #fff; text-align: center;">🔍 Calibrar Grade</button>
+                  <div class="info-row" style="margin-bottom: 8px;">
+                    <span class="info-label">Orientação</span>
+                    <select id="charSheetLayout" style="width: 80px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px; font-size: 11px;">
+                      <option value="horizontal" selected>Horizontal</option>
+                      <option value="vertical">Vertical</option>
+                    </select>
+                  </div>
+                  <label class="check-row" style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; color: var(--text-dim); font-size: 11px;">
+                    <span>Remover Fundo Rosa (Chroma Key)</span>
+                    <input type="checkbox" id="charChromaKeyToggle" style="accent-color: var(--accent-color); cursor: pointer;" />
+                  </label>
+                  <div class="info-row" id="charChromaKeyToleranceRow" style="margin-bottom: 12px; display: none; align-items: center; justify-content: space-between;">
+                    <span class="info-label" style="font-size: 11px;">Tolerância Chroma</span>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <input type="range" id="charChromaKeyTolerance" min="10" max="180" step="5" value="50" style="width: 80px; accent-color: var(--accent-color); cursor: pointer;" />
+                      <span id="charChromaKeyToleranceVal" style="font-size: 10px; font-weight: bold; min-width: 20px; text-align: right;">50</span>
+                    </div>
+                  </div>
+                  <input type="file" id="importSpriteInput" accept=".png" hidden />
+
+                  <div class="info-row" style="margin-bottom: 8px;">
+                    <span class="info-label">Largura Frame (px)</span>
+                    <input type="number" id="charFrameWidth" value="64" style="width: 60px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px;" />
+                  </div>
+                  <div class="info-row" style="margin-bottom: 8px;">
+                    <span class="info-label">Altura Frame (px)</span>
+                    <input type="number" id="charFrameHeight" value="64" style="width: 60px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px;" />
+                  </div>
+                  <div class="info-row" style="margin-bottom: 8px;">
+                    <span class="info-label">Margem Início X</span>
+                    <input type="number" id="charOffsetX" value="0" style="width: 60px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px;" />
+                  </div>
+                  <div class="info-row" style="margin-bottom: 8px;">
+                    <span class="info-label">Margem Início Y</span>
+                    <input type="number" id="charOffsetY" value="0" style="width: 60px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px;" />
+                  </div>
+                  <div class="info-row" style="margin-bottom: 8px;">
+                    <span class="info-label">Espaço Colunas X</span>
+                    <input type="number" id="charGapX" value="0" style="width: 60px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px;" />
+                  </div>
+                  <div class="info-row" style="margin-bottom: 12px;">
+                    <span class="info-label">Espaço Linhas Y</span>
+                    <input type="number" id="charGapY" value="0" style="width: 60px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px;" />
+                  </div>
+                  <div class="info-row" style="margin-bottom: 8px;">
+                    <span class="info-label">Ajuste Âncora X</span>
+                    <input type="number" id="charAnchorX" value="0" style="width: 60px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px;" />
+                  </div>
+                  <div class="info-row" style="margin-bottom: 12px;">
+                    <span class="info-label">Ajuste Âncora Y</span>
+                    <input type="number" id="charAnchorY" value="0" style="width: 60px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px;" />
+                  </div>
+
+                  <label class="flyout-label">Template Automático</label>
+                  <select id="charTemplateSelect" class="select-full" style="margin-bottom: 12px;">
+                    <option value="custom" selected>Customizado (Manual)</option>
+                    <option value="4x8_rpg">Mago / RPG Maker (4x8 - 8 Frames)</option>
+                    <option value="wizard_176x192">Mago Grande Artist (176x192 - 8 Frames)</option>
+                    <option value="4x4_standard">Padrão RPG (4x4 - 4 Frames)</option>
+                    <option value="static_32">Estático (Único Frame 32x32)</option>
+                  </select>
+
+                  <label class="flyout-label">Estado Ativo</label>
+                  <select id="charAnimState" class="select-full" style="margin-bottom: 8px;">
+                    <option value="idle">Repouso (idle)</option>
+                    <option value="walk">Caminhando (walk)</option>
+                    <option value="attack">Ataque (attack)</option>
+                    <option value="sit">Sentar (sit)</option>
+                    <option value="dead">Morrer (dead)</option>
+                    <option value="cast">Conjurar (cast)</option>
+                  </select>
+
+                  <label class="flyout-label">Direção Ativa</label>
+                  <select id="charAnimDir" class="select-full" style="margin-bottom: 12px;">
+                    <option value="down">Baixo (down)</option>
+                    <option value="up">Cima (up)</option>
+                    <option value="left">Esquerda (left)</option>
+                    <option value="right">Direita (right)</option>
+                  </select>
+
+                  <div class="info-row" style="margin-bottom: 4px;">
+                    <span class="info-label">Linha (Row)</span>
+                    <input type="number" id="charAnimRow" value="0" style="width: 60px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px;" />
+                  </div>
+                  <div class="info-row" style="margin-bottom: 4px;">
+                    <span class="info-label">Frame Inicial</span>
+                    <input type="number" id="charAnimStartFrame" value="0" style="width: 60px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px;" />
+                  </div>
+                  <div class="info-row" style="margin-bottom: 4px;">
+                    <span class="info-label">Qtd Frames</span>
+                    <input type="number" id="charAnimFrames" value="1" style="width: 60px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px;" />
+                  </div>
+                  <div class="info-row" style="margin-bottom: 12px;">
+                    <span class="info-label">Velocidade (FPS)</span>
+                    <input type="number" id="charAnimSpeed" value="5" style="width: 60px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px;" />
+                  </div>
+
+                  <label class="flyout-label">Visualização da Animação</label>
+                  <div style="background: #0d0f13; border: 1px solid #232731; border-radius: 8px; display: flex; align-items: center; justify-content: center; height: 100px; margin-bottom: 12px; position: relative;">
+                    <canvas id="charPreviewCanvas" width="64" height="64" style="image-rendering: pixelated; width: 64px; height: 64px;"></canvas>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Criador de Sprites de Terreno e Itens -->
+              <section class="flyout-section" data-panel="sprite_creator">
+                <div class="character-editor-panel">
+                  <label class="flyout-label">Tipo de Asset</label>
+                  <select id="mapSpriteAssetTypeSelect" class="select-full" style="margin-bottom: 12px; background: #111318; border-color: #3f4452;">
+                    <option value="terrain" selected>Bloco de Mapa (Terreno)</option>
+                    <option value="items">Item / Decoração</option>
+                    <option value="border_set">Conjunto auto-borda</option>
+                  </select>
+
+                  <label class="flyout-label">Sprites existentes</label>
+                  <select id="mapSpriteServerSelect" class="select-full" style="margin-bottom: 6px; font-size: 11px;">
+                    <option value="">-- Selecionar Sprite Existente --</option>
+                  </select>
+                  <div class="floor-controls" style="margin-bottom: 12px; gap: 6px; flex-wrap: wrap;">
+                    <button type="button" class="floor-btn" id="mapSpriteRefreshListBtn" style="flex: 1; min-width: 90px; font-size: 10px;">Atualizar lista</button>
+                    <button type="button" class="floor-btn" id="deleteMapSpriteBtn" style="flex: 1; min-width: 90px; display: none; font-size: 10px; border-color: #ef4444; color: #ef4444; background: rgba(239, 68, 68, 0.05);">🗑️ Excluir</button>
+                    <button type="button" class="floor-btn" id="mapSpriteNewBtn" style="flex: 1; min-width: 90px; font-size: 10px; border-color: var(--accent-color); color: var(--accent-color);" title="Limpar formulário e começar sprite nova">✨ Nova sprite</button>
+                  </div>
+
+                  <label class="flyout-label">Nome do Sprite</label>
+                  <input type="text" id="mapSpriteNameInput" value="Nova Grama" style="width: 100%; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 4px 8px; margin-bottom: 12px; font-size: 11px;" />
+
+                  <div id="mapSpriteBorderSetBlock" style="display: none; margin-bottom: 12px;">
+                    <label class="flyout-label">Conjunto de bordas</label>
+                    <label class="flyout-label" style="font-size: 10px; font-weight: normal; opacity: 0.85;">ID do conjunto</label>
+                    <input type="text" id="mapSpriteBorderSetIdInput" value="grass_edges" placeholder="grass_edges" style="width: 100%; background: #111318; color: #fff; border: 1px solid #3f4452; border-radius: 6px; padding: 6px 10px; font-size: 11px; margin-bottom: 8px;" />
+                    <label class="flyout-label" style="font-size: 10px; font-weight: normal; opacity: 0.85;">Nome exibido</label>
+                    <input type="text" id="mapSpriteBorderSetLabelInput" value="Bordas de grama" placeholder="Bordas de grama" style="width: 100%; background: #111318; color: #fff; border: 1px solid #3f4452; border-radius: 6px; padding: 6px 10px; font-size: 11px; margin-bottom: 8px;" />
+                    <label class="flyout-label" style="font-size: 10px; font-weight: normal; opacity: 0.85;">Terreno pintado (fill)</label>
+                    <select id="mapSpriteFillTerrainInput" style="width: 100%; background: #111318; color: #fff; border: 1px solid #3f4452; border-radius: 6px; padding: 6px 10px; font-size: 11px; margin-bottom: 8px;">
+                      <option value="grass">grass</option>
+                    </select>
+                    <label class="flyout-label" style="font-size: 10px; font-weight: normal; opacity: 0.85;">Pasta destino</label>
+                    <input type="text" id="mapSpriteBorderCategoryInput" value="terrain/borders/grass_edges" placeholder="terrain/borders/grass_edges" style="width: 100%; background: #111318; color: #fff; border: 1px solid #3f4452; border-radius: 6px; padding: 6px 10px; font-size: 11px; margin-bottom: 8px;" />
+                    <label class="check-row" style="margin-top: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; color: var(--text-dim); font-size: 11px;">
+                      <span>Caminhável (andável)</span>
+                      <input type="checkbox" id="mapSpriteBorderWalkableToggle" checked style="accent-color: var(--accent-color); cursor: pointer;" />
+                    </label>
+                    <p class="flyout-hint" style="margin: 0;">Máscaras genéricas: aplicam-se automaticamente sobre <strong>qualquer chão</strong> ao lado da grama pintada. Não é preciso escolher pedra, areia ou terra.</p>
+                  </div>
+
+                  <div id="mapSpriteCategoryBlock">
+                  <label class="flyout-label">Subpasta em tiles/maps</label>
+                  <p class="flyout-hint" style="margin-bottom: 6px;">Escolha na lista, clique na árvore abaixo ou digite uma pasta nova.</p>
+                  <input type="text" id="mapSpriteCategoryInput" list="mapSpriteCategoryList" placeholder="ex: grass, terrain/water" autocomplete="off" style="width: 100%; margin-bottom: 6px; font-size: 11px; padding: 4px 8px;" />
+                  <datalist id="mapSpriteCategoryList"></datalist>
+                  <div id="mapSpriteCategoryTree" class="char-folder-tree" aria-label="Estrutura de pastas de sprites de mapa"></div>
+                  </div>
+
+                  <!-- Propriedades Físicas (Apenas Terreno) -->
+                  <div id="mapSpriteTerrainPropertiesBlock">
+                    <label class="flyout-label">Propriedades do Terreno</label>
+                    <label class="check-row" style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; color: var(--text-dim); font-size: 11px;">
+                      <span>Caminhável (Sólido se desmarcado)</span>
+                      <input type="checkbox" id="mapSpriteWalkableToggle" checked style="accent-color: var(--accent-color); cursor: pointer;" />
+                    </label>
+                    <div class="info-row" style="margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+                      <span class="info-label" style="font-size: 11px;">Multiplicador de Velocidade</span>
+                      <div style="display: flex; align-items: center; gap: 6px;">
+                        <input type="range" id="mapSpriteSpeedRange" min="0.1" max="3.0" step="0.1" value="1.0" style="width: 80px; accent-color: var(--accent-color); cursor: pointer;" />
+                        <span id="mapSpriteSpeedVal" style="font-size: 10px; font-weight: bold; min-width: 20px; text-align: right;">1.0</span>
+                      </div>
+                    </div>
+                    <label class="check-row" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; color: var(--text-dim); font-size: 11px;">
+                      <span>Comportamento de Escada (Sobe/Desce andar)</span>
+                      <input type="checkbox" id="mapSpriteStairToggle" style="accent-color: var(--accent-color); cursor: pointer;" />
+                    </label>
+
+                     <label class="flyout-label">Variação aleatória</label>
+                     <label class="flyout-label" style="font-size: 10px; font-weight: normal; opacity: 0.85;">Grupo de variação (opcional)</label>
+                     <select id="mapSpriteVariantGroupSelect" style="width: 100%; background: #111318; color: #fff; border: 1px solid #3f4452; border-radius: 6px; padding: 6px 10px; font-size: 11px; outline: none; margin-bottom: 6px;">
+                       <option value="">-- Sem grupo / Tile Fixo --</option>
+                       <option value="grass">grass</option>
+                       <option value="_new_group_">+ Novo Grupo...</option>
+                     </select>
+                     <input type="text" id="mapSpriteVariantGroupInput" placeholder="Nome do novo grupo..." style="width: 100%; background: #111318; color: #fff; border: 1px solid #3f4452; border-radius: 6px; padding: 6px 10px; font-size: 11px; outline: none; margin-bottom: 6px; display: none;" />
+                     <p class="flyout-hint" style="margin-bottom: 8px;">Tiles com o mesmo grupo formam um pincel aleatório na aba Tile.</p>
+                     <input type="checkbox" id="mapSpriteVariantGroupExclude" style="display: none;" />
+                  </div>
+
+                  <label class="flyout-label">Ações / Importar</label>
+                  <button type="button" class="menu-dropdown-item block-btn" id="loadMapSpriteBtn" style="margin-bottom: 8px;">Carregar PNG</button>
+                  <button type="button" class="menu-dropdown-item block-btn" id="openMapSpriteCalibratorBtn" style="margin-bottom: 8px; background: var(--accent-color); color: #fff; text-align: center;">🔍 Calibrar Grade</button>
+                  <button type="button" class="menu-dropdown-item block-btn" id="saveMapSpriteServerBtn" style="margin-bottom: 8px; text-align: center; border: 1px solid var(--accent-color); color: var(--accent-color); background: transparent;">💾 Salvar no Servidor</button>
+                  <button type="button" class="menu-dropdown-item block-btn" id="saveMapSpriteBorderSetBtn" style="display: none; margin-bottom: 12px; text-align: center; border: 1px solid var(--accent-color); color: #fff; background: var(--accent-color);">💾 Salvar conjunto</button>
+                  <input type="file" id="importMapSpriteInput" accept=".png" hidden />
+
+                  <label class="check-row" style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; color: var(--text-dim); font-size: 11px;">
+                    <span>Remover Fundo Rosa (Chroma Key)</span>
+                    <input type="checkbox" id="mapSpriteChromaKeyToggle" style="accent-color: var(--accent-color); cursor: pointer;" />
+                  </label>
+                  <div class="info-row" id="mapSpriteChromaKeyToleranceRow" style="margin-bottom: 12px; display: none; align-items: center; justify-content: space-between;">
+                    <span class="info-label" style="font-size: 11px;">Tolerância Chroma</span>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <input type="range" id="mapSpriteChromaKeyTolerance" min="10" max="180" step="5" value="50" style="width: 80px; accent-color: var(--accent-color); cursor: pointer;" />
+                      <span id="mapSpriteChromaKeyToleranceVal" style="font-size: 10px; font-weight: bold; min-width: 20px; text-align: right;">50</span>
+                    </div>
+                  </div>
+
+                  <div class="info-row" style="margin-bottom: 8px;">
+                    <span class="info-label">Largura Frame (px)</span>
+                    <input type="number" id="mapSpriteFrameWidth" value="32" style="width: 60px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px;" />
+                  </div>
+                  <div class="info-row" style="margin-bottom: 12px;">
+                    <span class="info-label">Altura Frame (px)</span>
+                    <input type="number" id="mapSpriteFrameHeight" value="32" style="width: 60px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px;" />
+                  </div>
+                  <div class="info-row" style="margin-bottom: 8px;">
+                    <span class="info-label">Margem Início X</span>
+                    <input type="number" id="mapSpriteOffsetX" value="0" style="width: 60px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px;" />
+                  </div>
+                  <div class="info-row" style="margin-bottom: 12px;">
+                    <span class="info-label">Margem Início Y</span>
+                    <input type="number" id="mapSpriteOffsetY" value="0" style="width: 60px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px;" />
+                  </div>
+
+                  <label class="flyout-label">Visualização do Sprite</label>
+                  <div style="background: #0d0f13; border: 1px solid #232731; border-radius: 8px; display: flex; align-items: center; justify-content: center; height: 100px; margin-bottom: 12px; position: relative;">
+                    <canvas id="mapSpritePreviewCanvas" width="64" height="64" style="image-rendering: pixelated; width: 64px; height: 64px;"></canvas>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Minimap -->
+              <section class="flyout-section" data-panel="minimap">
+                <div class="minimap-wrap">
+                  <canvas id="minimapCanvas"></canvas>
+                </div>
+              </section>
+            </div>
+          </aside>
+        </div>
+
+        <!-- Barra de status sempre visível (compacta) -->
+        <footer class="status-bar" id="statusBar">
+          <span class="status-chip" title="Posição no tile"><span id="statusPos">50, 50</span></span>
+          <span class="status-sep">|</span>
+          <span class="status-chip">Z <span id="statusZ">0</span></span>
+          <span class="status-sep">|</span>
+          <span class="status-chip">SPD <span id="statusSpeed">1</span></span>
+          <span class="status-sep">|</span>
+          <span class="status-chip"><span id="statusStepMs">320</span>ms</span>
+          <span class="status-sep">|</span>
+          <span class="status-chip" title="Mapa ativo" id="statusMapChip">🗺️ <span id="statusMapName">—</span></span>
+          <span class="status-sep">|</span>
+          <span class="status-chip" title="Tile ou pincel ativo" id="statusTileBrush">🧱 —</span>
+          <span class="status-sep">|</span>
+          <span class="status-chip" title="Zoom do Jogo">
+            🔍 Zoom: 
+            <select id="gameZoomSelect" style="background: transparent; border: none; color: #fff; font-family: inherit; font-size: 10px; cursor: pointer; outline: none; padding: 0 4px; font-weight: bold;">
+              <option value="0.5" style="background: #111; color: #fff;">50%</option>
+              <option value="0.75" style="background: #111; color: #fff;">75%</option>
+              <option value="1.0" selected style="background: #111; color: #fff;">100%</option>
+              <option value="1.5" style="background: #111; color: #fff;">150%</option>
+              <option value="2.0" style="background: #111; color: #fff;">200%</option>
+              <option value="3.0" style="background: #111; color: #fff;">300%</option>
+            </select>
+          </span>
+          <span class="status-grow"></span>
+          <span class="status-chip status-chip--dim" id="statusRole">GM</span>
+        </footer>
+      </div>
+    </div>
+    <!-- Modal do Calibrador Visual de Spritesheet -->
+    <div class="calibrator-modal" id="calibratorModal">
+      <div class="calibrator-content">
+        <header class="calibrator-header">
+          <span class="calibrator-title">🔍 Estúdio Visual de Calibragem & Animação</span>
+          <button type="button" class="flyout-close" id="calibratorClose" title="Fechar (Esc)">×</button>
+        </header>
+        
+        <div class="calibrator-body-layout">
+          <!-- Coluna da Esquerda: Imagem Completa e Zoom -->
+          <div class="calibrator-left-column">
+            <p id="calibratorInstructionHint" class="flyout-hint" style="font-size: 10px; margin-top: 0; opacity: 0.9;">
+              💡 <strong>Instrução:</strong> Clique na imagem para definir a Margem de Início do primeiro frame. Clique e arraste para alinhar a grade de fatiamento com precisão milimétrica!
+            </p>
+            <div class="calibrator-canvas-container" id="calibratorCanvasContainer">
+              <canvas id="calibratorCanvas" style="image-rendering: pixelated;"></canvas>
+            </div>
+            <div class="calibrator-zoom-bar">
+              <label style="font-size: 9px; color: var(--text-dim); text-transform: uppercase; font-weight: bold;">Zoom da Imagem:</label>
+              <input type="range" id="calZoom" min="25" max="300" step="1" value="100" style="width: 140px; accent-color: var(--accent-color); cursor: pointer;" />
+              <span id="calZoomVal" style="font-size: 10px; color: var(--text-main); font-weight: bold; min-width: 35px;">100%</span>
+            </div>
+          </div>
+          
+          <!-- Coluna da Direita: Todos os Painéis Laterais -->
+          <div class="calibrator-right-column">
+            <!-- Grade de Fatiamento -->
+            <div class="calibrator-submenu">
+              <div class="calibrator-submenu-title">🎛️ Grade de Fatiamento</div>
+
+              <div id="calQuickDivisionBlock" class="calibrator-quick-division">
+                <div style="font-size: 10px; font-weight: bold; color: var(--accent-color); margin-bottom: 6px;">📐 Divisão rápida</div>
+                <p id="calImageSizeLabel" class="flyout-hint" style="margin: 0 0 8px; font-size: 10px;">Imagem: — × — px</p>
+                <div class="calibrator-input-grid" style="margin-bottom: 8px;">
+                  <div class="calibrator-input-group">
+                    <label>Colunas (X)</label>
+                    <input type="number" id="calGridCols" min="1" value="1" />
+                  </div>
+                  <div class="calibrator-input-group">
+                    <label>Linhas (Y)</label>
+                    <input type="number" id="calGridRows" min="1" value="1" />
+                  </div>
+                </div>
+                <div class="calibrator-quick-division__actions">
+                  <button type="button" id="calGridApplyBtn" class="floor-btn">Aplicar divisão</button>
+                  <button type="button" id="calGrid1x1Btn" class="floor-btn">1×1</button>
+                  <button type="button" id="calGrid4x4Btn" class="floor-btn">4×4</button>
+                </div>
+                <p id="calGridResultLabel" class="flyout-hint" style="margin: 0; font-size: 10px;">Frame calculado: — × — px</p>
+                <p id="calGridRemainderLabel" class="flyout-hint" style="margin: 4px 0 0; font-size: 10px; color: #fbbf24; display: none;"></p>
+              </div>
+
+              <div class="calibrator-input-group" style="margin-bottom: 8px;">
+                <label>Orientação da Spritesheet</label>
+                <select id="calSheetLayout" class="select-full" style="padding: 4px;">
+                  <option value="horizontal" selected>Horizontal (Frames na Linha)</option>
+                  <option value="vertical">Vertical (Frames na Coluna)</option>
+                </select>
+              </div>
+              <div class="calibrator-input-grid">
+                <div class="calibrator-input-group">
+                  <label>Largura Frame</label>
+                  <input type="number" id="calFrameWidth" value="64" />
+                </div>
+                <div class="calibrator-input-group">
+                  <label>Altura Frame</label>
+                  <input type="number" id="calFrameHeight" value="64" />
+                </div>
+                <div class="calibrator-input-group">
+                  <label>Margem X (px)</label>
+                  <input type="number" id="calOffsetX" value="0" />
+                </div>
+                <div class="calibrator-input-group">
+                  <label>Margem Y (px)</label>
+                  <input type="number" id="calOffsetY" value="0" />
+                </div>
+                <div class="calibrator-input-group">
+                  <label>Espaço X (Gap)</label>
+                  <input type="number" id="calGapX" value="0" />
+                </div>
+                <div class="calibrator-input-group">
+                  <label>Espaço Y (Gap)</label>
+                  <input type="number" id="calGapY" value="0" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Escolha de frame único (modo tile / sprite de mapa) -->
+            <div class="calibrator-submenu" id="calibratorMapFramePanel" style="display: none;">
+              <div class="calibrator-submenu-title">🎯 Escolher frame</div>
+              <p id="calMapFrameHint" class="flyout-hint" style="margin: 0 0 8px; font-size: 10px; line-height: 1.45;">
+                <strong>Um frame:</strong> clique e Confirmar · <strong>Vários:</strong> ative seleção múltipla, clique nos tiles (de novo desmarca) · <strong>Sheet inteira:</strong> Exportar todos
+              </p>
+              <label class="check-row cal-map-multiselect-toggle" style="margin: 0 0 8px; padding: 6px 8px; background: #111318; border-radius: 6px; border: 1px solid #3f4452;">
+                <span style="font-size: 11px; font-weight: 600; color: var(--accent-color);">☑️ Seleção múltipla</span>
+                <input type="checkbox" id="calMapMultiSelectToggle" style="accent-color: var(--accent-color); cursor: pointer;" />
+              </label>
+              <div id="calMapMultiSelectTools" class="cal-map-multiselect-tools" style="display: none; gap: 6px; margin-bottom: 8px;">
+                <button type="button" class="floor-btn" id="calMapSelectAllBtn" style="flex: 1; font-size: 10px; padding: 4px 6px;">Todos visíveis</button>
+                <button type="button" class="floor-btn" id="calMapClearSelectionBtn" style="flex: 1; font-size: 10px; padding: 4px 6px;">Limpar</button>
+              </div>
+              <p id="calMapSelectionSummary" class="flyout-hint" style="margin: 0 0 8px; font-size: 10px; display: none; color: var(--accent-color); font-weight: 600;">0 frames selecionados</p>
+              <div class="calibrator-input-grid" style="margin-bottom: 6px;">
+                <div class="calibrator-input-group">
+                  <label>Coluna (1 … N)</label>
+                  <input type="number" id="calMapFrameCol" min="1" value="1" />
+                </div>
+                <div class="calibrator-input-group">
+                  <label>Linha (1 … N)</label>
+                  <input type="number" id="calMapFrameRow" min="1" value="1" />
+                </div>
+              </div>
+              <p id="calMapFrameSummary" class="flyout-hint" style="margin: 0; font-size: 10px; color: var(--accent-color); font-weight: 600;">Nenhum tile selecionado — clique na imagem</p>
+              <p id="calMapFrameTotal" class="flyout-hint" style="margin: 4px 0 0; font-size: 10px;">Grade visível: — frames</p>
+            </div>
+
+            <div class="calibrator-submenu" id="calibratorBorderSetPanel" style="display: none;">
+              <div class="calibrator-submenu-title">🌿 Conjunto auto-borda</div>
+              <p id="calBorderSetBadge" class="cal-border-set-badge">grama → chão</p>
+              <p class="flyout-hint" style="margin: 0 0 6px; font-size: 10px; line-height: 1.45;">
+                Cada slot = <strong>pedra ao redor da grama</strong>. Ex.: «↑ Acima da grama» = pedra em cima → escolha tile com filete <strong>embaixo</strong> (M4).
+              </p>
+              <p id="calBorderPickHint" class="cal-border-pick-hint">Selecione um slot e clique no tile na imagem.</p>
+              <p id="calBorderMaskHint" class="cal-border-mask-hint"></p>
+              <div class="cal-border-preset-row">
+                <button type="button" class="floor-btn" id="calBorderPreset3x3" title="8 slots = vizinhos da grama (N/E/S/O + diagonais)">9 vizinhos</button>
+                <button type="button" class="floor-btn" id="calBorderPreset4x4" title="Mínimo: bordas retas N/E/S/O">4 cardinais</button>
+                <button type="button" class="floor-btn" id="calBorderPresetInnerL" title="Quinas internas em L (máscaras 3, 6, 9, 12) — adiciona após 9 vizinhos">+ 4 quinas L</button>
+              </div>
+              <div id="calBorderCellList" class="cal-border-cell-list" aria-label="Máscaras por célula"></div>
+              <div class="cal-border-preview-block">
+                <p class="cal-border-preview-label">Bordas retas — clique na pedra, depois na sheet</p>
+                <canvas id="calBorderPreviewCanvas" width="96" height="96" title="Clique na célula de pedra ao redor da grama, depois escolha o tile na sheet" aria-label="Prévia 3×3 das bordas"></canvas>
+                <p class="cal-border-preview-label cal-border-preview-label--inner">Quinas internas (L) — clique na pedra, depois na sheet</p>
+                <canvas id="calBorderInnerPreviewCanvas" width="96" height="96" title="Clique na quina L para selecionar o slot, depois o tile na sheet" aria-label="Prévia das quatro quinas internas"></canvas>
+                <p id="calBorderPreviewStatus" class="cal-border-preview-status"></p>
+              </div>
+            </div>
+
+            <!-- Ajuste de Âncora -->
+            <div class="calibrator-submenu">
+              <div class="calibrator-submenu-title">⚓ Âncora e Pivot</div>
+              <div class="calibrator-input-grid">
+                <div class="calibrator-input-group">
+                  <label>Ajuste Âncora X</label>
+                  <input type="number" id="calAnchorX" value="0" />
+                </div>
+                <div class="calibrator-input-group">
+                  <label>Ajuste Âncora Y</label>
+                  <input type="number" id="calAnchorY" value="0" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Configuração de Animação -->
+            <div class="calibrator-submenu" id="calibratorAnimPanel">
+              <div class="calibrator-submenu-title">🏃‍♂️ Configuração de Animações</div>
+              <div class="calibrator-input-group" style="margin-bottom: 6px;">
+                <label>Estado Ativo</label>
+                <select id="calAnimState" class="select-full" style="padding: 4px;">
+                  <option value="idle">Repouso (idle)</option>
+                  <option value="walk">Caminhando (walk)</option>
+                  <option value="attack">Ataque (attack)</option>
+                  <option value="sit">Sentar (sit)</option>
+                  <option value="dead">Morrer (dead)</option>
+                  <option value="cast">Conjurar (cast)</option>
+                </select>
+              </div>
+              <div class="calibrator-input-group" style="margin-bottom: 6px;">
+                <label>Direção Ativa</label>
+                <select id="calAnimDir" class="select-full" style="padding: 4px;">
+                  <option value="down">Baixo (down)</option>
+                  <option value="up">Cima (up)</option>
+                  <option value="left">Esquerda (left)</option>
+                  <option value="right">Direita (right)</option>
+                </select>
+              </div>
+              <div class="calibrator-input-grid">
+                <div class="calibrator-input-group">
+                  <label>Linha (Row)</label>
+                  <input type="number" id="calAnimRow" value="0" />
+                </div>
+                <div class="calibrator-input-group">
+                  <label>Frame Inicial</label>
+                  <input type="number" id="calAnimStartFrame" value="0" />
+                </div>
+                <div class="calibrator-input-group">
+                  <label>Qtd Frames</label>
+                  <input type="number" id="calAnimFrames" value="1" />
+                </div>
+                <div class="calibrator-input-group">
+                  <label>Velocidade (FPS)</label>
+                  <input type="number" id="calAnimSpeed" value="5" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <footer class="calibrator-footer calibrator-footer--with-batch">
+          <div class="calibrator-footer-batch-group" id="calibratorBatchBtnGroup" style="display: none;">
+            <button type="button" class="floor-btn calibrator-batch-btn calibrator-batch-btn--selected" id="calBatchExportSelectedBtn" disabled title="Exporta só os tiles marcados na seleção múltipla">✅ Exportar selecionados</button>
+            <button type="button" class="floor-btn calibrator-batch-btn" id="calBatchExportBtn" title="Gera um PNG por célula da grade">📦 Exportar todos</button>
+          </div>
+          <span class="calibrator-footer-spacer"></span>
+          <button type="button" class="floor-btn" id="calCancelBtn" style="max-width: 100px;">Cancelar</button>
+          <button type="button" class="floor-btn" id="calBorderConfirmBtn" style="display: none; max-width: 140px; background: var(--accent-color);">Confirmar conjunto</button>
+          <button type="button" class="floor-btn" id="calConfirmBtn" style="max-width: 100px; background: var(--accent-color);">Confirmar</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- Modal exportação em lote (spritesheet → N tiles) -->
+    <div class="calibrator-modal" id="mapSpriteBatchExportModal" aria-hidden="true">
+      <div class="calibrator-content" style="max-width: 420px;">
+        <header class="calibrator-header">
+          <span class="calibrator-title">📦 Exportar todos os frames</span>
+          <button type="button" class="flyout-close" id="mapSpriteBatchExportCloseBtn" title="Fechar">×</button>
+        </header>
+        <div class="calibrator-body-layout" style="flex-direction: column; padding: 16px; gap: 12px;">
+          <p id="mapSpriteBatchSummary" class="flyout-hint" style="margin: 0; color: var(--accent-color); font-weight: 600;">—</p>
+          <p class="flyout-hint" style="margin: 0; line-height: 1.45;">
+            Cada célula da grade vira um PNG em <code>tiles/maps/</code>. Tiles com o mesmo <strong>grupo de variação</strong> formam o pincel aleatório 🎲 na aba Tile.
+          </p>
+          <label class="flyout-label">Prefixo do nome</label>
+          <input type="text" id="mapSpriteBatchPrefixInput" placeholder="grama → 01-grama, 02-grama…" class="select-full" style="padding: 8px 10px; background: #111318; border-color: #3f4452;" />
+          <label class="flyout-label">Subpasta (categoria)</label>
+          <input type="text" id="mapSpriteBatchCategoryInput" placeholder="grass" class="select-full" style="padding: 8px 10px; background: #111318; border-color: #3f4452;" />
+          <label class="flyout-label">Grupo de variação (pincel aleatório)</label>
+          <input type="text" id="mapSpriteBatchVariantGroupInput" list="mapSpriteVariantGroupList" placeholder="grass" class="select-full" style="padding: 8px 10px; background: #111318; border-color: #3f4452;" />
+          <label class="check-row" style="margin: 0; padding: 4px 0;">
+            <span style="font-size: 11px; color: var(--text-dim);">Sem grupo (tiles individuais)</span>
+            <input type="checkbox" id="mapSpriteBatchVariantGroupExclude" style="accent-color: var(--accent-color);" />
+          </label>
+          <div class="calibrator-input-grid">
+            <label class="check-row" style="margin: 0; padding: 4px 0; flex: 1;">
+              <span style="font-size: 11px;">Caminhável</span>
+              <input type="checkbox" id="mapSpriteBatchWalkable" checked style="accent-color: var(--accent-color);" />
+            </label>
+            <div class="calibrator-input-group">
+              <label>Velocidade</label>
+              <input type="number" id="mapSpriteBatchSpeed" min="0.1" max="3" step="0.1" value="1" />
+            </div>
+          </div>
+          <p id="mapSpriteBatchProgress" class="flyout-hint" style="margin: 0; display: none; color: var(--accent-color);"></p>
+        </div>
+        <footer class="calibrator-footer">
+          <button type="button" class="floor-btn" id="mapSpriteBatchExportCancelBtn">Cancelar</button>
+          <button type="button" class="floor-btn" id="mapSpriteBatchExportConfirmBtn" style="background: var(--accent-color); color: #fff;">Exportar</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- Modal Ir para Posição Rápida (Teletransporte) -->
+    <div id="teleportModal" class="calibrator-modal" style="display: none; justify-content: center; align-items: center; z-index: 10000;">
+      <div class="calibrator-content" style="max-width: 320px; width: 100%; border-radius: 12px; background: radial-gradient(circle at center, #1b1e24 0%, #0e1115 100%); border: 1px solid var(--border-color); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+        <header class="calibrator-header" style="padding: 12px 16px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-weight: 700; font-size: 13px; color: var(--accent-color); text-transform: uppercase; letter-spacing: 0.05em;">📍 Ir para Posição</span>
+          <button type="button" class="flyout-close" id="teleportCloseBtn" style="font-size: 18px; border: none; background: transparent; color: var(--text-dim); cursor: pointer;">×</button>
+        </header>
+        <div class="calibrator-body-layout" style="display: flex; flex-direction: column; padding: 16px; gap: 12px;">
+          <p class="flyout-hint" style="font-size: 10px; margin: 0; color: var(--text-dim);">Digite as coordenadas tridimensionais de destino:</p>
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+            <div class="calibrator-input-group" style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 9px; color: var(--text-dim); text-transform: uppercase;">Tile X (0-255)</label>
+              <div class="custom-number-input">
+                <input type="number" id="teleportX" min="0" max="255" value="50" style="background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 6px; font-size: 11px; outline: none; box-sizing: border-box;" />
+                <div class="spinner-arrows">
+                  <button type="button" class="spinner-up">▲</button>
+                  <button type="button" class="spinner-down">▼</button>
+                </div>
+              </div>
+            </div>
+            <div class="calibrator-input-group" style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 9px; color: var(--text-dim); text-transform: uppercase;">Tile Y (0-255)</label>
+              <div class="custom-number-input">
+                <input type="number" id="teleportY" min="0" max="255" value="50" style="background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 6px; font-size: 11px; outline: none; box-sizing: border-box;" />
+                <div class="spinner-arrows">
+                  <button type="button" class="spinner-up">▲</button>
+                  <button type="button" class="spinner-down">▼</button>
+                </div>
+              </div>
+            </div>
+            <div class="calibrator-input-group" style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 9px; color: var(--text-dim); text-transform: uppercase;">Andar Z (-7 a +7)</label>
+              <div class="custom-number-input">
+                <input type="number" id="teleportZ" min="-7" max="7" value="0" style="background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 6px; font-size: 11px; outline: none; box-sizing: border-box;" />
+                <div class="spinner-arrows">
+                  <button type="button" class="spinner-up">▲</button>
+                  <button type="button" class="spinner-down">▼</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <footer class="calibrator-footer" style="padding: 12px 16px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 8px; background: #0f1115;">
+          <button type="button" class="floor-btn" id="teleportCancelBtn" style="padding: 6px 12px; font-size: 11px; border-radius: 4px; border: 1px solid #3f4452; background: transparent; color: var(--text-main); cursor: pointer;">Cancelar</button>
+          <button type="button" class="floor-btn" id="teleportConfirmBtn" style="padding: 6px 12px; font-size: 11px; border-radius: 4px; border: 1px solid var(--accent-color); background: var(--accent-color); color: #fff; cursor: pointer; font-weight: bold;">Teletransportar</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- Modal Gerenciador de Casas -->
+    <div id="houseManagerModal" class="calibrator-modal" style="display: none; justify-content: center; align-items: center; z-index: 10000;">
+      <div class="calibrator-content" style="max-width: 600px; width: 100%; border-radius: 12px; background: radial-gradient(circle at center, #1b1e24 0%, #0e1115 100%); border: 1px solid var(--border-color); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+        <header class="calibrator-header" style="padding: 12px 16px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-weight: 700; font-size: 13px; color: var(--accent-color); text-transform: uppercase; letter-spacing: 0.05em;">🏠 Gerenciador de Casas</span>
+          <button type="button" class="flyout-close" id="houseManagerCloseBtn" style="font-size: 18px; border: none; background: transparent; color: var(--text-dim); cursor: pointer;">×</button>
+        </header>
+        <div class="calibrator-body-layout" style="display: flex; flex-direction: column; padding: 16px; gap: 12px; max-height: 400px; overflow-y: auto;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <p class="flyout-hint" style="font-size: 11px; margin: 0; color: var(--text-dim);">Lista oficial de casas registradas no servidor.</p>
+            <button type="button" class="floor-btn" id="houseManagerCreateBtn" style="padding: 4px 10px; font-size: 11px; border-color: var(--accent-color); color: var(--accent-color);">➕ Nova Casa</button>
+          </div>
+          
+          <div style="background: #111318; border: 1px solid #2d3139; border-radius: 6px; overflow: hidden;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 11px; color: #e2e8f0;">
+              <thead>
+                <tr style="background: #1a1d24; border-bottom: 1px solid #2d3139; text-align: left;">
+                  <th style="padding: 8px; font-weight: 600;">ID</th>
+                  <th style="padding: 8px; font-weight: 600;">Nome</th>
+                  <th style="padding: 8px; font-weight: 600;">Aluguel</th>
+                  <th style="padding: 8px; font-weight: 600;">Entrada (X,Y,Z)</th>
+                  <th style="padding: 8px; font-weight: 600; text-align: center;">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="houseManagerTbody">
+                <!-- Javascript will populate this -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Editar/Criar Casa -->
+    <div id="houseEditModal" class="calibrator-modal" style="display: none; justify-content: center; align-items: center; z-index: 10001;">
+      <div class="calibrator-content" style="max-width: 350px; width: 100%; border-radius: 12px; background: radial-gradient(circle at center, #1b1e24 0%, #0e1115 100%); border: 1px solid var(--border-color); box-shadow: 0 10px 30px rgba(0,0,0,0.8);">
+        <header class="calibrator-header" style="padding: 12px 16px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-weight: 700; font-size: 13px; color: var(--accent-color); text-transform: uppercase; letter-spacing: 0.05em;" id="houseEditTitle">🏠 Editar Casa</span>
+          <button type="button" class="flyout-close" id="houseEditCloseBtn" style="font-size: 18px; border: none; background: transparent; color: var(--text-dim); cursor: pointer;">×</button>
+        </header>
+        <div class="calibrator-body-layout" style="display: flex; flex-direction: column; padding: 16px; gap: 12px;">
+          
+          <div style="display: grid; grid-template-columns: 1fr 3fr; gap: 8px; align-items: center;">
+            <label style="font-size: 10px; color: var(--text-dim);">ID da Casa:</label>
+            <input type="number" id="houseEditId" min="1" value="1" style="background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 6px; font-size: 11px; outline: none;" disabled />
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 3fr; gap: 8px; align-items: center;">
+            <label style="font-size: 10px; color: var(--text-dim);">Nome:</label>
+            <input type="text" id="houseEditName" value="" placeholder="Ex: Wood Avenue 1" style="background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 6px; font-size: 11px; outline: none;" />
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 3fr; gap: 8px; align-items: center;">
+            <label style="font-size: 10px; color: var(--text-dim);">Aluguel (GP):</label>
+            <input type="number" id="houseEditRent" min="0" value="0" style="background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 6px; font-size: 11px; outline: none;" />
+          </div>
+
+          <fieldset style="border: 1px solid #2d3139; border-radius: 6px; padding: 8px; margin-top: 4px;">
+            <legend style="font-size: 9px; color: var(--text-dim); padding: 0 4px;">Posição da Porta de Entrada</legend>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+              <div>
+                <label style="font-size: 9px; color: var(--text-dim);">X</label>
+                <input type="number" id="houseEditX" min="0" max="255" value="0" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 11px; outline: none; box-sizing: border-box;" />
+              </div>
+              <div>
+                <label style="font-size: 9px; color: var(--text-dim);">Y</label>
+                <input type="number" id="houseEditY" min="0" max="255" value="0" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 11px; outline: none; box-sizing: border-box;" />
+              </div>
+              <div>
+                <label style="font-size: 9px; color: var(--text-dim);">Z</label>
+                <input type="number" id="houseEditZ" min="-7" max="7" value="0" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 11px; outline: none; box-sizing: border-box;" />
+              </div>
+            </div>
+            <button type="button" class="floor-btn" id="houseEditUseCurrentPosBtn" style="margin-top: 8px; width: 100%; padding: 4px; font-size: 9px;">📍 Usar Minha Posição Atual</button>
+          </fieldset>
+        </div>
+        <footer class="calibrator-footer" style="padding: 12px 16px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 8px; background: #0f1115;">
+          <button type="button" class="floor-btn" id="houseEditCancelBtn" style="padding: 6px 12px; font-size: 11px; border-radius: 4px; border: 1px solid #3f4452; background: transparent; color: var(--text-main); cursor: pointer;">Cancelar</button>
+          <button type="button" class="floor-btn" id="houseEditSaveBtn" style="padding: 6px 12px; font-size: 11px; border-radius: 4px; border: 1px solid var(--accent-color); background: var(--accent-color); color: #fff; cursor: pointer; font-weight: bold;">Salvar Casa</button>
+        </footer>
+      </div>
+    </div>
+    <!-- Modal Propriedades do Tile (ActionID / UniqueID) -->
+    <div id="tilePropertiesModal" class="calibrator-modal" style="display: none; justify-content: center; align-items: center; z-index: 10000;">
+      <div class="calibrator-content" style="max-width: 320px; width: 100%; border-radius: 12px; background: radial-gradient(circle at center, #1b1e24 0%, #0e1115 100%); border: 1px solid var(--border-color); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+        <header class="calibrator-header" style="padding: 12px 16px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-weight: 700; font-size: 13px; color: var(--accent-color); text-transform: uppercase; letter-spacing: 0.05em;">⚙️ Propriedades do Tile</span>
+          <button type="button" class="flyout-close" id="tilePropCloseBtn" style="font-size: 18px; border: none; background: transparent; color: var(--text-dim); cursor: pointer;">×</button>
+        </header>
+        <div class="calibrator-body-layout" style="display: flex; flex-direction: column; padding: 16px; gap: 12px;">
+          <p class="flyout-hint" style="font-size: 10px; margin: 0; color: var(--text-dim);">Coordenada atual: <strong id="tilePropCoord" style="color: #fff;">X:0 Y:0 Z:0</strong></p>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="calibrator-input-group" style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 9px; color: var(--text-dim); text-transform: uppercase;">Action ID</label>
+              <div class="custom-number-input">
+                <input type="number" id="tilePropActionId" min="0" max="65535" value="0" style="background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 6px; font-size: 11px; outline: none; box-sizing: border-box;" />
+                <div class="spinner-arrows">
+                  <button type="button" class="spinner-up">▲</button>
+                  <button type="button" class="spinner-down">▼</button>
+                </div>
+              </div>
+            </div>
+            <div class="calibrator-input-group" style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 9px; color: var(--text-dim); text-transform: uppercase;">Unique ID</label>
+              <div class="custom-number-input">
+                <input type="number" id="tilePropUniqueId" min="0" max="65535" value="0" style="background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 6px; font-size: 11px; outline: none; box-sizing: border-box;" />
+                <div class="spinner-arrows">
+                  <button type="button" class="spinner-up">▲</button>
+                  <button type="button" class="spinner-down">▼</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-top: 4px;">
+            <span id="tilePropLastActionId" style="font-size: 9px; color: var(--accent-color); opacity: 0.8;">Último: -</span>
+            <span id="tilePropLastUniqueId" style="font-size: 9px; color: var(--accent-color); opacity: 0.8;">Último: -</span>
+          </div>
+          <p class="flyout-hint" style="font-size: 9px; margin: 0; color: var(--text-dim); opacity: 0.8;">ActionID (0-65535) é usado para quests e portas. UniqueID é usado para identificar 1 bloco específico no servidor inteiro (ex: Baú da POI).</p>
+        </div>
+        <footer class="calibrator-footer" style="padding: 12px 16px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 8px; background: #0f1115;">
+          <button type="button" class="floor-btn" id="tilePropCancelBtn" style="padding: 6px 12px; font-size: 11px; border-radius: 4px; border: 1px solid #3f4452; background: transparent; color: var(--text-main); cursor: pointer;">Cancelar</button>
+          <button type="button" class="floor-btn" id="tilePropConfirmBtn" style="padding: 6px 12px; font-size: 11px; border-radius: 4px; border: 1px solid var(--accent-color); background: var(--accent-color); color: #fff; cursor: pointer; font-weight: bold;">Salvar Propriedades</button>
+        </footer>
+      </div>
+    </div>
+
+    <script type="module" src="/src/studio/bootstrap.ts"></script>
+  </body>
+</html>

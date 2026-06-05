@@ -1,0 +1,129 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { env } from './env.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(__dirname, '../../..');
+
+export interface AppPaths {
+    projectRoot: string;
+    distDir: string;
+    repoMapsDir: string;
+    repoTilesDir: string;
+    repoPublicDir: string;
+    mapsDir: string;
+    tilesDir: string;
+    charactersDir: string;
+    tilePropertiesPath: string;
+    tileCatalogPath: string;
+    autoBorderSetsPath: string;
+    creaturePresetsPath: string;
+    outfitPresetsPath: string;
+    tileVariantGroupsPath: string;
+    gameConfigPath: string;
+}
+
+function copyDirRecursive(src: string, dest: string): void {
+    if (!fs.existsSync(src)) return;
+    fs.mkdirSync(dest, { recursive: true });
+    for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+        const srcPath = path.join(src, entry.name);
+        const destPath = path.join(dest, entry.name);
+        if (entry.isDirectory()) {
+            copyDirRecursive(srcPath, destPath);
+        } else {
+            if (!fs.existsSync(destPath)) {
+                fs.copyFileSync(srcPath, destPath);
+            }
+        }
+    }
+}
+
+function copyFileIfMissing(src: string, dest: string): void {
+    if (!fs.existsSync(src)) return;
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    if (!fs.existsSync(dest)) {
+        fs.copyFileSync(src, dest);
+    }
+}
+
+function seedDataRoot(dataRoot: string): void {
+    const repoMaps = path.join(projectRoot, 'public', 'maps');
+    const repoTiles = path.join(projectRoot, 'tiles');
+    const repoPublic = path.join(projectRoot, 'public');
+
+    const dataMaps = path.join(dataRoot, 'maps');
+    const dataTiles = path.join(dataRoot, 'tiles');
+
+    if (!fs.existsSync(dataMaps) || fs.readdirSync(dataMaps).length === 0) {
+        copyDirRecursive(repoMaps, dataMaps);
+    }
+    if (!fs.existsSync(dataTiles) || fs.readdirSync(dataTiles).length === 0) {
+        copyDirRecursive(repoTiles, dataTiles);
+    }
+
+    const publicFiles = [
+        'tile_catalog.json',
+        'auto_border_sets.json',
+        'creature_presets.json',
+        'outfit_presets.json',
+        'tile_variant_groups.json',
+    ];
+    for (const file of publicFiles) {
+        copyFileIfMissing(path.join(repoPublic, file), path.join(dataRoot, file));
+    }
+}
+
+function buildPaths(): AppPaths {
+    const repoMapsDir = path.join(projectRoot, 'public', 'maps');
+    const repoTilesDir = path.join(projectRoot, 'tiles');
+    const repoPublicDir = path.join(projectRoot, 'public');
+
+    if (env.dataRoot) {
+        fs.mkdirSync(env.dataRoot, { recursive: true });
+        seedDataRoot(env.dataRoot);
+        const tilesDir = path.join(env.dataRoot, 'tiles');
+        return {
+            projectRoot,
+            distDir: path.join(projectRoot, 'dist'),
+            repoMapsDir,
+            repoTilesDir,
+            repoPublicDir,
+            mapsDir: path.join(env.dataRoot, 'maps'),
+            tilesDir,
+            charactersDir: path.join(tilesDir, 'characters'),
+            tilePropertiesPath: path.join(tilesDir, 'tile_properties.json'),
+            tileCatalogPath: path.join(env.dataRoot, 'tile_catalog.json'),
+            autoBorderSetsPath: path.join(env.dataRoot, 'auto_border_sets.json'),
+            creaturePresetsPath: path.join(env.dataRoot, 'creature_presets.json'),
+            outfitPresetsPath: path.join(env.dataRoot, 'outfit_presets.json'),
+            tileVariantGroupsPath: path.join(env.dataRoot, 'tile_variant_groups.json'),
+            gameConfigPath: path.join(projectRoot, 'game_config.json'),
+        };
+    }
+
+    return {
+        projectRoot,
+        distDir: path.join(projectRoot, 'dist'),
+        repoMapsDir,
+        repoTilesDir,
+        repoPublicDir,
+        mapsDir: repoMapsDir,
+        tilesDir: repoTilesDir,
+        charactersDir: path.join(repoTilesDir, 'characters'),
+        tilePropertiesPath: path.join(repoTilesDir, 'tile_properties.json'),
+        tileCatalogPath: path.join(repoPublicDir, 'tile_catalog.json'),
+        autoBorderSetsPath: path.join(repoPublicDir, 'auto_border_sets.json'),
+        creaturePresetsPath: path.join(repoPublicDir, 'creature_presets.json'),
+        outfitPresetsPath: path.join(repoPublicDir, 'outfit_presets.json'),
+        tileVariantGroupsPath: path.join(repoPublicDir, 'tile_variant_groups.json'),
+        gameConfigPath: path.join(projectRoot, 'game_config.json'),
+    };
+}
+
+export const paths: AppPaths = buildPaths();
+
+export function getMapsDirForCollision(): string {
+    return paths.mapsDir;
+}

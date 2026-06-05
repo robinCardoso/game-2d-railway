@@ -1,0 +1,50 @@
+[
+  {
+    "id": "knight_female",
+    "name": "Cavaleira",
+    "vocationId": "knight",
+    "gender": "female",
+    "spriteSheetUrl": "tiles/characters/vocations/female/knight.png",
+    "showInCreation": true
+  },
+  {
+    "id": "mage_male",
+    "name": "Mago",
+    "vocationId": "mage",
+    "gender": "male",
+    "spriteSheetUrl": "tiles/characters/vocations/male/mage.png",
+    "showInCreation": true
+  },
+  {
+    "id": "mage_female",
+    "name": "Maga",
+    "vocationId": "mage",
+    "gender": "female",
+    "spriteSheetUrl": "tiles/characters/vocations/female/mage.png",
+    "showInCreation": true
+  },
+  {
+    "id": "archer_male",
+    "name": "Arqueiro",
+    "vocationId": "archer",
+    "gender": "male",
+    "spriteSheetUrl": "tiles/characters/vocations/male/archer.png",
+    "showInCreation": true
+  },
+  {
+    "id": "archer_female",
+    "name": "Arqueira",
+    "vocationId": "archer",
+    "gender": "female",
+    "spriteSheetUrl": "tiles/characters/vocations/female/archer.png",
+    "showInCreation": true
+  },
+  {
+    "id": "knight",
+    "name": "Knight",
+    "vocationId": "knight",
+    "gender": "male",
+    "spriteSheetUrl": "tiles/characters/vocations/male/knight.png",
+    "showInCreation": true
+  }
+]

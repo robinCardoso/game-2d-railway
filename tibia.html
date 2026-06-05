@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tibia - Map Editor Engine</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap');
+
+        :root {
+            --panel-bg: #1a1c23;
+            --sidebar-bg: #15171c;
+            --border-color: #2d3139;
+            --accent-color: #6366f1;
+            --text-main: #e2e8f0;
+            --text-dim: #94a3b8;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #0f1115;
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            width: 95vw;
+            height: 95vh;
+            max-width: 1400px;
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            overflow: hidden;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .top-nav {
+            padding: 0.75rem 1.5rem;
+            background: var(--sidebar-bg);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo-area { display: flex; align-items: center; gap: 12px; }
+        .logo-box { width: 32px; height: 32px; background: var(--accent-color); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+
+        .status-bars { display: flex; gap: 24px; }
+        .bar-container { width: 120px; }
+        .bar-label { display: flex; justify-content: space-between; font-size: 10px; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; }
+        .bar-bg { height: 8px; background: #2d3139; border-radius: 4px; overflow: hidden; }
+        .hp-fill { height: 100%; width: 100%; background: #ef4444; }
+        .mp-fill { height: 100%; width: 100%; background: #3b82f6; }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            flex-grow: 1;
+            overflow: hidden;
+        }
+
+        .canvas-container { position: relative; background: #000; overflow: hidden; cursor: crosshair; }
+        canvas { image-rendering: pixelated; width: 100%; height: 100%; }
+
+        .sidebar {
+            background-color: var(--sidebar-bg);
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            padding: 1rem;
+            gap: 1rem;
+            overflow-y: auto;
+        }
+
+        .stats-panel { background: rgba(255, 255, 255, 0.03); border-radius: 0.75rem; padding: 1rem; }
+        .panel-title { font-size: 11px; font-weight: bold; color: var(--accent-color); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+
+        .floor-controls { display: flex; gap: 8px; }
+        .floor-btn { flex: 1; padding: 8px; background: #1e2128; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; color: white; cursor: pointer; font-size: 12px; }
+        .floor-btn.active { background: var(--accent-color); border-color: var(--accent-color); }
+
+        .tile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .tile-option { 
+            height: 64px; background: #1e2128; border: 2px solid transparent; border-radius: 8px; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            cursor: pointer; transition: all 0.2s; font-size: 11px;
+        }
+        .tile-option:hover { background: #252a35; }
+        .tile-option.active { border-color: var(--accent-color); background: #252a35; }
+        .tile-preview { width: 32px; height: 32px; margin-bottom: 4px; background-repeat: no-repeat; image-rendering: pixelated; }
+
+        .info-row { display: flex; justify-content: space-between; font-size: 13px; padding-bottom: 4px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); margin-bottom: 8px; }
+        .info-label { color: var(--text-dim); }
+
+        .hint { position: absolute; bottom: 16px; left: 16px; background: rgba(0,0,0,0.5); backdrop-filter: blur(8px); padding: 8px 12px; border-radius: 8px; font-size: 11px; border: 1px solid rgba(255,255,255,0.1); pointer-events: none; }
+        .accent { color: var(--accent-color); font-weight: bold; }
+    </style>
+</head>
+
+<body>
+    <div class="game-container">
+        <div class="top-nav">
+            <div class="logo-area">
+                <div class="logo-box">T</div>
+                <div style="font-weight: bold;">Tibia Web Engine <span style="font-size: 10px; font-weight: normal; opacity: 0.5;">v0.3</span></div>
+            </div>
+            <div class="status-bars">
+                <div class="bar-container">
+                    <div class="bar-label"><span>Health</span><span>100%</span></div>
+                    <div class="bar-bg"><div class="hp-fill"></div></div>
+                </div>
+                <div class="bar-container">
+                    <div class="bar-label"><span>Mana</span><span>100%</span></div>
+                    <div class="bar-bg"><div class="mp-fill"></div></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-layout">
+            <div class="canvas-container">
+                <canvas id="gameCanvas"></canvas>
+                <div class="hint">
+                    <span class="accent">WASD:</span> Mover | <span class="accent">Mouse:</span> Pintar | <span class="accent">PgUp/Dn:</span> Andar
+                </div>
+            </div>
+
+            <div class="sidebar">
+                <div class="stats-panel">
+                    <div class="panel-title">Andar de Edição</div>
+                    <div class="floor-controls">
+                        <button class="floor-btn" data-z="-1">-1</button>
+                        <button class="floor-btn active" data-z="0">0</button>
+                        <button class="floor-btn" data-z="1">+1</button>
+                    </div>
+                </div>
+
+                <div class="stats-panel">
+                    <div class="panel-title">Map Editor</div>
+                    <div class="tile-grid" id="tileSelector"></div>
+                </div>
+
+                <div class="stats-panel">
+                    <div class="panel-title">Personagem</div>
+                    <div class="info-row"><span class="info-label">Posição X:</span> <span id="posX">50</span></div>
+                    <div class="info-row"><span class="info-label">Posição Y:</span> <span id="posY">50</span></div>
+                    <div class="info-row"><span class="info-label">Andar (Z):</span> <span id="posZ">0</span></div>
+                </div>
+
+                <div class="stats-panel">
+                    <div class="panel-title">Minimap</div>
+                    <div style="aspect-ratio: 1/1; background: #000; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); overflow: hidden;">
+                        <canvas id="minimapCanvas"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const TILE_SIZE_SCREEN = 32;
+        const MAP_SIZE = 100;
+        
+        let spritesheet = new Image();
+        let useFallback = false;
+        let tileSizeInternal = 32;
+
+        const TILE_TYPES = {
+            "-1": { name: 'Vazio', col: 1, row: 2, walkable: true },
+            0: { name: 'Grama', col: 0, row: 0, walkable: true },
+            1: { name: 'Piso Pedra', col: 1, row: 0, walkable: true },
+            2: { name: 'Água', col: 2, row: 0, walkable: false },
+            3: { name: 'Madeira', col: 0, row: 1, walkable: true },
+            4: { name: 'Parede', col: 1, row: 1, walkable: false },
+            5: { name: 'Árvore', col: 2, row: 1, walkable: false },
+            6: { name: 'Cavaleiro', col: 0, row: 2, walkable: true }
+        };
+
+        let worldMap = {
+            "-1": Array(MAP_SIZE).fill().map(() => Array(MAP_SIZE).fill(-1)),
+            "0": Array(MAP_SIZE).fill().map(() => Array(MAP_SIZE).fill(0)),
+            "1": Array(MAP_SIZE).fill().map(() => Array(MAP_SIZE).fill(-1))
+        };
+        
+        for(let x=45; x<55; x++) {
+            for(let y=45; y<55; y++) {
+                worldMap["0"][y][x] = 1;
+                if(x === 45 || x === 54 || y === 45 || y === 54) worldMap["0"][y][x] = 4;
+            }
+        }
+
+        let selectedTileType = 0;
+        let editingFloor = 0;
+
+        function createFallbackSpritesheet() {
+            console.log("Usando Spritesheet de Contingência...");
+            useFallback = true;
+            const canvas = document.createElement('canvas');
+            canvas.width = 96; canvas.height = 96;
+            const sCtx = canvas.getContext('2d');
+            tileSizeInternal = 32;
+
+            // Desenhos simples para cada tile
+            sCtx.fillStyle = '#2d5a27'; sCtx.fillRect(0,0,32,32); // Grama
+            sCtx.fillStyle = '#374151'; sCtx.fillRect(32,0,32,32); // Pedra
+            sCtx.fillStyle = '#1e3a8a'; sCtx.fillRect(64,0,32,32); // Agua
+            sCtx.fillStyle = '#78350f'; sCtx.fillRect(0,32,32,32); // Madeira
+            sCtx.fillStyle = '#1f2937'; sCtx.fillRect(32,32,32,32); // Parede
+            sCtx.fillStyle = '#064e3b'; sCtx.beginPath(); sCtx.arc(80,48,10,0,7); sCtx.fill(); // Arvore
+            sCtx.fillStyle = '#f97316'; sCtx.beginPath(); sCtx.arc(16,80,10,0,7); sCtx.fill(); // Cavaleiro
+
+            spritesheet = canvas;
+            initEditorUI();
+            startGameLoop();
+        }
+
+        function initEditorUI() {
+            const selector = document.getElementById('tileSelector');
+            selector.innerHTML = '';
+            const ratio = 32 / tileSizeInternal;
+
+            Object.keys(TILE_TYPES).forEach(id => {
+                if(id == "-1") return;
+                const tile = TILE_TYPES[id];
+                const div = document.createElement('div');
+                div.className = `tile-option ${selectedTileType == id ? 'active' : ''}`;
+                
+                const sx = tile.col * tileSizeInternal;
+                const sy = tile.row * tileSizeInternal;
+
+                const previewStyles = useFallback ? 
+                    `background: ${spritesheet.getContext('2d').fillStyle}; border-radius: 4px;` : 
+                    `background-image: url('tileset.png'); background-position: -${sx*ratio}px -${sy*ratio}px; background-size: ${spritesheet.width*ratio}px auto;`;
+
+                div.innerHTML = `
+                    <div class="tile-preview" style="${previewStyles}"></div>
+                    <span>${tile.name}</span>
+                `;
+                div.onclick = () => {
+                    document.querySelectorAll('.tile-option').forEach(el => el.classList.remove('active'));
+                    div.classList.add('active');
+                    selectedTileType = parseInt(id);
+                };
+                selector.appendChild(div);
+            });
+        }
+
+        function startGameLoop() {
+            update(); // First call to set camera
+            requestAnimationFrame(loop);
+        }
+
+        spritesheet.src = 'tileset.png';
+        spritesheet.onload = () => {
+            tileSizeInternal = spritesheet.width / 3;
+            initEditorUI();
+            startGameLoop();
+        };
+        spritesheet.onerror = () => {
+            createFallbackSpritesheet();
+        };
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const minimapCanvas = document.getElementById('minimapCanvas');
+        const mCtx = minimapCanvas.getContext('2d');
+
+        function resize() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            minimapCanvas.width = 150; minimapCanvas.height = 150;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        const player = { worldX: 50 * 32, worldY: 50 * 32, worldZ: 0, speed: 4 };
+        const camera = { x: 0, y: 0 };
+        const keys = {};
+
+        document.addEventListener('keydown', e => {
+            keys[e.key.toLowerCase()] = true;
+            if(e.key === 'PageUp') player.worldZ = Math.min(1, player.worldZ + 1);
+            if(e.key === 'PageDown') player.worldZ = Math.max(-1, player.worldZ - 1);
+        });
+        document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+        canvas.addEventListener('mousedown', e => { 
+            paint(e); canvas.addEventListener('mousemove', paint); 
+        });
+        window.addEventListener('mouseup', () => canvas.removeEventListener('mousemove', paint));
+
+        function paint(e) {
+            const rect = canvas.getBoundingClientRect();
+            const tx = Math.floor((e.clientX - rect.left + camera.x) / 32);
+            const ty = Math.floor((e.clientY - rect.top + camera.y) / 32);
+            if(tx >= 0 && tx < MAP_SIZE && ty >= 0 && ty < MAP_SIZE) worldMap[player.worldZ][ty][tx] = selectedTileType;
+        }
+
+        document.querySelectorAll('.floor-btn').forEach(btn => {
+            btn.onclick = () => {
+                document.querySelectorAll('.floor-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                editingFloor = parseInt(btn.dataset.z);
+            };
+        });
+
+        function update() {
+            let dx = 0, dy = 0;
+            if(keys['w'] || keys['arrowup']) dy -= player.speed;
+            if(keys['s'] || keys['arrowdown']) dy += player.speed;
+            if(keys['a'] || keys['arrowleft']) dx -= player.speed;
+            if(keys['d'] || keys['arrowright']) dx += player.speed;
+
+            const tx = Math.floor((player.worldX + dx + 16) / 32);
+            const ty = Math.floor((player.worldY + dy + 16) / 32);
+            if(tx >= 0 && tx < MAP_SIZE && ty >= 0 && ty < MAP_SIZE) {
+                const t = worldMap[player.worldZ][ty][tx];
+                if(t === -1 || TILE_TYPES[t].walkable) { player.worldX += dx; player.worldY += dy; }
+            }
+            camera.x = player.worldX - canvas.width / 2;
+            camera.y = player.worldY - canvas.height / 2;
+            document.getElementById('posX').innerText = Math.floor(player.worldX/32);
+            document.getElementById('posY').innerText = Math.floor(player.worldY/32);
+            document.getElementById('posZ').innerText = player.worldZ;
+        }
+
+        function draw() {
+            ctx.fillStyle = '#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
+            [-1, 0, 1].forEach(z => {
+                const isAbove = z > player.worldZ;
+                let playerUnder = false;
+                if(isAbove) {
+                    const tx = Math.floor((player.worldX+16)/32);
+                    const ty = Math.floor((player.worldY+16)/32);
+                    if(worldMap[z][ty][tx] !== -1) playerUnder = true;
+                }
+                ctx.globalAlpha = (isAbove && playerUnder) ? 0.3 : 1.0;
+                
+                const startX = Math.max(0, Math.floor(camera.x / 32));
+                const endX = Math.min(MAP_SIZE-1, Math.floor((camera.x + canvas.width)/32));
+                const startY = Math.max(0, Math.floor(camera.y / 32));
+                const endY = Math.min(MAP_SIZE-1, Math.floor((camera.y + canvas.height)/32));
+
+                for(let y = startY; y <= endY; y++) {
+                    for(let x = startX; x <= endX; x++) {
+                        const tid = worldMap[z][y][x];
+                        if(tid === -1) continue;
+                        const tile = TILE_TYPES[tid];
+                        ctx.drawImage(spritesheet, tile.col*tileSizeInternal, tile.row*tileSizeInternal, tileSizeInternal, tileSizeInternal, x*32-camera.x, y*32-camera.y, 32, 32);
+                    }
+                }
+                if(player.worldZ === z) {
+                    ctx.globalAlpha = 1.0;
+                    const knight = TILE_TYPES[6];
+                    ctx.drawImage(spritesheet, knight.col*tileSizeInternal, knight.row*tileSizeInternal, tileSizeInternal, tileSizeInternal, player.worldX-camera.x, player.worldY-camera.y, 32, 32);
+                }
+            });
+            drawMinimap();
+        }
+
+        function drawMinimap() {
+            mCtx.fillStyle = '#000'; mCtx.fillRect(0,0,150,150);
+            const step = 150 / MAP_SIZE;
+            const floor = worldMap[player.worldZ];
+            for(let y=0; y<MAP_SIZE; y++) {
+                for(let x=0; x<MAP_SIZE; x++) {
+                    if(floor[y][x] !== -1) {
+                        const colors = ['#2d5a27', '#374151', '#1e3a8a', '#78350f', '#1f2937', '#064e3b', '#7f1d1d'];
+                        mCtx.fillStyle = colors[floor[y][x]] || '#333';
+                        mCtx.fillRect(x*step, y*step, step, step);
+                    }
+                }
+            }
+            mCtx.fillStyle = '#fff'; mCtx.fillRect((player.worldX/32)*step, (player.worldY/32)*step, 2, 2);
+        }
+
+        function loop() { update(); draw(); requestAnimationFrame(loop); }
+    </script>
+</body>
+
+</html>

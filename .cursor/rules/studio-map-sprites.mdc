@@ -1,0 +1,113 @@
+---
+description: Convenções do Studio — sprites de mapa, calibrador, variantes, carregamento de mapas e APIs dev. Evitar regressões.
+alwaysApply: true
+---
+
+# Studio — sprites de mapa, tiles e mapas (anti-regressão)
+
+Referência detalhada: `docs/studio-improvements-log.md`, `docs/auto-border.md`, `docs/sprite-exporter-walkthrough.md`, `docs/map-format.md`.
+
+## Constantes e arquivos
+
+- **Tile visual:** `ENGINE_CONFIG.TILE_SIZE = 32` (`src/engine/config.ts`). Não usar `64` como padrão em HTML/forms.
+- **PNG de mapa:** `tiles/maps/**/*.png` — única pasta escaneada por `GET /api/list-map-sprites`.
+- **Paleta (Tileset):** glob Vite `tiles/**/*.png` via `buildTileRegistryAsync()` — inclui mapas + escadas, etc.
+- **Metadados:** `tiles/tile_properties.json` — chave = **nome do arquivo sem `.png`** (ex. `01_grama`, não `01_grama_randon`).
+- **Grupos 🎲:** `public/tile_variant_groups.json` + campo `variantGroup` em `tile_properties.json`.
+
+## Registro de tiles (`tileRegistry.ts`) — NÃO REGREDIR
+
+1. **Ordem determinística:** carregar todos os PNGs, depois registrar em ordem **alfabética de path** (não na ordem do `onload`).
+2. **Variant strips:** detectar com `inferVariantStripFrameCount()` após imagem carregada (largura = N × TILE_SIZE).
+3. **Fail-safe `variantGroup`:** strips `*_variants` / `*_var_variants` sem grupo → inferir em `inferVariantGroupForStrip()` (`grass`, `stone`, etc.).
+4. **fileKey:** strip → `nome#0`…`nome#N-1`; tile único → `nome`.
+
+## Random vs mapa salvo — NÃO CONFUNDIR
+
+- **`resolvePaintTileId()`** — só ao **pintar** com pincel 🎲 (ids 9000–9999). Usa `Math.random`.
+- **Renderização / mapa carregado:** usa ids **fixos** em `worldMap`; nunca chamar random no `draw()`.
+- **Mapas salvos:** células guardam ids concretos + `ref` informativo. Nunca persistir id de pincel 🎲.
+- **`resolvePaintSelectionId()`:** frames com `variantStripIndex` pintam variante **fixa**; não redirecionar para brush por conter `"vari"` no nome.
+
+## Carregamento de mapas — NÃO REGREDIR
+
+1. **Bootstrap:** `bootstrapApp()` deve `await tileRegistryReady` antes de `transitionToMap` / `loadMapFile`.
+2. **Resolução por ref:** `loadMapFromJson(raw, spawn, tileRegistry)` → `tileRefResolver.ts` mapeia `ref` / `tileRefs` → id atual do registry.
+3. **Prioridade:** ref da célula → ref em `tileRefs[id]` → id se existir no registry (sem fallback silencioso quando ref explícita falha).
+4. **Reload de registry:** após `reloadTileRegistry()`, remapear `worldMap` via snapshot serializado com refs (`serializeMapDocument` + `loadMapFromJson`).
+5. **`sanitizeTilesByFloor`:** preservar campo `ref` nas células ao importar.
+
+## Calibrador de mapa (`characterCalibratorModal.ts`)
+
+- Modo mapa: passar `initialGridCols` / `initialGridRows` de `mapSpriteCalibration.ts` (inferir de PNG + `tile_properties`).
+- Se grid > 1×1: chamar `applyGridDivision()` na abertura.
+- Seleção múltipla: evento `click` dedicado; desativar drag quando multi-select ativo; reset checkbox ao abrir; `AbortController` no close.
+- Inferência de grade: `src/editor/mapSpriteCalibration.ts` — strip horizontal `W = N × 32`, altura 32.
+
+## Editor Criar Sprites (`mapSpriteEditor.ts`)
+
+- Ao selecionar sprite existente: `syncCalibrationFromImage()` preenche frameWidth/Height e grade.
+- Botão **🗑️ Excluir** (`#deleteMapSpriteBtn`): visível só com sprite selecionado; fluxo usage → confirm → delete.
+- Salvar inclui `calibrationToPropertyPayload()` em `tile_properties` (frameWidth, gridCols, etc.).
+
+## APIs Studio (`server/src/studio/`) — dev e prod unificados
+
+Em `npm run dev`, o Vite faz **proxy** de `/api/*` para o Express (`:8787`). Implementação única em `server/src/routes/studio/` + `studioService.ts`.
+
+- **Movimentação automática de PNG:** Ao salvar um sprite existente (`POST /api/save-map-sprite`), se a URL da imagem for local (contiver `/tiles/`) e a subpasta/categoria informada for diferente da atual, o backend cria a nova subpasta, copia o arquivo físico PNG para ela e remove o arquivo original do caminho antigo.
+
+| Método | Rota | Uso |
+|--------|------|-----|
+| GET | `/api/list-map-sprites` | Dropdown Criar Sprites |
+| GET | `/api/sprite-usage?filename=` | Verificar mapas antes de excluir |
+| DELETE | `/api/delete-map-sprite?filename=&category=&force=` | 409 se em uso e force=false |
+| POST | `/api/save-map-sprite` | Salvar PNG + tile_properties |
+
+## Paleta vs seletor Criar Sprites
+
+- **Tileset:** todos PNGs em `tiles/**` (automático).
+- **Seletor:** só `tiles/maps/**` via API — nomes vêm de `nameOverride` ou filename.
+- Tile avulso + strip no mesmo grupo (`variantGroup`) → um 🎲 com N+M membros; evitar duplicata desnecessária (ex. `01_grama.png` + strip grama).
+
+## Auto-borda e camadas — NÃO REGREDIR
+
+- **Camadas:** `worldMap` (base) + `grassOverlayMap` + `borderOverlayMap` — ver `src/engine/mapPaintLayers.ts`.
+- **Pintura grama:** aditiva no overlay; **não** apagar base; borracha remove só overlay grama.
+- **Filete:** desenhado na **célula de chão vizinha** à grama, nunca por cima de célula com grama (`cellHasGrass`).
+- **Multi-sprite:** `collectBorderDrawMasks()` no draw via **`collectBorderDrawTileIdsCached`** — cache invalida em load, undo, `reloadTileRegistry`, `recalculateAutoBorderRegion`.
+- **Recalc pintura:** `deferBorderRecalc` durante traço; **`flushPendingBorderRecalc()`** no mouseup (1× por traço).
+- **Save JSON:** `mapDocumentFormat.ts` deve exportar `layers.grass` e `layers.border`.
+- **Random:** só `resolvePaintTileId`; render e mapa carregado usam ids fixos.
+
+## Y-sorting (profundidade) — NÃO REGREDIR
+
+- **Passo 1:** chão base + grama + auto-borda apenas (`worldMap` / overlays grass+border) — **não** mover para Y-sort.
+- **Passo 2:** `depthSortDraw.ts` — itens (`itemsOverlayMap`) + NPCs + remotos + jogador local na **mesma fila**, ordenados por pé (`sortY`, `sortX`).
+- **Não** desenhar todos os itens numa passada fixa antes do jogador sem Y-sort.
+- Overlays de editor (zonas, portais, spawns, preview) ficam **após** o Y-sort.
+
+## Performance render (Studio) — NÃO REGREDIR
+
+- **`draw()`:** só células visíveis (`computeViewportTileBounds`); pular andares vazios (`floorHasVisibleContentInView`).
+- **`buildBorderMaskTileIndex`:** 1× por frame, **fora** do loop de andares.
+- **Minimap:** rebuild completo só quando dirty; ponto do player incremental.
+- **Idle FPS:** Studio 30 FPS após 2 s sem input; **60 FPS** ao interagir e nas abas Portais/Spawns; **Play (`playApp.ts`) sempre 60 FPS**.
+- **Debug dev:** `localStorage` keys `debug.perf`, `debug.paint`, `debug.map.save`, `debug.movement` — ver `docs/studio-improvements-log.md` §7.8.
+
+## Personagens e Outfits — NÃO REGREDIR
+
+1. **Criação e Roster:** A visualização na criação de personagem (`create.ts`) e no roster (`roster.ts`) usa `<canvas>` com Chroma Key e fatiamento 32x32 virado para o Sul (`walk_down` / `idle_down`) carregado dos JSONs de configuração dos outfits, e nunca `<img>` estáticos ou texturas completas com fundo magenta.
+2. **Sincronização de Calibração (Hot-reload):** O motor de jogo (`playApp.ts` -> `startPlay`) e a criação (`characterStore.ts` -> `createCharacter`) devem sempre fazer fetch das configurações do arquivo JSON oficial do outfit no servidor para sincronizar dimensões e Chroma Key em tempo real, permitindo que alterações nos JSONs se reflitam imediatamente para os personagens ativos.
+3. **Calibrador de Âncoras do Studio:** A visualização do calibrador em `spriteSheetEditor.ts` deve sempre renderizar a célula azul tracejada de 32x32px e a mira vermelha no centro inferior do tile (ponto de âncora padrão dos pés do boneco), aplicando os deslocamentos `anchorX` e `anchorY` multiplicados pela escala no preview para feedback em tempo real.
+
+## Checklist antes de alterar este subsistema
+
+- [ ] Registry ainda registra em ordem determinística de path?
+- [ ] Map load ainda passa `TILE_TYPES` para `loadMapFromJson` / `loadMapFile`?
+- [ ] Random só em `resolvePaintTileId`, não no draw?
+- [ ] Strips sem grupo ainda inferem `variantGroup`?
+- [ ] Exclusão ainda verifica `sprite-usage`?
+- [ ] `tile_properties` chave = filename real do PNG?
+- [ ] Save ainda inclui `layers` quando grass/border não vazios?
+- [ ] Draw ainda usa cache de bordas + viewport culling (não loop 256×256)?
+- [ ] Recalc de borda ainda defer + flush no mouseup?

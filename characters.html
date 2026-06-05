@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Personagens — 2D World</title>
+    <link rel="stylesheet" href="/src/shared/shell.css" />
+  </head>
+  <body class="shell-page">
+    <div class="shell-card shell-card--wide">
+      <div class="shell-logo">
+        <h1>Seus personagens</h1>
+        <p id="accountEmail" style="color: #94a3b8"></p>
+      </div>
+      <p id="rosterError" class="shell-error" hidden></p>
+      <div id="charGrid" class="char-grid"></div>
+      <p id="emptyState" hidden style="text-align: center; color: #94a3b8">
+        Nenhum personagem ainda. Crie o primeiro aventureiro!
+      </p>
+      <div class="shell-actions">
+        <button type="button" id="enterWorldBtn" class="shell-btn" disabled>Entrar no mundo</button>
+        <a href="/characters-new.html" class="shell-btn shell-btn--ghost" style="text-align: center; text-decoration: none; line-height: 1.2; display: flex; align-items: center; justify-content: center">Criar personagem</a>
+        <button type="button" id="deleteCharBtn" class="shell-btn shell-btn--danger" disabled>Excluir</button>
+        <button type="button" id="logoutBtn" class="shell-btn shell-btn--ghost">Sair da conta</button>
+      </div>
+      <p class="shell-links"><a href="/studio.html" id="studioLink">GM Studio</a> · <a href="/">Início</a></p>
+    </div>
+    <script type="module" src="/src/characters/roster.ts"></script>
+  </body>
+</html>

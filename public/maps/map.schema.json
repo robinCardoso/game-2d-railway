@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://game-2d.local/maps/map.schema.json",
+  "title": "Game 2D MapDocument",
+  "description": "Mapa esparso para o editor/jogo. Tiles só listam células pintadas. Catálogo completo em /tile_catalog.json.",
+  "type": "object",
+  "required": ["version", "name", "size", "spawn"],
+  "properties": {
+    "$schema": { "type": "string", "const": "./map.schema.json" },
+    "format": {
+      "type": "string",
+      "const": "game-2d/map-sparse-v1",
+      "description": "Layout do arquivo. Mapas gerados por IA devem usar este valor."
+    },
+    "version": { "type": "integer", "const": 1 },
+    "coordSystem": {
+      "type": "object",
+      "description": "Eixos do mundo — X leste, Y sul, Z andar (-7…+7).",
+      "properties": {
+        "origin": { "const": "top-left" },
+        "axisX": { "type": "string" },
+        "axisY": { "type": "string" },
+        "axisZ": { "type": "string" },
+        "validZ": {
+          "type": "object",
+          "properties": {
+            "min": { "type": "integer" },
+            "max": { "type": "integer" }
+          }
+        },
+        "emptyTileId": { "type": "integer", "const": -1 },
+        "tileUnit": { "const": "cell" }
+      }
+    },
+    "name": { "type": "string", "minLength": 1 },
+    "mapId": {
+      "type": "string",
+      "pattern": "^[a-z0-9_-]+$",
+      "description": "ID único do mapa no MAP_REGISTRY."
+    },
+    "size": {
+      "type": "integer",
+      "minimum": 8,
+      "maximum": 256,
+      "description": "Largura e altura da grade em células (N×N)."
+    },
+    "tileSize": {
+      "type": "integer",
+      "description": "Pixels por tile no spritesheet (32 neste projeto)."
+    },
+    "tileRefs": {
+      "type": "object",
+      "description": "Legenda dos IDs usados neste mapa. Chave = id string.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string" },
+          "ref": { "type": "string", "description": "Chave estável do PNG (fileKey)." },
+          "category": { "enum": ["ground", "nature", "walls", "items"] },
+          "variantGroup": { "type": "string" },
+          "variantIndex": { "type": "integer", "minimum": 0 },
+          "walkable": { "type": "boolean" }
+        }
+      }
+    },
+    "spawn": {
+      "type": "object",
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 },
+        "z": { "type": "integer", "minimum": -7, "maximum": 7 }
+      },
+      "description": "Posição inicial do jogador ao entrar no mapa."
+    },
+    "tiles": {
+      "type": "object",
+      "description": "Células pintadas agrupadas por andar (chave = Z como string).",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["x", "y", "id"],
+          "properties": {
+            "x": { "type": "integer", "minimum": 0 },
+            "y": { "type": "integer", "minimum": 0 },
+            "id": {
+              "type": "integer",
+              "description": "Tile ID — deve existir em tileRefs ou tile_catalog.json."
+            },
+            "ref": {
+              "type": "string",
+              "description": "Opcional, informativo. A engine resolve pelo id."
+            }
+          }
+        }
+      }
+    },
+    "sparseTiles": {
+      "description": "Legado: [x, y, z, id][] — preferir tiles.",
+      "type": "array",
+      "items": {
+        "type": "array",
+        "minItems": 4,
+        "maxItems": 4,
+        "items": { "type": "integer" }
+      }
+    },
+    "floors": {
+      "description": "Legado: grade densa floors[z][y][x].",
+      "type": "object"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Metadados por célula, chave z_y_x.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "actionId": { "type": "integer" },
+          "uniqueId": { "type": "integer" },
+          "zoneId": { "type": "integer" },
+          "houseId": { "type": "integer" }
+        }
+      }
+    },
+    "houses": { "type": "object" },
+    "spawns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "x", "y", "z", "type"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "x": { "type": "integer" },
+          "y": { "type": "integer" },
+          "z": { "type": "integer" },
+          "type": { "enum": ["monster", "npc"] }
+        }
+      }
+    },
+    "portals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "targetMapId",
+          "targetX",
+          "targetY",
+          "targetZ",
+          "tileX",
+          "tileY",
+          "tileZ"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "targetMapId": { "type": "string" },
+          "targetX": { "type": "integer" },
+          "targetY": { "type": "integer" },
+          "targetZ": { "type": "integer" },
+          "tileX": { "type": "integer" },
+          "tileY": { "type": "integer" },
+          "tileZ": { "type": "integer" }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

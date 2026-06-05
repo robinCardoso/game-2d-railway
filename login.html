@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Entrar — 2D World</title>
+    <link rel="stylesheet" href="/src/shared/shell.css" />
+  </head>
+  <body class="shell-page">
+    <div class="shell-card">
+      <div class="shell-logo">
+        <h1>Entrar</h1>
+        <p>Acesse sua conta para escolher um personagem</p>
+      </div>
+      <p id="loginError" class="shell-error" hidden></p>
+      <form id="loginForm">
+        <div class="shell-field">
+          <label for="email">E-mail</label>
+          <input id="email" name="email" type="email" required autocomplete="email" />
+        </div>
+        <div class="shell-field">
+          <label for="password">Senha</label>
+          <input id="password" name="password" type="password" required autocomplete="current-password" />
+        </div>
+        <button type="submit" class="shell-btn">Entrar</button>
+      </form>
+      <p class="shell-links">
+        <a href="/register.html">Criar conta</a> · <a href="/">Voltar</a>
+      </p>
+      <p class="shell-links" style="font-size: 0.75rem; color: #64748b; margin-top: 12px">
+        Modo mock: qualquer e-mail/senha. Use <code>@gm.dev</code> para acesso ao Studio.
+      </p>
+    </div>
+    <script type="module" src="/src/auth/login.ts"></script>
+  </body>
+</html>

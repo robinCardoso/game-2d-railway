@@ -1,0 +1,102 @@
+{
+  "name": "Knight",
+  "spriteSheetUrl": "tiles/characters/vocations/male/knight.png",
+  "frameWidth": 32,
+  "frameHeight": 32,
+  "defaultDirection": "down",
+  "animations": {
+    "idle_up": {
+      "row": 2,
+      "frames": 1,
+      "speedFps": 1,
+      "loop": true,
+      "startFrame": 5
+    },
+    "idle_down": {
+      "row": 1,
+      "frames": 1,
+      "speedFps": 1,
+      "loop": true,
+      "startFrame": 15
+    },
+    "idle_left": {
+      "row": 2,
+      "frames": 1,
+      "speedFps": 1,
+      "loop": true,
+      "startFrame": 8
+    },
+    "idle_right": {
+      "row": 2,
+      "frames": 1,
+      "speedFps": 1,
+      "loop": true,
+      "startFrame": 2
+    },
+    "walk_up": {
+      "row": 2,
+      "frames": 2,
+      "speedFps": 5,
+      "loop": true,
+      "startFrame": 6
+    },
+    "walk_down": {
+      "row": 2,
+      "frames": 2,
+      "speedFps": 5,
+      "loop": true,
+      "startFrame": 0
+    },
+    "walk_left": {
+      "row": 2,
+      "frames": 2,
+      "speedFps": 5,
+      "loop": true,
+      "startFrame": 9
+    },
+    "walk_right": {
+      "row": 2,
+      "frames": 2,
+      "speedFps": 5,
+      "loop": true,
+      "startFrame": 3
+    },
+    "attack_up": {
+      "row": 0,
+      "frames": 1,
+      "speedFps": 5,
+      "loop": false
+    },
+    "attack_down": {
+      "row": 0,
+      "frames": 1,
+      "speedFps": 5,
+      "loop": false
+    },
+    "attack_left": {
+      "row": 0,
+      "frames": 1,
+      "speedFps": 5,
+      "loop": false
+    },
+    "attack_right": {
+      "row": 0,
+      "frames": 1,
+      "speedFps": 5,
+      "loop": false
+    }
+  },
+  "offsetX": 0,
+  "offsetY": 0,
+  "gapX": 0,
+  "gapY": 0,
+  "anchorX": -20,
+  "anchorY": 0,
+  "chromaKey": true,
+  "chromaKeyTolerance": 50,
+  "category": "vocations/male",
+  "sheetLayout": "horizontal",
+  "vocation": "knight",
+  "gender": "male",
+  "showInCreation": true
+}

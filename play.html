@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jogando — 2D World</title>
+    <link rel="stylesheet" href="/src/style.css" />
+    <style>
+      .play-top-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 16px;
+        background: #12141a;
+        border-bottom: 1px solid #2d3139;
+        font-size: 13px;
+      }
+      .play-top-bar a { color: #818cf8; text-decoration: none; margin-left: 12px; }
+      #canvasContainer { flex: 1; position: relative; min-height: 0; }
+      .play-layout { display: flex; flex-direction: column; height: 100vh; }
+      .play-main-layout { display: grid; grid-template-columns: 1fr 280px; flex-grow: 1; overflow: hidden; }
+      .sidebar { background-color: #15171c; border-left: 1px solid #2d3139; display: flex; flex-direction: column; padding: 1rem; gap: 1rem; overflow-y: auto; }
+      .stats-panel { background: rgba(255, 255, 255, 0.03); border-radius: 0.75rem; padding: 1rem; }
+      .panel-title { font-size: 11px; font-weight: bold; color: #6366f1; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+      .info-row { display: flex; justify-content: space-between; font-size: 13px; padding-bottom: 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); margin-bottom: 8px; color: #e2e8f0; }
+      .info-label { color: #94a3b8; }
+      .play-zoom-controls {
+        position: absolute;
+        right: 12px;
+        bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        background: rgba(18, 20, 26, 0.92);
+        border: 1px solid #2d3139;
+        border-radius: 8px;
+        padding: 4px 6px;
+        z-index: 10;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+      }
+      .play-zoom-controls button {
+        width: 30px;
+        height: 30px;
+        border: 1px solid #3d4450;
+        border-radius: 6px;
+        background: #1e2229;
+        color: #e2e8f0;
+        font-size: 18px;
+        line-height: 1;
+        cursor: pointer;
+        padding: 0;
+      }
+      .play-zoom-controls button:hover:not(:disabled) {
+        background: #2a3140;
+        border-color: #6366f1;
+        color: #fff;
+      }
+      .play-zoom-controls button:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+      }
+      #playZoomLabel {
+        min-width: 42px;
+        text-align: center;
+        font-size: 11px;
+        font-weight: bold;
+        color: #94a3b8;
+        user-select: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="play-layout">
+      <header class="play-top-bar">
+        <span><strong id="playCharName">—</strong> · <span id="statusMapName">—</span></span>
+        <span>
+          <span id="statusPos">0, 0</span> · Z <span id="statusZ">0</span>
+          <span id="posX" hidden></span><span id="posY" hidden></span><span id="posZ" hidden></span>
+          <a href="#" id="changeCharLink">Trocar personagem</a>
+          <a href="#" id="logoutPlay">Sair</a>
+        </span>
+      </header>
+      <div class="play-main-layout">
+        <div id="canvasContainer">
+          <canvas id="gameCanvas"></canvas>
+          <div id="playZoomControls" class="play-zoom-controls" title="Zoom da câmera">
+            <button type="button" id="playZoomOut" aria-label="Afastar">−</button>
+            <span id="playZoomLabel">100%</span>
+            <button type="button" id="playZoomIn" aria-label="Aproximar">+</button>
+          </div>
+        </div>
+        <aside class="sidebar">
+          <div class="stats-panel">
+            <div class="panel-title">Atributos</div>
+            <div id="statsContainer">
+              <div class="info-row"><span class="info-label">Classe/Vocação:</span> <span id="statVocation">—</span></div>
+              <div class="info-row"><span class="info-label">Nível (Level):</span> <span id="statLevel">1</span></div>
+              <div class="info-row"><span class="info-label">Melee:</span> <span id="statMelee">0</span></div>
+              <div class="info-row"><span class="info-label">Ataque Distância:</span> <span id="statDistance">0</span></div>
+              <div class="info-row"><span class="info-label">Ataque Mágico:</span> <span id="statMagic">0</span></div>
+              <div class="info-row"><span class="info-label">Defesa:</span> <span id="statDefense">0</span></div>
+              <div class="info-row"><span class="info-label">Vida Máxima:</span> <span id="statHealth">0</span></div>
+              <div class="info-row"><span class="info-label">Mana Máxima:</span> <span id="statMana">0</span></div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <div id="loadingScreen" class="loading-screen">
+      <div class="loading-spinner"></div>
+      <p id="loadingMsg">Carregando mundo…</p>
+    </div>
+    <script type="module" src="/src/game/bootstrap.ts"></script>
+  </body>
+</html>

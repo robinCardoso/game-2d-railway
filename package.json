@@ -1,0 +1,23 @@
+{
+  "name": "tibia-web-engine",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n web,api -c blue,green \"vite\" \"npm run dev --prefix server\"",
+    "dev:web": "vite",
+    "dev:server": "npm run dev --prefix server",
+    "server": "npm run start --prefix server",
+    "build": "tsc && vite build",
+    "start": "npm run start --prefix server",
+    "start:railway": "npm run build && npm run start",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "concurrently": "^9.2.0",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0"
+  },
+  "dependencies": {}
+}
