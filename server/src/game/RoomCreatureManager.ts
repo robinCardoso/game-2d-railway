@@ -92,7 +92,7 @@ export class RoomCreatureManager {
 
     start(): void {
         if (this.tickTimer) return;
-        this.tickTimer = setInterval(() => this.tick(Date.now()), 100);
+        this.tickTimer = setInterval(() => this.tick(Date.now()), 50);
     }
 
     stop(): void {

@@ -1,9 +1,9 @@
 /** Lógica pura de chase de monstros — compartilhada cliente/servidor. */
 
 export const MONSTER_AGGRO_RADIUS = 7;
-export const MONSTER_STEP_MS = 360;
-/** Pausa após o jogador mudar de tile antes do mob reagir (estilo Tibia / think time). */
-export const MONSTER_REACTION_DELAY_MS = 200;
+export const MONSTER_STEP_MS = 320;
+/** Pausa após o jogador mudar de tile (think time). 0 = desligado — evita travar perseguição contínua. */
+export const MONSTER_REACTION_DELAY_MS = 0;
 
 export type MobChaseBehavior = 'melee' | 'ranged';
 
@@ -375,7 +375,12 @@ export function applyPlayerMoveReactionDelay(
     ) {
         mob.lastSeenPlayerTileX = player.tileX;
         mob.lastSeenPlayerTileY = player.tileY;
-        mob.reactAfterMs = nowMs + MONSTER_REACTION_DELAY_MS;
+        if (
+            MONSTER_REACTION_DELAY_MS > 0 &&
+            !isMonsterReactionPaused(mob, nowMs)
+        ) {
+            mob.reactAfterMs = nowMs + MONSTER_REACTION_DELAY_MS;
+        }
     }
 }
 
