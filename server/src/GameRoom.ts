@@ -33,6 +33,7 @@ import { applyExperienceGain } from '../../src/game/experience.js';
 import { getLevelFromExp, calculateStatsForLevel } from '../../src/engine/character/calculateStats.js';
 import type { VocationId } from '../../shared/types/character.js';
 import { env } from './config/env.js';
+import { shouldAcceptClientProgressSync } from '../../shared/progressSyncPolicy.js';
 
 /** Tolerância de jitter de rede no intervalo mínimo entre passos (0.85 = 15% mais rápido que o step). */
 const MOVE_RATE_LIMIT_TOLERANCE = 0.85;
@@ -744,8 +745,15 @@ export class GameRoom {
         socket: WebSocket,
         msg: Extract<ClientMessage, { type: 'progress_sync' }>
     ): void {
-        if (env.isProduction && !env.allowClientProgressSync) return;
-        if (this.requireWsTicket) return;
+        if (
+            !shouldAcceptClientProgressSync({
+                isProduction: env.isProduction,
+                allowClientProgressSync: env.allowClientProgressSync,
+                requireWsTicket: this.requireWsTicket,
+            })
+        ) {
+            return;
+        }
 
         const playerId = this.socketToPlayerId.get(socket);
         if (!playerId) return;

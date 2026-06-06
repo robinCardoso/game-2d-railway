@@ -935,7 +935,8 @@ Sessão dedicada à resolução de problemas de usabilidade que causavam perda d
 
 ### 40.2 Hardening progress_sync
 - **`server/src/config/env.ts`:** `ALLOW_CLIENT_PROGRESS_SYNC` (default false)
-- **`GameRoom.handleProgressSync`:** bloqueia em produção salvo flag explícita; boot avisa se prod sem `requireWsTicket` ou JWT dev
+- **`shared/progressSyncPolicy.ts`:** produção nunca aceita; dev exige opt-in + sem ticket WS
+- **`GameRoom.handleProgressSync`:** usa política acima; boot avisa se prod sem `requireWsTicket` ou JWT dev
 
 ### 40.3 Registry dinâmico de mapas no servidor
 - **`server/src/mapRegistry.ts`:** builtins + scan de `paths.mapsDir` (`*.json`); `initServerMapRegistry()` no boot
