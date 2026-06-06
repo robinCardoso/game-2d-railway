@@ -3,6 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { getPool, isDatabaseConfigured } from './pool.js';
 import { paths } from '../config/paths.js';
+import { env } from '../config/env.js';
 
 const migrationsDir = path.join(paths.projectRoot, 'database', 'migrations');
 
@@ -21,7 +22,11 @@ export async function runMigrations(): Promise<void> {
     `);
 
     if (!fs.existsSync(migrationsDir)) {
-        console.warn('[migrate] Pasta não encontrada:', migrationsDir);
+        const msg = `[migrate] Pasta não encontrada: ${migrationsDir}`;
+        if (env.isProduction) {
+            throw new Error(msg);
+        }
+        console.warn(msg);
         return;
     }
 

@@ -5,6 +5,15 @@ const { Pool } = pg;
 
 let pool: pg.Pool | null = null;
 
+/** Railway: internal (*.railway.internal), HTTP proxy (*.railway.app) ou TCP público (*.rlwy.net). */
+function shouldUsePostgresSsl(connectionString: string): boolean {
+    return (
+        env.databaseSsl ||
+        /railway\.(app|internal)/i.test(connectionString) ||
+        /\.rlwy\.net/i.test(connectionString)
+    );
+}
+
 export function isDatabaseConfigured(): boolean {
     return !!env.databaseUrl;
 }
@@ -16,10 +25,7 @@ export function getPool(): pg.Pool {
     if (!pool) {
         pool = new Pool({
             connectionString: env.databaseUrl,
-            ssl:
-                env.databaseSsl || /railway\.(app|internal)/i.test(env.databaseUrl)
-                    ? { rejectUnauthorized: false }
-                    : undefined,
+            ssl: shouldUsePostgresSsl(env.databaseUrl) ? { rejectUnauthorized: false } : undefined,
         });
     }
     return pool;
