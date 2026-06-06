@@ -21,6 +21,8 @@ export const env = {
         (process.env.NODE_ENV === 'production' &&
             process.env.REQUIRE_WS_TICKET !== 'false' &&
             Boolean(process.env.DATABASE_URL?.trim())),
+    /** Aceita progress_sync do cliente (dev/offline). Nunca habilitar em produção. */
+    allowClientProgressSync: process.env.ALLOW_CLIENT_PROGRESS_SYNC === 'true',
     studioMockGm: process.env.STUDIO_MOCK_GM === 'true',
     clientOrigin: process.env.CLIENT_ORIGIN?.trim() || null,
     isProduction: process.env.NODE_ENV === 'production',

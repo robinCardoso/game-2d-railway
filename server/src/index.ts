@@ -8,8 +8,21 @@ import { CreaturePresetStore } from './game/CreaturePresetStore.js';
 import { VocationStore } from './game/VocationStore.js';
 import { runMigrations } from './db/migrate.js';
 import { env } from './config/env.js';
+import { initServerMapRegistry } from './mapRegistry.js';
 
 await runMigrations();
+
+const mapEntries = initServerMapRegistry();
+console.log(`[game-2d-server] Mapas registrados: ${mapEntries.map((m) => m.id).join(', ')}`);
+
+if (env.isProduction && !env.requireWsTicket) {
+    console.warn(
+        '[game-2d-server] AVISO: produção sem REQUIRE_WS_TICKET — join WS e XP do cliente inseguros.'
+    );
+}
+if (env.isProduction && env.jwtSecret.includes('change-in-production')) {
+    console.warn('[game-2d-server] AVISO: JWT_SECRET padrão de dev em produção.');
+}
 
 const collision = new MapCollisionStore();
 const instances = new MapInstanceStore();

@@ -82,6 +82,22 @@ export function createApp(getOnline: (() => number) | undefined, collision: MapC
             res.sendFile(filePath);
             return;
         }
+        // Volume DATA_ROOT pode não ter subpastas read-only novas (ex. effects/combat/)
+        if (env.dataRoot) {
+            const repoFilePath = path.join(paths.repoTilesDir, safePath);
+            const repoRoot = path.normalize(paths.repoTilesDir + path.sep);
+            if (
+                (repoFilePath.startsWith(repoRoot) || repoFilePath === paths.repoTilesDir) &&
+                fs.existsSync(repoFilePath) &&
+                fs.statSync(repoFilePath).isFile()
+            ) {
+                const ext = path.extname(repoFilePath).toLowerCase();
+                res.setHeader('Content-Type', MIME_TYPES[ext] ?? 'application/octet-stream');
+                res.setHeader('Cache-Control', 'no-cache');
+                res.sendFile(repoFilePath);
+                return;
+            }
+        }
         next();
     });
 

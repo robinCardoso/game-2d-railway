@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isTileWalkable, type WorldMapGrids } from '../../shared/tileWalkable.js';
 import { SERVER_MAP_SIZE } from '../../shared/protocol.js';
-import { getServerMapEntry } from './mapRegistry.js';
+import { getServerMapRegistry } from './mapRegistry.js';
 import { paths } from './config/paths.js';
 
 const MAPS_DIR = paths.mapsDir;
@@ -45,8 +45,7 @@ export class MapCollisionStore {
 
     async loadAll(): Promise<void> {
         await this.loadTileProperties();
-        for (const entry of [getServerMapEntry('mainland'), getServerMapEntry('rookgaard'), getServerMapEntry('orc_cave')]) {
-            if (!entry) continue;
+        for (const entry of getServerMapRegistry()) {
             await this.loadTemplate(entry.id, entry.file);
         }
         console.log(`[MapCollisionStore] ${this.templates.size} template(s) carregado(s)`);

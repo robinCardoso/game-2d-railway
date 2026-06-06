@@ -19,6 +19,11 @@ import type { MapCollisionStore } from './MapCollisionStore.js';
 import type { MapInstanceStore } from './MapInstanceStore.js';
 import { isInstancedMap } from './mapRegistry.js';
 import { verifyEnterTicket } from './enterTicket.js';
+import {
+    clearSteppingDest,
+    computeSteppingDestExpiresAtMs,
+    expireStaleSteppingDest,
+} from '../../shared/steppingDestReserve.js';
 import { PositionPersistence } from './game/PositionPersistence.js';
 import { ProgressPersistence } from './game/ProgressPersistence.js';
 import { RoomCreatureManager } from './game/RoomCreatureManager.js';
@@ -27,6 +32,7 @@ import type { VocationStore } from './game/VocationStore.js';
 import { applyExperienceGain } from '../../src/game/experience.js';
 import { getLevelFromExp, calculateStatsForLevel } from '../../src/engine/character/calculateStats.js';
 import type { VocationId } from '../../shared/types/character.js';
+import { env } from './config/env.js';
 
 /** Tolerância de jitter de rede no intervalo mínimo entre passos (0.85 = 15% mais rápido que o step). */
 const MOVE_RATE_LIMIT_TOLERANCE = 0.85;
@@ -63,6 +69,7 @@ interface ConnectedPlayer {
     /** Tile reservado durante deslize (colisão de mobs; posição autoritativa ainda é tileX/tileY). */
     steppingDestTileX?: number;
     steppingDestTileY?: number;
+    steppingDestExpiresAtMs?: number;
     level: number;
     experience: number;
     lastAttackAtMs: number;
@@ -121,6 +128,7 @@ export class GameRoom {
         }> = [];
         for (const p of this.players.values()) {
             if (this.roomKey(p) !== room) continue;
+            expireStaleSteppingDest(p);
             out.push({
                 tileX: p.tileX,
                 tileY: p.tileY,
@@ -543,12 +551,15 @@ export class GameRoom {
                 player.steppingDestTileY === steppingDestTileY;
             player.steppingDestTileX = steppingDestTileX;
             player.steppingDestTileY = steppingDestTileY;
-            if (msg.direction) {
-                player.direction = msg.direction;
-            }
             const reserveStepMs = parseStepDurationMs(msg.stepDurationMs);
             if (reserveStepMs !== undefined) {
                 player.lastStepDurationMs = reserveStepMs;
+            }
+            player.steppingDestExpiresAtMs = computeSteppingDestExpiresAtMs(
+                reserveStepMs ?? player.lastStepDurationMs
+            );
+            if (msg.direction) {
+                player.direction = msg.direction;
             }
             if (sameDest) {
                 return;
@@ -572,8 +583,7 @@ export class GameRoom {
             return;
         }
 
-        player.steppingDestTileX = undefined;
-        player.steppingDestTileY = undefined;
+        clearSteppingDest(player);
 
         if (!this.isWalkable(msg.mapId, msg.tileX, msg.tileY, msg.z)) {
             this.rejectMove(
@@ -734,6 +744,7 @@ export class GameRoom {
         socket: WebSocket,
         msg: Extract<ClientMessage, { type: 'progress_sync' }>
     ): void {
+        if (env.isProduction && !env.allowClientProgressSync) return;
         if (this.requireWsTicket) return;
 
         const playerId = this.socketToPlayerId.get(socket);

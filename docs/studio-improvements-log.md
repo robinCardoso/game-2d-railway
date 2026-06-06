@@ -902,3 +902,47 @@ Sessão dedicada à resolução de problemas de usabilidade que causavam perda d
 - [ ] 2 abas Railway: remoto começa a andar quase junto (alvo ~120–250ms, não 500ms+)
 - [ ] Sem efeito “anda → trava → anda” em caminhada contínua
 - [ ] Confirmação do passo não reinicia o deslize visual
+
+---
+
+## 39. FX combat no volume DATA_ROOT — target_ring (2026-06-06)
+
+### 39.1 Sintoma
+- Play em Railway (`DATA_ROOT=/data`): anel de alvo amarelo tracejado (fallback procedural) em vez do sprite dourado.
+- Localhost `:5173`: Vite serve `tiles/` do repo; `/tiles/effects/combat/target_ring.png` responde 200.
+
+### 39.2 Causa
+- `combatTargetRing.ts` carrega FX via `fetch('/tiles/effects/combat/...')` — **fora** do tile registry.
+- Com volume persistente, `seedDataRoot()` só copiava `tiles/` inteiro se `/data/tiles` estivesse vazio; volumes antigos não recebiam subpastas novas (`effects/combat/`).
+
+### 39.3 Correção
+- **`server/src/config/paths.ts`:** merge incremental de `tiles/effects/` do repo para o volume a cada boot (`copyDirRecursive`, sem sobrescrever).
+- **`server/src/app.ts`:** fallback read-only — se arquivo ausente em `paths.tilesDir`, servir de `paths.repoTilesDir` (cópia do deploy).
+
+### Checklist manual
+- [ ] Railway: `GET /tiles/effects/combat/target_ring.png` → 200
+- [ ] Play online: selecionar mob → anel dourado animado (3 frames)
+- [ ] Console sem `[combatTargetRing] PNG não encontrado`
+- [ ] `node scripts/verify-tiles-fallback.mjs` após `npm run build`
+
+---
+
+## 40. Revisão análise GPT — reserva de passo, XP e mapas (2026-06-06)
+
+### 40.1 TTL reserva de movimento (tile fantasma)
+- **`shared/steppingDestReserve.ts`:** `computeSteppingDestExpiresAtMs`, `expireStaleSteppingDest`, `clearSteppingDest`
+- **`server/src/GameRoom.ts`:** `steppingDestExpiresAtMs` na reserva (`stepDurationMs + 80ms`); expiração em `playersInRoomAsRefs()` antes de refs para mobs
+
+### 40.2 Hardening progress_sync
+- **`server/src/config/env.ts`:** `ALLOW_CLIENT_PROGRESS_SYNC` (default false)
+- **`GameRoom.handleProgressSync`:** bloqueia em produção salvo flag explícita; boot avisa se prod sem `requireWsTicket` ou JWT dev
+
+### 40.3 Registry dinâmico de mapas no servidor
+- **`server/src/mapRegistry.ts`:** builtins + scan de `paths.mapsDir` (`*.json`); `initServerMapRegistry()` no boot
+- **`MapCollisionStore.loadAll()`:** carrega todos os mapas registrados (não só 3 hardcoded)
+
+### Checklist manual
+- [ ] 2 clientes: cancelar passo no meio — mob não trava tile para sempre
+- [ ] Produção: `progress_sync` ignorado (XP só via kill servidor)
+- [ ] Mapa novo em `public/maps/` ou volume → colisão WS após redeploy sem editar código
+- [ ] `npm test` inclui `shared/steppingDestReserve.test.ts`

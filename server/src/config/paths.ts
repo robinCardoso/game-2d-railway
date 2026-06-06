@@ -53,10 +53,8 @@ function copyDirRecursive(src: string, dest: string): void {
         const destPath = path.join(dest, entry.name);
         if (entry.isDirectory()) {
             copyDirRecursive(srcPath, destPath);
-        } else {
-            if (!fs.existsSync(destPath)) {
-                fs.copyFileSync(srcPath, destPath);
-            }
+        } else if (!fs.existsSync(destPath)) {
+            fs.copyFileSync(srcPath, destPath);
         }
     }
 }
@@ -83,6 +81,9 @@ function seedDataRoot(dataRoot: string): void {
     if (!fs.existsSync(dataTiles) || fs.readdirSync(dataTiles).length === 0) {
         copyDirRecursive(repoTiles, dataTiles);
     }
+
+    // FX/UI read-only: merge subpastas novas do repo sem sobrescrever o volume
+    copyDirRecursive(path.join(repoTiles, 'effects'), path.join(dataTiles, 'effects'));
 
     const publicFiles = [
         'tile_catalog.json',
