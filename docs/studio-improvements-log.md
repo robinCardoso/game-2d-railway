@@ -37,6 +37,7 @@ Documento de referência para humanos e agentes IA. **Atualizar este arquivo** q
 | **Movimento remoto “pulo”** | Remoto desenhado direto no tile do servidor, sem walk | `RemotePlayerSpriteManager` interpola `visualX/Y` + `walk`/`idle` como o grid local |
 | **Remoto “anda e trava”** | Idle imediato ao chegar no tile + duração fixa 200ms | Grace 120ms + duração estimada pelo intervalo entre pacotes |
 | **Velocidade remota desalinhada** | Remoto estimava ms pelo intervalo de rede | `stepDurationMs` em `move` / `player_moved` (duração real do passo local) |
+| **Delay remoto online (Railway)** | Remoto só recebia `player_moved` ao fim do passo + interpolação conservadora (~350–600ms) | Constantes mais baixas em `remotePlayerSprites.ts`; `GameRoom` broadcasta `player_moved` no `steppingReserveOnly`; cliente não reinicia deslize no mesmo destino |
 | **Doc escala multiplayer** | Roadmap para muitos players online não estava centralizado | [docs/multiplayer-remote-players.md](./multiplayer-remote-players.md) — estado atual + Fases A–D |
 | **Diagonal no Play (WS)** | `isAdjacentStep` só aceitava ortogonal; servidor rejeitava W+D e `position_correction` puxava o jogador | `canAdjacentStep` em `shared/tileWalkable.ts` + reset `gridMovement.stepping` na correção |
 | **Pulo ao mudar direção** | Sprite/rede mudavam de face antes do deslize terminar → `position_correction` | `activeStepFacing` trava sprite no passo; grid tick antes do sprite; rede adia sync só de direção durante deslize |
@@ -882,3 +883,19 @@ Sessão dedicada à resolução de problemas de usabilidade que causavam perda d
 - [ ] Mob online não entra no tile para onde o player está deslizando
 - [ ] Player não “aterriza” em tile com mob se este entrou durante o passo
 
+---
+
+## 38. Movimento remoto mais responsivo online (2026-06-06)
+
+### 38.1 Tuning (`src/net/remotePlayerSprites.ts`)
+- `REMOTE_STEP_DURATION_MS` 180, `MIN_REMOTE_STEP_MS` 120, `MAX_REMOTE_STEP_MS` 260
+- `REMOTE_SMOOTHING_EXTRA_MS` 20, `REMOTE_IDLE_GRACE_MS` 80, diagonal max 300ms
+
+### 38.2 Broadcast no início do passo (`server/src/GameRoom.ts`)
+- Em `isSteppingReserveOnly`, após validar destino, `broadcastToRoom` com `player_moved` (tile destino + `stepDurationMs`)
+- Confirmação no fim do passo reutiliza o mesmo evento; remoto não reinicia interpolação se destino igual
+
+### Checklist manual
+- [ ] 2 abas Railway: remoto começa a andar quase junto (alvo ~120–250ms, não 500ms+)
+- [ ] Sem efeito “anda → trava → anda” em caminhada contínua
+- [ ] Confirmação do passo não reinicia o deslize visual

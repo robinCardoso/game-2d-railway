@@ -1,55 +1,202 @@
-Ponto de atenção ainda existente
-Combate ainda é client-side
+Minha recomendação prática
 
-Isso não é erro neste momento, mas precisa ficar marcado.
+Eu faria em 2 commits, nesta ordem:
 
-Hoje o cliente ainda calcula:
+1. tuning das constantes
+2. broadcast no início do passo
 
-ataque
-dano
-vida do monstro
-morte
-XP
+Mas eu não pararia no tuning, porque ele melhora, mas não resolve o problema raiz.
 
-Então para MVP funciona, mas para multiplayer real ainda pode dar inconsistência:
+Commit 1 — tuning rápido
 
-Player A mata o monstro na tela dele
-Player B ainda pode ver o monstro vivo
-XP é calculado localmente
-loot futuro poderia ser explorado pelo cliente
+Faça primeiro porque é pequeno e reduz o delay imediatamente.
 
-Minha recomendação: não mexe nisso agora, mas marca como próxima grande fase.
+Eu usaria:
 
-A próxima evolução correta seria:
+const REMOTE_STEP_DURATION_MS = 180;
+const MIN_REMOTE_STEP_MS = 120;
+const MAX_REMOTE_STEP_MS = 260;
+const REMOTE_SMOOTHING_EXTRA_MS = 20;
+const REMOTE_IDLE_GRACE_MS = 80;
 
-server-authoritative combat
+Se você já tem diagonal separada:
 
-Com:
+const MAX_REMOTE_STEP_WITH_DIAG_MS = 300;
 
-servidor controla monstros
-servidor calcula dano
-servidor confirma morte
-servidor concede XP
-servidor calcula loot
-cliente só envia intenção de ataque
+Isso deve deixar o remoto menos “pesado”.
 
-Mas isso é uma fase grande. Agora você precisava primeiro fechar vocação runtime e XP persistente, e esse commit fez isso.
+Mas cuidado: se baixar demais, pode voltar o efeito:
 
-Pequena melhoria recomendada
+anda → trava → anda → trava
 
-Eu só deixaria mais claro no código que existem dois níveis de autoridade:
+Então eu não iria abaixo de 120ms agora.
 
-const SERVER_AUTHORITATIVE_POSITION = isServerWsTicketEnabled();
-const SERVER_AUTHORITATIVE_COMBAT = false;
+Commit 2 — broadcast no início do passo
 
-Hoje isso está implícito: posição não salva no frontend em produção, mas progresso salva. Funciona, mas no futuro você pode esquecer e achar que “WS ticket ativo” significa “tudo é servidor”. Separar essas flags evita confusão.
+Esse é o commit que realmente vai melhorar a sensação online.
 
-Minha conclusão
+Hoje você tem esse trecho:
 
-Esse commit está muito bom.
+if (isSteppingReserveOnly) {
+  player.steppingDestTileX = steppingDestTileX;
+  player.steppingDestTileY = steppingDestTileY;
+  return;
+}
 
-Você resolveu os 3 problemas principais do commit anterior:
+O problema é esse return silencioso. O servidor reserva o destino, mas os outros clientes não sabem que o player começou a andar.
 
-1. vocações dinâmicas agora alimentam Play/Create/UI/Combat
-2. vocations.json agora pode vir do backend/volume
-3. XP/level agora persiste mesmo em produção Railway
+O ideal é, nesse momento, enviar um evento para os outros players.
+
+Você tem duas opções.
+
+Opção A — reaproveitar player_moved
+
+Mais simples.
+
+Quando receber isSteppingReserveOnly, depois de validar, envie um player_moved com destino:
+
+const payload: ServerMessage = {
+  type: 'player_moved',
+  v: PROTOCOL_VERSION,
+  playerId: player.id,
+  tileX: steppingDestTileX,
+  tileY: steppingDestTileY,
+  z: player.z,
+  mapId: player.mapId,
+  instanceId: player.instanceId,
+  direction: player.direction,
+  stepDurationMs: player.lastStepDurationMs,
+};
+
+this.broadcastToRoom(player.roomKey, payload, player.socket);
+
+E mantém o return.
+
+Vantagem
+
+Menos código. O cliente remoto já sabe lidar com player_moved.
+
+Risco
+
+Você está dizendo para o remoto “o player foi para o tile X” antes do servidor finalizar o passo. Mas como o servidor já validou e reservou o destino, para MVP está ok.
+
+Opção B — criar player_stepping
+
+Mais correto.
+
+No protocolo:
+
+export interface PlayerSteppingMessage {
+  type: 'player_stepping';
+  v: number;
+  playerId: string;
+  fromTileX: number;
+  fromTileY: number;
+  toTileX: number;
+  toTileY: number;
+  z: number;
+  mapId: string;
+  instanceId?: string;
+  direction: Direction;
+  stepDurationMs: number;
+}
+
+No servidor, quando reservar:
+
+const payload: ServerMessage = {
+  type: 'player_stepping',
+  v: PROTOCOL_VERSION,
+  playerId: player.id,
+  fromTileX: player.tileX,
+  fromTileY: player.tileY,
+  toTileX: steppingDestTileX,
+  toTileY: steppingDestTileY,
+  z: player.z,
+  mapId: player.mapId,
+  instanceId: player.instanceId,
+  direction: player.direction,
+  stepDurationMs: player.lastStepDurationMs,
+};
+
+this.broadcastToRoom(player.roomKey, payload, player.socket);
+
+No cliente remoto, player_stepping inicia interpolação para o destino.
+
+Quando o player_moved final chegar depois, ele apenas confirma/corrige.
+
+Vantagem
+
+Mais limpo e mais profissional.
+
+Risco
+
+Mais alteração no protocolo e no cliente.
+
+Qual eu escolheria agora?
+
+Para seu momento, eu escolheria:
+
+Opção A primeiro: reaproveitar player_moved no início do passo.
+
+Motivo: você já está testando Railway, multiplayer e movimento. Agora o objetivo é sentir o jogo fluido rapidamente, sem criar muita estrutura nova.
+
+Depois, se ficar bom, você pode refatorar para player_stepping.
+
+Cuidado importante
+
+Se você mandar player_moved no início do passo e depois mandar outro player_moved no final com o mesmo tile, o cliente remoto não pode reiniciar a interpolação.
+
+Então no RemotePlayerSpriteManager, precisa garantir:
+
+se target tile é igual ao tile atual/target atual:
+  não reinicia movimento
+  só atualiza direction/stepDuration se necessário
+
+Algo como:
+
+const sameTarget =
+  player.tileX === state.tileX &&
+  player.tileY === state.tileY &&
+  player.z === state.z;
+
+if (sameTarget) {
+  state.lastDirection = player.direction;
+  state.controller.setDirection(toSpriteDirection(player.direction));
+  return;
+}
+
+Se isso já existe, ótimo. Se não, implemente antes de broadcastar no início.
+
+Minha ordem final
+
+Eu faria assim:
+
+Commit 1:
+tune: reduce remote movement delay
+
+Commit 2:
+feat: broadcast remote movement when step starts
+
+No Commit 2, por enquanto:
+
+usar player_moved no reserve-only
+não criar player_stepping ainda
+garantir que o cliente não reinicie interpolação no mesmo target
+
+Resultado esperado:
+
+Antes:
+local anda → termina passo → remoto começa a andar
+
+Depois:
+local começa passo → remoto começa a andar quase junto
+
+O delay deve cair de algo como:
+
+350–600ms
+
+para algo mais perto de:
+
+120–250ms
+
+Aí sim vai parecer multiplayer fluido.

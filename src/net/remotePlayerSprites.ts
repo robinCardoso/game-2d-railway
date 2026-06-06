@@ -149,17 +149,47 @@ export class RemotePlayerSpriteManager {
             player.tileY !== state.tileY ||
             player.z !== state.z;
 
+        const fromServer = parseStepDurationMs(player.stepDurationMs);
+        const clampStepDuration = (ms: number, isDiagonal: boolean): number => {
+            const clamped = clamp(ms, MIN_REMOTE_STEP_MS, MAX_REMOTE_STEP_WITH_DIAG_MS);
+            return isDiagonal ? clamped * DIAGONAL_STEP_DURATION_FACTOR : clamped;
+        };
+
         if (!tileChanged) {
+            if (fromServer !== undefined && state.moving) {
+                const ox = Math.round(state.fromX / TILE_SIZE);
+                const oy = Math.round(state.fromY / TILE_SIZE);
+                const tx = Math.round(state.toX / TILE_SIZE);
+                const ty = Math.round(state.toY / TILE_SIZE);
+                const isDiagConfirm = Math.abs(tx - ox) === 1 && Math.abs(ty - oy) === 1;
+                state.moveDurationMs = clampStepDuration(fromServer, isDiagConfirm);
+            }
             return;
         }
 
         const dx = Math.abs(player.tileX - state.tileX);
         const dy = Math.abs(player.tileY - state.tileY);
         const isDiagonal = dx === 1 && dy === 1;
-        const fromServer = parseStepDurationMs(player.stepDurationMs);
+
+        // Confirmação do passo (broadcast no início + no fim) — não reinicia o deslize.
+        if (
+            state.moving &&
+            state.toX === targetWorldX &&
+            state.toY === targetWorldY &&
+            player.z === state.z
+        ) {
+            state.tileX = player.tileX;
+            state.tileY = player.tileY;
+            state.z = player.z;
+            if (fromServer !== undefined) {
+                state.moveDurationMs = clampStepDuration(fromServer, isDiagonal);
+            }
+            return;
+        }
+
         const duration =
             fromServer !== undefined
-                ? clamp(fromServer, MIN_REMOTE_STEP_MS, MAX_REMOTE_STEP_WITH_DIAG_MS)
+                ? clampStepDuration(fromServer, isDiagonal)
                 : this.estimateStepDuration(state, nowMs, isDiagonal);
 
         state.fromX = state.visualX;

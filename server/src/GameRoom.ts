@@ -524,8 +524,37 @@ export class GameRoom {
             if (!this.isWalkable(msg.mapId, steppingDestTileX, steppingDestTileY, msg.z)) {
                 return;
             }
+            const sameDest =
+                player.steppingDestTileX === steppingDestTileX &&
+                player.steppingDestTileY === steppingDestTileY;
             player.steppingDestTileX = steppingDestTileX;
             player.steppingDestTileY = steppingDestTileY;
+            if (msg.direction) {
+                player.direction = msg.direction;
+            }
+            const reserveStepMs = parseStepDurationMs(msg.stepDurationMs);
+            if (reserveStepMs !== undefined) {
+                player.lastStepDurationMs = reserveStepMs;
+            }
+            if (sameDest) {
+                return;
+            }
+            this.broadcastToRoom(
+                this.roomKey(player),
+                {
+                    type: 'player_moved',
+                    v: PROTOCOL_VERSION,
+                    playerId: player.id,
+                    tileX: steppingDestTileX,
+                    tileY: steppingDestTileY,
+                    z: player.z,
+                    mapId: player.mapId,
+                    instanceId: player.instanceId,
+                    direction: player.direction,
+                    stepDurationMs: player.lastStepDurationMs,
+                },
+                player.id
+            );
             return;
         }
 
