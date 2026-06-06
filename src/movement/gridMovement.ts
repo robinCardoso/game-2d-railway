@@ -10,7 +10,7 @@
  *
  * Acorde WASD (W+D, W+A, S+D, S+A): diagonal só após `DIAGONAL_CHORD_DELAY_MS`
  * com ambas as teclas pressionadas — evita passo diagonal em clique acidental.
- * Q / E continuam com diagonal imediata.
+ * Q / E / Z / C continuam com diagonal imediata (NO, NE, SO, SE).
  */
 
 export type CardinalDirection = 'north' | 'south' | 'east' | 'west';
@@ -178,8 +178,8 @@ function tileToWorld(tx: number, ty: number, tileSize: number) {
 }
 
 /**
- * Estado de teclas de movimento (WASD + setas + Q/E diagonais).
- * Layout Q/E/A/D: Q=NO, E=NE, S+A=SO, S+D=SE; também W+A, W+D, W+Q, W+E.
+ * Estado de teclas de movimento (WASD + setas + Q/E/Z/C diagonais).
+ * Layout: Q=NO, E=NE, Z=SO, C=SE; também W+A, W+D, S+A, S+D (acorde com delay).
  */
 export interface MovementKeyState {
     north: boolean;
@@ -198,6 +198,8 @@ export interface MovementKeyState {
     chordSoutheast: boolean;
     explicitNorthwest: boolean;
     explicitNortheast: boolean;
+    explicitSouthwest: boolean;
+    explicitSoutheast: boolean;
 }
 
 export function buildMovementKeyState(keys: Record<string, boolean>): MovementKeyState {
@@ -207,6 +209,8 @@ export function buildMovementKeyState(keys: Record<string, boolean>): MovementKe
     const d = !!(keys['d'] || keys['arrowright']);
     const q = !!keys['q'];
     const e = !!keys['e'];
+    const z = !!keys['z'];
+    const c = !!keys['c'];
 
     const chordNorthwest = w && a;
     const chordNortheast = w && d;
@@ -215,15 +219,15 @@ export function buildMovementKeyState(keys: Record<string, boolean>): MovementKe
 
     const northwest = q || chordNorthwest;
     const northeast = e || chordNortheast;
-    const southwest = chordSouthwest;
-    const southeast = chordSoutheast;
+    const southwest = z || chordSouthwest;
+    const southeast = c || chordSoutheast;
 
     const north = w && !s && !southwest && !southeast;
     const south = s && !w && !northwest && !northeast;
     const west =
-        a && !d && !q && !e && !northeast && !southeast && !northwest;
+        a && !d && !q && !e && !z && !c && !northeast && !southeast && !northwest;
     const east =
-        d && !a && !q && !e && !northwest && !southwest && !northeast;
+        d && !a && !q && !e && !z && !c && !northwest && !southwest && !northeast;
 
     return {
         north,
@@ -240,6 +244,8 @@ export function buildMovementKeyState(keys: Record<string, boolean>): MovementKe
         chordSoutheast,
         explicitNorthwest: q,
         explicitNortheast: e,
+        explicitSouthwest: z,
+        explicitSoutheast: c,
     };
 }
 
@@ -291,6 +297,8 @@ function resolveDirection(
 
     if (keys.explicitNorthwest) return 'northwest';
     if (keys.explicitNortheast) return 'northeast';
+    if (keys.explicitSouthwest) return 'southwest';
+    if (keys.explicitSoutheast) return 'southeast';
 
     const pendingChords: DiagonalChord[] = [];
 
@@ -430,6 +438,11 @@ export function resolveSpriteDirection(
         return null;
     }
 
+    if (keys['q']) return 'north';
+    if (keys['e']) return 'east';
+    if (keys['z']) return 'south';
+    if (keys['c']) return 'south';
+
     if (w && !s) return 'north';
     if (s && !w) return 'south';
     if (a && !d) return 'west';
@@ -456,7 +469,12 @@ function isDiagonalDirection(dir: GridDirection): boolean {
     return dir === 'northwest' || dir === 'northeast' || dir === 'southwest' || dir === 'southeast';
 }
 
-/** Impede “cortar canto” entre dois tiles bloqueados (estilo Tibia). */
+/**
+ * Diagonal: destino livre (terreno + criaturas).
+ * Cantos: bloqueia só se **ambos** os cardinais laterais (terreno) estiverem fechados —
+ * permite passar pelo flanco quando há árvore/parede num lado e corredor no outro.
+ * Criaturas nos laterais não bloqueiam o canto (só o tile de destino).
+ */
 function canStepToTile(
     tx: number,
     ty: number,
@@ -474,9 +492,9 @@ function canStepToTile(
     const terrainProbe = deps.isTerrainWalkablePixels ?? deps.isWalkablePixels;
     const sideX = tileToWorld(ntx, ty, tileSize);
     const sideY = tileToWorld(tx, nty, tileSize);
-    if (!terrainProbe(sideX.x, sideX.y, z).walkable) return false;
-    if (!terrainProbe(sideY.x, sideY.y, z).walkable) return false;
-    return true;
+    const sideXOk = terrainProbe(sideX.x, sideX.y, z).walkable;
+    const sideYOk = terrainProbe(sideY.x, sideY.y, z).walkable;
+    return sideXOk || sideYOk;
 }
 
 function clampTile(v: number, mapSize: number): number {

@@ -31,6 +31,12 @@ export class GameEntity {
     isDead = false;
     isChasing = false;
     lastAggroMoveTime = 0;
+    lastSeenPlayerTileX?: number;
+    lastSeenPlayerTileY?: number;
+    reactAfterMs?: number;
+    /** Tile reservado durante deslize (rede ou animação local). */
+    stepDestTileX?: number;
+    stepDestTileY?: number;
 
     constructor(
         id: string,
@@ -60,6 +66,47 @@ export class GameEntity {
     syncWorldToTile(tileSize: number = ENGINE_CONFIG.TILE_SIZE): void {
         this.worldX = this.tileX * tileSize;
         this.worldY = this.tileY * tileSize;
+    }
+
+    /** Tile do pé — usa posição visual (worldX/Y), não tile lógico adiantado pela rede. */
+    getFootTile(tileSize: number = ENGINE_CONFIG.TILE_SIZE): { tileX: number; tileY: number } {
+        return {
+            tileX: Math.floor(this.worldX / tileSize),
+            tileY: Math.floor(this.worldY / tileSize),
+        };
+    }
+
+    /** Tiles que bloqueiam movimento (pé + destino do deslize + tile lógico pendente). */
+    getOccupiedTiles(tileSize: number = ENGINE_CONFIG.TILE_SIZE): Array<{ tileX: number; tileY: number }> {
+        const seen = new Set<string>();
+        const out: Array<{ tileX: number; tileY: number }> = [];
+        const add = (tileX: number, tileY: number) => {
+            const key = `${tileX},${tileY}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            out.push({ tileX, tileY });
+        };
+
+        const foot = this.getFootTile(tileSize);
+        add(foot.tileX, foot.tileY);
+
+        const atLogical =
+            Math.abs(this.worldX - this.tileX * tileSize) < 0.5 &&
+            Math.abs(this.worldY - this.tileY * tileSize) < 0.5;
+        if (!atLogical) {
+            add(this.tileX, this.tileY);
+        }
+
+        if (this.stepDestTileX !== undefined && this.stepDestTileY !== undefined) {
+            add(this.stepDestTileX, this.stepDestTileY);
+        }
+
+        return out;
+    }
+
+    occupiesTile(tx: number, ty: number, z: number, tileSize: number = ENGINE_CONFIG.TILE_SIZE): boolean {
+        if (this.worldZ !== z || this.isDead) return false;
+        return this.getOccupiedTiles(tileSize).some((t) => t.tileX === tx && t.tileY === ty);
     }
 
     setState(state: CharacterState) {

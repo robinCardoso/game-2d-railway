@@ -107,7 +107,7 @@ export function isDiagonalStep(from: TilePos, to: TilePos): boolean {
 
 /**
  * Valida passo adjacente + walkable no destino.
- * Diagonal exige os dois tiles ortogonais livres (anti “corte de canto”, igual ao cliente).
+ * Diagonal: bloqueia canto só se **ambos** os cardinais laterais (terreno) estiverem fechados.
  */
 export function canAdjacentStep(
     from: TilePos,
@@ -117,8 +117,7 @@ export function canAdjacentStep(
     if (!isAdjacentStep(from, to)) return false;
     if (!isWalkableAt(to.tileX, to.tileY, to.z)) return false;
     if (!isDiagonalStep(from, to)) return true;
-    return (
-        isWalkableAt(to.tileX, from.tileY, from.z) &&
-        isWalkableAt(from.tileX, to.tileY, from.z)
-    );
+    const sideXOk = isWalkableAt(to.tileX, from.tileY, from.z);
+    const sideYOk = isWalkableAt(from.tileX, to.tileY, from.z);
+    return sideXOk || sideYOk;
 }

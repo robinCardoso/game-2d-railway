@@ -1291,6 +1291,26 @@
               </div>
             </fieldset>
 
+            <fieldset id="mobChaseFieldset" style="border: 1px solid #2d3139; border-radius: 6px; padding: 8px 10px; margin: 0;">
+              <legend style="font-size: 10px; color: var(--accent-color); font-weight: bold; text-transform: uppercase; padding: 0 4px;">Perseguição / Combate</legend>
+              <p style="margin: 0 0 8px; font-size: 9px; color: var(--text-dim); line-height: 1.35;">
+                Define como o mob se move ao perseguir o jogador. Ataque do mob ao player ainda virá em fase futura.
+              </p>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Tipo de perseguição</label>
+                  <select id="mobChaseBehaviorSelect" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;">
+                    <option value="melee">Corpo a corpo — segue e cola (troll)</option>
+                    <option value="ranged">À distância — mantém range e foge (mago)</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Distância de ataque (SQM)</label>
+                  <input type="number" id="mobAttackRangeInput" min="1" max="6" value="1" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+              </div>
+            </fieldset>
+
             <fieldset id="mobLootSection" style="border: 1px solid #2d3139; border-radius: 6px; padding: 8px 10px; margin: 0;">
               <legend style="font-size: 10px; color: #fbbf24; font-weight: bold; text-transform: uppercase; padding: 0 4px;">
                 Loot <span style="font-size: 8px; color: var(--text-dim); font-weight: normal;">— em desenvolvimento</span>
@@ -1315,6 +1335,8 @@
                 <div>Atk Spd: <strong id="mobPreviewAtkSpd" style="color:#fff;">-</strong></div>
                 <div>XP: <strong id="mobPreviewXp" style="color:#fff;">-</strong></div>
                 <div>Raça: <strong id="mobPreviewRace" style="color:#fff;">-</strong></div>
+                <div>Perseguição: <strong id="mobPreviewChase" style="color:#fff;">-</strong></div>
+                <div>Range: <strong id="mobPreviewRange" style="color:#fff;">-</strong> SQM</div>
               </div>
               <p style="margin: 0; font-size: 8px; opacity: 0.65;">Valores vazios no JSON usam defaults por <code>visualSize</code>.</p>
             </div>

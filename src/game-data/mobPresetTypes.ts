@@ -1,6 +1,14 @@
 /** Tipos compartilhados entre Studio, Play e servidor para stats de criaturas. */
 
+import {
+    MONSTER_AGGRO_RADIUS,
+    type ChaseMobConfig,
+} from '../../shared/creatureChase.js';
+
 export type CreatureVisualSize = 'tiny' | 'small' | 'medium' | 'large' | 'boss';
+
+export const MOB_CHASE_BEHAVIORS = ['melee', 'ranged'] as const;
+export type MobChaseBehavior = (typeof MOB_CHASE_BEHAVIORS)[number];
 
 export const MOB_RACES = [
     'humanoid',
@@ -36,6 +44,10 @@ export interface CreaturePresetEntry {
     attackSpeed?: number;
     xpReward?: number;
     race?: MobRace;
+    /** `melee` = cola no jogador; `ranged` = mantém distância e foge se aproximar. */
+    chaseBehavior?: MobChaseBehavior;
+    /** Distância Manhattan de combate (1 = corpo a corpo; mago usa ~3). */
+    attackRange?: number;
     /** Persistido para loot futuro; gameplay ainda não consome. */
     loot?: MobLootEntry[];
 }
@@ -69,6 +81,11 @@ function parseRace(value: unknown): MobRace | undefined {
     if (typeof value === 'string' && VALID_RACES.has(value as MobRace)) {
         return value as MobRace;
     }
+    return undefined;
+}
+
+function parseChaseBehavior(value: unknown): MobChaseBehavior | undefined {
+    if (value === 'melee' || value === 'ranged') return value;
     return undefined;
 }
 
@@ -117,10 +134,25 @@ export function sanitizeCreaturePresetEntry(raw: unknown): CreaturePresetEntry |
         attackSpeed: coerceOptionalPositiveInt(row.attackSpeed),
         xpReward: coerceOptionalPositiveInt(row.xpReward),
         race: parseRace(row.race),
+        chaseBehavior: parseChaseBehavior(row.chaseBehavior),
+        attackRange: coerceOptionalPositiveInt(row.attackRange),
         loot: sanitizeLoot(row.loot),
     };
 
     return entry;
+}
+
+/** Perseguição efetiva — defaults: melee/1 SQM, ranged/3 SQM. */
+export function resolveMobChaseConfig(preset?: CreaturePresetEntry): ChaseMobConfig {
+    const chaseBehavior: MobChaseBehavior =
+        preset?.chaseBehavior === 'ranged' ? 'ranged' : 'melee';
+    const defaultRange = chaseBehavior === 'ranged' ? 3 : 1;
+    let attackRange = preset?.attackRange ?? defaultRange;
+    attackRange = Math.max(1, Math.min(MONSTER_AGGRO_RADIUS - 1, Math.floor(attackRange)));
+    if (chaseBehavior === 'melee') {
+        attackRange = 1;
+    }
+    return { chaseBehavior, attackRange };
 }
 
 export interface ResolvedMobCombatStats {

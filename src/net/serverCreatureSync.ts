@@ -27,9 +27,13 @@ function mapDirection(dir?: CreatureSnapshot['direction']): 'up' | 'down' | 'lef
 /**
  * Criaturas autoritativas do servidor — substituem mobs locais quando online.
  */
+/** Janela sem novo passo antes de voltar ao idle (persegue = walk contínuo, como npcAI offline). */
+const CHASE_IDLE_GRACE_MS = MONSTER_STEP_MS * 2;
+
 export class ServerCreatureSync {
     private readonly entities = new Map<string, GameEntity>();
     private readonly visuals = new Map<string, CreatureVisualState>();
+    private readonly chaseActiveUntil = new Map<string, number>();
     private readonly loading = new Set<string>();
 
     isActive(): boolean {
@@ -57,6 +61,7 @@ export class ServerCreatureSync {
             if (!activeIds.has(id)) {
                 this.entities.delete(id);
                 this.visuals.delete(id);
+                this.chaseActiveUntil.delete(id);
             }
         }
     }
@@ -103,8 +108,12 @@ export class ServerCreatureSync {
         entity.worldZ = payload.z;
         entity.worldX = payload.tileX * TILE_SIZE;
         entity.worldY = payload.tileY * TILE_SIZE;
+        entity.stepDestTileX = undefined;
+        entity.stepDestTileY = undefined;
         entity.setState('idle');
+        entity.isChasing = false;
         this.visuals.delete(payload.creatureId);
+        this.chaseActiveUntil.delete(payload.creatureId);
         return entity;
     }
 
@@ -119,25 +128,39 @@ export class ServerCreatureSync {
         const entity = this.entities.get(snap.creatureId);
         if (!entity || entity.isDead) return;
 
-        const prevX = entity.tileX;
-        const prevY = entity.tileY;
-        entity.tileX = snap.tileX;
-        entity.tileY = snap.tileY;
         entity.worldZ = snap.z;
         entity.setDirection(mapDirection(snap.direction));
 
-        if (prevX !== snap.tileX || prevY !== snap.tileY) {
-            entity.setState('walk');
-            this.startMoveVisual(
-                snap.creatureId,
-                prevX * TILE_SIZE,
-                prevY * TILE_SIZE,
-                snap.tileX * TILE_SIZE,
-                snap.tileY * TILE_SIZE,
-                stepDurationMs,
-                nowMs
-            );
+        const destX = snap.tileX * TILE_SIZE;
+        const destY = snap.tileY * TILE_SIZE;
+        const atDest =
+            Math.abs(entity.worldX - destX) < 0.5 && Math.abs(entity.worldY - destY) < 0.5;
+
+        if (atDest) {
+            entity.tileX = snap.tileX;
+            entity.tileY = snap.tileY;
+            entity.worldX = destX;
+            entity.worldY = destY;
+            entity.stepDestTileX = undefined;
+            entity.stepDestTileY = undefined;
+            this.visuals.delete(snap.creatureId);
+            this.chaseActiveUntil.delete(snap.creatureId);
+            entity.isChasing = false;
+            entity.setState('idle');
+            return;
         }
+
+        entity.stepDestTileX = snap.tileX;
+        entity.stepDestTileY = snap.tileY;
+        this.startMoveVisual(
+            snap.creatureId,
+            entity.worldX,
+            entity.worldY,
+            destX,
+            destY,
+            stepDurationMs,
+            nowMs
+        );
     }
 
     tick(nowMs: number): void {
@@ -151,14 +174,15 @@ export class ServerCreatureSync {
                 if (t >= 1) {
                     entity.worldX = visual.toX;
                     entity.worldY = visual.toY;
+                    entity.tileX = Math.floor(visual.toX / TILE_SIZE);
+                    entity.tileY = Math.floor(visual.toY / TILE_SIZE);
+                    entity.stepDestTileX = undefined;
+                    entity.stepDestTileY = undefined;
                     visual.moving = false;
-                    entity.setState('idle');
-                } else {
-                    entity.setState('walk');
                 }
             }
 
-            entity.isChasing = Boolean(visual?.moving);
+            this.syncChaseVisualState(id, entity, visual, nowMs);
             entity.update(nowMs, visual?.moveDurationMs);
         }
     }
@@ -166,6 +190,7 @@ export class ServerCreatureSync {
     clear(): void {
         this.entities.clear();
         this.visuals.clear();
+        this.chaseActiveUntil.clear();
         this.loading.clear();
     }
 
@@ -186,8 +211,6 @@ export class ServerCreatureSync {
 
         const prevX = entity.tileX;
         const prevY = entity.tileY;
-        entity.tileX = snap.tileX;
-        entity.tileY = snap.tileY;
         entity.worldZ = snap.z;
         entity.setDirection(mapDirection(snap.direction));
         this.applyCombatState(entity, snap);
@@ -196,8 +219,12 @@ export class ServerCreatureSync {
         const targetY = snap.tileY * TILE_SIZE;
 
         if (!animateMove || (prevX === snap.tileX && prevY === snap.tileY)) {
+            entity.tileX = snap.tileX;
+            entity.tileY = snap.tileY;
             entity.worldX = targetX;
             entity.worldY = targetY;
+            entity.stepDestTileX = undefined;
+            entity.stepDestTileY = undefined;
             if (!entity.isDead) {
                 entity.setState('idle');
             }
@@ -205,16 +232,42 @@ export class ServerCreatureSync {
             return;
         }
 
-        entity.setState('walk');
+        entity.stepDestTileX = snap.tileX;
+        entity.stepDestTileY = snap.tileY;
         this.startMoveVisual(
             snap.creatureId,
-            prevX * TILE_SIZE,
-            prevY * TILE_SIZE,
+            entity.worldX,
+            entity.worldY,
             targetX,
             targetY,
             snap.stepDurationMs ?? MONSTER_STEP_MS,
             nowMs
         );
+    }
+
+    /** Mantém walk entre passos durante perseguição; idle só quando a perseguição termina. */
+    private syncChaseVisualState(
+        id: string,
+        entity: GameEntity,
+        visual: CreatureVisualState | undefined,
+        nowMs: number
+    ): void {
+        if (entity.isDead) return;
+
+        const moving = Boolean(visual?.moving);
+        const chaseUntil = this.chaseActiveUntil.get(id);
+        const chasing = moving || (chaseUntil !== undefined && nowMs < chaseUntil);
+
+        entity.isChasing = chasing;
+        if (chasing) {
+            entity.setState('walk');
+            return;
+        }
+
+        if (chaseUntil !== undefined) {
+            this.chaseActiveUntil.delete(id);
+        }
+        entity.setState('idle');
     }
 
     private buildEntityImmediate(snap: CreatureSnapshot): GameEntity {
@@ -272,6 +325,7 @@ export class ServerCreatureSync {
         durationMs: number,
         nowMs: number
     ): void {
+        this.chaseActiveUntil.set(id, nowMs + CHASE_IDLE_GRACE_MS);
         this.visuals.set(id, {
             fromX,
             fromY,

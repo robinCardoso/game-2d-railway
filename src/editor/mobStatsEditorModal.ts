@@ -9,7 +9,9 @@ import { dispatchCreaturePresetsUpdated } from '../game-data/creaturePresetUi';
 import {
     getMobStatsFormDefaults,
     MOB_RACES,
+    resolveMobChaseConfig,
     type CreaturePresetEntry,
+    type MobChaseBehavior,
     type MobLootEntry,
     type MobRace,
     type ResolvedMobCombatStats,
@@ -94,14 +96,26 @@ export function initMobStatsEditor(): void {
         updateLootValidationUi(readDraftFromForm(preset));
     });
 
-    mobForm?.querySelectorAll('input').forEach((el) => {
+    mobForm?.querySelectorAll('input, select').forEach((el) => {
         el.addEventListener('input', () => {
             if (!activePresetName) return;
             const preset = presets.find((p) => p.name === activePresetName);
             if (!preset) return;
             const draft = readDraftFromForm(preset);
-            updatePreview(getMobStatsFormDefaults(draft));
+            updatePreview(getMobStatsFormDefaults(draft), resolveMobChaseConfig(draft));
         });
+        el.addEventListener('change', () => {
+            if (!activePresetName) return;
+            const preset = presets.find((p) => p.name === activePresetName);
+            if (!preset) return;
+            syncAttackRangeFieldState();
+            const draft = readDraftFromForm(preset);
+            updatePreview(getMobStatsFormDefaults(draft), resolveMobChaseConfig(draft));
+        });
+    });
+
+    document.getElementById('mobChaseBehaviorSelect')?.addEventListener('change', () => {
+        syncAttackRangeFieldState();
     });
 
     confirmBtn.onclick = async () => {
@@ -143,7 +157,10 @@ function readNum(id: string, fallback: number, allowZero = false): number {
 function readDraftFromForm(base: CreaturePresetEntry): CreaturePresetEntry {
     const raceEl = document.getElementById('mobRaceSelect') as HTMLSelectElement | null;
     const race = (raceEl?.value as MobRace) || base.race || 'beast';
+    const chaseEl = document.getElementById('mobChaseBehaviorSelect') as HTMLSelectElement | null;
+    const chaseBehavior = (chaseEl?.value as MobChaseBehavior) || base.chaseBehavior || 'melee';
     const defaults = getMobStatsFormDefaults(base);
+    const chaseDefaults = resolveMobChaseConfig(base);
 
     const draft: CreaturePresetEntry = {
         ...base,
@@ -153,6 +170,11 @@ function readDraftFromForm(base: CreaturePresetEntry): CreaturePresetEntry {
         attackSpeed: readNum('mobAttackSpeedInput', defaults.attackSpeed),
         xpReward: readNum('mobXpInput', defaults.xpReward),
         race,
+        chaseBehavior,
+        attackRange:
+            chaseBehavior === 'melee'
+                ? 1
+                : readNum('mobAttackRangeInput', chaseDefaults.attackRange),
         loot: readLootFromForm(),
     };
 
@@ -161,6 +183,15 @@ function readDraftFromForm(base: CreaturePresetEntry): CreaturePresetEntry {
     }
 
     return draft;
+}
+
+function syncAttackRangeFieldState(): void {
+    const chaseEl = document.getElementById('mobChaseBehaviorSelect') as HTMLSelectElement | null;
+    const rangeEl = document.getElementById('mobAttackRangeInput') as HTMLInputElement | null;
+    if (!chaseEl || !rangeEl) return;
+    const isMelee = chaseEl.value === 'melee';
+    rangeEl.disabled = isMelee;
+    rangeEl.value = isMelee ? '1' : rangeEl.value || '3';
 }
 
 function readLootFromForm(): MobLootEntry[] {
@@ -261,6 +292,7 @@ function selectPreset(name: string | null): void {
 
     const metaEl = document.getElementById('mobMetaInfo');
     const statsFieldset = document.getElementById('mobStatsFieldset');
+    const chaseFieldset = document.getElementById('mobChaseFieldset');
     const npcNotice = document.getElementById('mobNpcNotice');
 
     if (!name) {
@@ -290,6 +322,11 @@ function selectPreset(name: string | null): void {
             (el as HTMLInputElement).disabled = !isMonster;
         });
     }
+    if (chaseFieldset) {
+        chaseFieldset.querySelectorAll('input, select').forEach((el) => {
+            (el as HTMLInputElement).disabled = !isMonster;
+        });
+    }
     const lootSection = document.getElementById('mobLootSection');
     if (lootSection) {
         lootSection.querySelectorAll('input, select, button').forEach((el) => {
@@ -314,9 +351,21 @@ function selectPreset(name: string | null): void {
         raceSelect.disabled = !isMonster;
     }
 
+    const chaseDefaults = resolveMobChaseConfig(preset);
+    const chaseSelect = document.getElementById('mobChaseBehaviorSelect') as HTMLSelectElement | null;
+    if (chaseSelect) {
+        chaseSelect.value = chaseDefaults.chaseBehavior;
+        chaseSelect.disabled = !isMonster;
+    }
+    const rangeInput = document.getElementById('mobAttackRangeInput') as HTMLInputElement | null;
+    if (rangeInput) {
+        rangeInput.value = String(chaseDefaults.attackRange);
+        rangeInput.disabled = !isMonster || chaseDefaults.chaseBehavior === 'melee';
+    }
+
     renderLootTable(preset.loot ?? []);
     updateLootValidationUi(preset);
-    updatePreview(defaults);
+    updatePreview(defaults, chaseDefaults);
 }
 
 function updateLootValidationUi(preset: CreaturePresetEntry): void {
@@ -443,7 +492,10 @@ function addLootRow(itemId: string, chance: number): void {
     container.appendChild(row);
 }
 
-function updatePreview(stats: ResolvedMobCombatStats): void {
+function updatePreview(
+    stats: ResolvedMobCombatStats,
+    chase = resolveMobChaseConfig(undefined)
+): void {
     const set = (id: string, value: string | number) => {
         const el = document.getElementById(id);
         if (el) el.textContent = String(value);
@@ -454,4 +506,6 @@ function updatePreview(stats: ResolvedMobCombatStats): void {
     set('mobPreviewAtkSpd', `${stats.attackSpeed} ms`);
     set('mobPreviewXp', stats.xpReward);
     set('mobPreviewRace', stats.race);
+    set('mobPreviewChase', chase.chaseBehavior === 'melee' ? 'Corpo a corpo' : 'À distância');
+    set('mobPreviewRange', chase.attackRange);
 }

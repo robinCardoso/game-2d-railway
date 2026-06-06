@@ -11,6 +11,8 @@
     "attack": 45,
     "attackSpeed": 1200,
     "xpReward": 250,
-    "race": "humanoid"
+    "race": "humanoid",
+    "chaseBehavior": "melee",
+    "attackRange": 1
   }
 ]

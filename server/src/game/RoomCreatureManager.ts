@@ -40,6 +40,9 @@ interface ServerCreature {
     maxRadius: number;
     direction: CardinalDirection;
     lastAggroMoveTime: number;
+    lastSeenPlayerTileX?: number;
+    lastSeenPlayerTileY?: number;
+    reactAfterMs?: number;
     maxHealth: number;
     health: number;
     defense: number;
@@ -266,6 +269,9 @@ export class RoomCreatureManager {
                 creature.tileY = creature.spawnY;
                 creature.direction = 'south';
                 creature.lastAggroMoveTime = 0;
+                creature.lastSeenPlayerTileX = undefined;
+                creature.lastSeenPlayerTileY = undefined;
+                creature.reactAfterMs = undefined;
                 creature.respawnAtMs = undefined;
                 respawns.push({
                     type: 'creature_respawned',
@@ -297,9 +303,13 @@ export class RoomCreatureManager {
                 const target = this.pickChaseTarget(creature, players);
                 if (!target) continue;
 
-                const canWalkTo = (tx: number, ty: number) => {
+                const canWalkTerrain = (tx: number, ty: number) => {
                     if (tx < 0 || tx >= mapSize || ty < 0 || ty >= mapSize) return false;
-                    if (!this.collision.isWalkable(state.mapId, tx, ty, creature.z)) return false;
+                    return this.collision.isWalkable(state.mapId, tx, ty, creature.z);
+                };
+
+                const canStepTo = (tx: number, ty: number) => {
+                    if (!canWalkTerrain(tx, ty)) return false;
                     if (this.isPlayerAt(players, tx, ty, creature.z)) return false;
                     if (this.isCreatureAt(state.creatures, tx, ty, creature.z, creature.id)) {
                         return false;
@@ -307,20 +317,34 @@ export class RoomCreatureManager {
                     return true;
                 };
 
+                const canGoalTile = (tx: number, ty: number) => {
+                    if (!canWalkTerrain(tx, ty)) return false;
+                    return !this.isPlayerAt(players, tx, ty, creature.z);
+                };
+
                 const mobState = {
                     tileX: creature.tileX,
                     tileY: creature.tileY,
                     z: creature.z,
                     lastAggroMoveTime: creature.lastAggroMoveTime,
+                    lastSeenPlayerTileX: creature.lastSeenPlayerTileX,
+                    lastSeenPlayerTileY: creature.lastSeenPlayerTileY,
+                    reactAfterMs: creature.reactAfterMs,
                 };
 
                 const step = tickMonsterChaseStep(
                     mobState,
                     target,
                     nowMs,
-                    canWalkTo,
-                    reservedGoals
+                    canStepTo,
+                    reservedGoals,
+                    this.presets.getChaseConfig(creature.name),
+                    canGoalTile
                 );
+
+                creature.lastSeenPlayerTileX = mobState.lastSeenPlayerTileX;
+                creature.lastSeenPlayerTileY = mobState.lastSeenPlayerTileY;
+                creature.reactAfterMs = mobState.reactAfterMs;
 
                 if (!step) continue;
 

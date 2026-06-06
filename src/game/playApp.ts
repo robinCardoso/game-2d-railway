@@ -368,8 +368,9 @@ function handleBeforeUnload(): void {
 }
 
 function faceTowardEntity(target: GameEntity): void {
-    const dx = target.tileX - player.tileX;
-    const dy = target.tileY - player.tileY;
+    const foot = target.getFootTile(TILE_SIZE_SCREEN);
+    const dx = foot.tileX - player.tileX;
+    const dy = foot.tileY - player.tileY;
     if (Math.abs(dx) > Math.abs(dy)) {
         activeCharacterController.setDirection(dx > 0 ? 'right' : 'left');
     } else {
@@ -535,7 +536,8 @@ function isEntityAtTile(tx: number, ty: number, z: number, excludeId?: string): 
         return true;
     }
     for (const npc of getPlayEntities()) {
-        if (npc.id !== excludeId && !npc.isDead && npc.tileX === tx && npc.tileY === ty && npc.worldZ === z) {
+        if (npc.id === excludeId || npc.isDead) continue;
+        if (npc.occupiesTile(tx, ty, z, TILE_SIZE_SCREEN)) {
             return true;
         }
     }

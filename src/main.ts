@@ -2386,9 +2386,10 @@ function isEntityAtTile(tx: number, ty: number, z: number, excludeId?: string): 
         return true;
     }
     
-    // 2. Verifica se algum NPC está nesse tile
+    // 2. Verifica se algum NPC está nesse tile (pé + tiles reservados no deslize)
     for (const npc of npcs) {
-        if (npc.id !== excludeId && npc.tileX === tx && npc.tileY === ty && npc.worldZ === z) {
+        if (npc.id === excludeId) continue;
+        if (npc.occupiesTile(tx, ty, z, TILE_SIZE_SCREEN)) {
             return true;
         }
     }

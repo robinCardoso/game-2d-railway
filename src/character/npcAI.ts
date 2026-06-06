@@ -1,5 +1,15 @@
 import type { GameEntity } from './entity';
+import type { Direction } from './spriteAnimation';
 import type { CollisionQueryContext } from '../engine/types';
+import { getCreaturePreset } from '../editor/creaturePresets';
+import { resolveMobChaseConfig } from '../game-data/mobPresetTypes';
+import {
+    MONSTER_AGGRO_RADIUS,
+    MONSTER_STEP_MS,
+    manhattanDist,
+    tickMonsterChaseStep,
+    type CardinalDirection,
+} from '../../shared/creatureChase';
 
 export interface NpcAIController {
     tickNpcAI(options: {
@@ -18,9 +28,6 @@ export interface NpcAIController {
     }): void;
 }
 
-const MONSTER_AGGRO_RADIUS = 7;
-/** Intervalo entre passos lógicos do monstro (ms) — alinhado à interpolação visual. */
-const MONSTER_STEP_MS = 360;
 const RANDOM_WANDER_INTERVAL_MS = 3000;
 
 const CARDINAL_DIRS = [
@@ -30,15 +37,14 @@ const CARDINAL_DIRS = [
     { dx: 0, dy: -1, dir: 'up' as const },
 ];
 
+const CHASE_DIR_TO_SPRITE: Record<CardinalDirection, Direction> = {
+    east: 'right',
+    west: 'left',
+    south: 'down',
+    north: 'up',
+};
+
 let lastNpcMoveTime = 0;
-
-function tileKey(tx: number, ty: number): string {
-    return `${tx},${ty}`;
-}
-
-function manhattanDist(x1: number, y1: number, x2: number, y2: number): number {
-    return Math.abs(x2 - x1) + Math.abs(y2 - y1);
-}
 
 function isAtTileCenter(npc: GameEntity, tileSize: number): boolean {
     const targetX = npc.tileX * tileSize;
@@ -69,97 +75,14 @@ function faceSlideDirection(npc: GameEntity, tileSize: number): void {
     }
 }
 
-/** Tiles ortogonais ao jogador onde o mob pode ficar para melee (exclui tile do player). */
-function findMeleeGoalTiles(
-    playerTileX: number,
-    playerTileY: number,
-    canWalkTo: (tx: number, ty: number) => boolean
-): Array<{ tx: number; ty: number }> {
-    const goals: Array<{ tx: number; ty: number }> = [];
-    for (const { dx, dy } of CARDINAL_DIRS) {
-        const tx = playerTileX + dx;
-        const ty = playerTileY + dy;
-        if (canWalkTo(tx, ty)) {
-            goals.push({ tx, ty });
-        }
+function isMobInCombatPosition(
+    distToPlayer: number,
+    chaseConfig: ReturnType<typeof resolveMobChaseConfig>
+): boolean {
+    if (chaseConfig.chaseBehavior === 'melee') {
+        return distToPlayer <= chaseConfig.attackRange;
     }
-    return goals;
-}
-
-function pickMeleeGoalTile(
-    npc: GameEntity,
-    playerTileX: number,
-    playerTileY: number,
-    canWalkTo: (tx: number, ty: number) => boolean,
-    reservedGoals: Set<string>
-): { tx: number; ty: number } {
-    const goals = findMeleeGoalTiles(playerTileX, playerTileY, canWalkTo);
-    let best: { tx: number; ty: number } | null = null;
-    let bestDist = Infinity;
-
-    for (const goal of goals) {
-        const key = tileKey(goal.tx, goal.ty);
-        if (reservedGoals.has(key)) continue;
-        const d = manhattanDist(npc.tileX, npc.tileY, goal.tx, goal.ty);
-        if (d < bestDist) {
-            bestDist = d;
-            best = goal;
-        }
-    }
-
-    if (best) {
-        reservedGoals.add(tileKey(best.tx, best.ty));
-        return best;
-    }
-
-    // Todos os slots adjacentes ocupados/reservados — aproximar do jogador sem pisar nele
-    return { tx: playerTileX, ty: playerTileY };
-}
-
-function pickMonsterChaseStep(
-    npc: GameEntity,
-    goalX: number,
-    goalY: number,
-    canWalkTo: (tx: number, ty: number) => boolean
-): (typeof CARDINAL_DIRS)[number] | null {
-    const currentGoalDist = manhattanDist(npc.tileX, npc.tileY, goalX, goalY);
-
-    let bestCloser: (typeof CARDINAL_DIRS)[number] | null = null;
-    let bestCloserDist = currentGoalDist;
-
-    let bestSidestep: (typeof CARDINAL_DIRS)[number] | null = null;
-    let bestSidestepDist = Infinity;
-
-    let bestAny: (typeof CARDINAL_DIRS)[number] | null = null;
-    let bestAnyDist = Infinity;
-
-    for (const step of CARDINAL_DIRS) {
-        const nx = npc.tileX + step.dx;
-        const ny = npc.tileY + step.dy;
-        if (!canWalkTo(nx, ny)) continue;
-
-        const d = manhattanDist(nx, ny, goalX, goalY);
-
-        if (d < bestCloserDist) {
-            bestCloserDist = d;
-            bestCloser = step;
-        }
-
-        // Contorno: passo lateral (distância igual ou +1) quando o caminho direto está bloqueado
-        if (d >= currentGoalDist && d <= currentGoalDist + 1 && d < bestSidestepDist) {
-            bestSidestepDist = d;
-            bestSidestep = step;
-        }
-
-        if (d < bestAnyDist) {
-            bestAnyDist = d;
-            bestAny = step;
-        }
-    }
-
-    if (bestCloser) return bestCloser;
-    if (bestSidestep) return bestSidestep;
-    return bestAny;
+    return distToPlayer === chaseConfig.attackRange;
 }
 
 function tickMonsterChase(
@@ -168,35 +91,54 @@ function tickMonsterChase(
     nowMs: number,
     tileSize: number,
     mapSize: number,
-    canWalkTo: (tx: number, ty: number) => boolean,
+    canStepTo: (tx: number, ty: number) => boolean,
+    canGoalTile: (tx: number, ty: number) => boolean,
     reservedGoals: Set<string>
 ): void {
+    const chaseConfig = resolveMobChaseConfig(getCreaturePreset(npc.name));
     const distToPlayer = manhattanDist(npc.tileX, npc.tileY, player.tileX, player.tileY);
-
     const isAggroed = distToPlayer <= MONSTER_AGGRO_RADIUS && player.worldZ === npc.worldZ;
-    npc.isChasing = isAggroed && distToPlayer > 1;
+    const inCombatPosition = isMobInCombatPosition(distToPlayer, chaseConfig);
 
-    if (!npc.isChasing) return;
+    npc.isChasing = isAggroed && !inCombatPosition;
+
+    if (!isAggroed) return;
+
+    if (inCombatPosition) {
+        faceTowardTile(npc, player.tileX, player.tileY);
+        return;
+    }
 
     if (!isAtTileCenter(npc, tileSize)) {
         faceSlideDirection(npc, tileSize);
         return;
     }
 
-    if (distToPlayer <= 1) {
-        faceTowardTile(npc, player.tileX, player.tileY);
-        return;
-    }
+    const mobState = {
+        tileX: npc.tileX,
+        tileY: npc.tileY,
+        z: npc.worldZ,
+        lastAggroMoveTime: npc.lastAggroMoveTime,
+        lastSeenPlayerTileX: npc.lastSeenPlayerTileX,
+        lastSeenPlayerTileY: npc.lastSeenPlayerTileY,
+        reactAfterMs: npc.reactAfterMs,
+    };
 
-    if (nowMs - npc.lastAggroMoveTime < MONSTER_STEP_MS) {
-        faceTowardTile(npc, player.tileX, player.tileY);
-        return;
-    }
+    const step = tickMonsterChaseStep(
+        mobState,
+        { tileX: player.tileX, tileY: player.tileY, z: player.worldZ },
+        nowMs,
+        canStepTo,
+        reservedGoals,
+        chaseConfig,
+        canGoalTile
+    );
 
-    const goal = pickMeleeGoalTile(npc, player.tileX, player.tileY, canWalkTo, reservedGoals);
-    const step = pickMonsterChaseStep(npc, goal.tx, goal.ty, canWalkTo);
+    npc.lastSeenPlayerTileX = mobState.lastSeenPlayerTileX;
+    npc.lastSeenPlayerTileY = mobState.lastSeenPlayerTileY;
+    npc.reactAfterMs = mobState.reactAfterMs;
+
     if (!step) {
-        npc.setState('idle');
         faceTowardTile(npc, player.tileX, player.tileY);
         return;
     }
@@ -208,8 +150,8 @@ function tickMonsterChase(
     npc.tileX = nx;
     npc.tileY = ny;
     npc.setState('walk');
-    npc.setDirection(step.dir);
-    npc.lastAggroMoveTime = nowMs;
+    npc.setDirection(CHASE_DIR_TO_SPRITE[step.dir]);
+    npc.lastAggroMoveTime = mobState.lastAggroMoveTime;
 }
 
 export const NpcAI: NpcAIController = {
@@ -226,22 +168,31 @@ export const NpcAI: NpcAIController = {
         } = options;
 
         const moveSpeedPx = TILE_SIZE_SCREEN / (MONSTER_STEP_MS / (1000 / 60));
-        const reservedMeleeGoals = new Set<string>();
+        const reservedChaseGoals = new Set<string>();
 
         npcs.forEach((npc) => {
             if (npc.isDead) return;
 
-            const canWalkTo = (tx: number, ty: number) => {
+            const canWalkTerrain = (tx: number, ty: number) => {
                 if (tx < 0 || tx >= MAP_SIZE || ty < 0 || ty >= MAP_SIZE) return false;
-                const scenarioWalkable = queryWalkable(
+                return queryWalkable(
                     createCollisionContext(),
                     tx * TILE_SIZE_SCREEN,
                     ty * TILE_SIZE_SCREEN,
                     npc.worldZ
                 ).walkable;
+            };
+
+            const canStepTo = (tx: number, ty: number) => {
+                if (!canWalkTerrain(tx, ty)) return false;
                 const occupiedByEntity = isEntityAtTile(tx, ty, npc.worldZ, npc.id);
                 const occupiedByPlayer = isEntityAtTile(tx, ty, npc.worldZ, 'player');
-                return scenarioWalkable && !occupiedByEntity && !occupiedByPlayer;
+                return !occupiedByEntity && !occupiedByPlayer;
+            };
+
+            const canGoalTile = (tx: number, ty: number) => {
+                if (!canWalkTerrain(tx, ty)) return false;
+                return !isEntityAtTile(tx, ty, npc.worldZ, 'player');
             };
 
             if (npc.type === 'npc') {
@@ -274,8 +225,9 @@ export const NpcAI: NpcAIController = {
                     nowMs,
                     TILE_SIZE_SCREEN,
                     MAP_SIZE,
-                    canWalkTo,
-                    reservedMeleeGoals
+                    canStepTo,
+                    canGoalTile,
+                    reservedChaseGoals
                 );
                 if (npc.isChasing) return;
             }
@@ -293,7 +245,7 @@ export const NpcAI: NpcAIController = {
                     Math.abs(newTileX - npc.spawnX) <= npc.maxRadius &&
                     Math.abs(newTileY - npc.spawnY) <= npc.maxRadius;
 
-                if (isWithinRadius && canWalkTo(newTileX, newTileY)) {
+                if (isWithinRadius && canStepTo(newTileX, newTileY)) {
                     npc.tileX = newTileX;
                     npc.tileY = newTileY;
                     npc.setState('walk');
