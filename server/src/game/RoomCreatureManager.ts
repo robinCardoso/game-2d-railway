@@ -9,6 +9,7 @@ import type {
 import {
     MONSTER_STEP_MS,
     armMonsterWakeDelay,
+    resolveChaseIdleDirection,
     isMonsterWakePaused,
     tickMonsterChaseStep,
     type CardinalDirection,
@@ -174,11 +175,10 @@ export class RoomCreatureManager {
         if (creature.isDead) {
             return { ok: false, code: 'CREATURE_DEAD' };
         }
-        if (creature.z !== attacker.z) {
-            return { ok: false, code: 'NOT_ADJACENT' };
-        }
+
         const attackProfile = resolvePlayerAttackProfile(attacker.vocationId);
         if (
+            creature.z !== attacker.z ||
             !isPlayerInAttackRange(
                 { tileX: attacker.tileX, tileY: attacker.tileY, z: attacker.z },
                 { tileX: creature.tileX, tileY: creature.tileY, z: creature.z },
@@ -225,17 +225,22 @@ export class RoomCreatureManager {
             attackerPlayerId: attacker.playerId,
         };
 
-        const outcome: CombatAttackOutcome = {
+        if (!result.isDead) {
+            return {
+                ok: true,
+                newLastAttackAtMs: nowMs,
+                damaged,
+            };
+        }
+
+        creature.isDead = true;
+        creature.health = 0;
+        creature.respawnAtMs = nowMs + MONSTER_RESPAWN_MS;
+        return {
             ok: true,
             newLastAttackAtMs: nowMs,
             damaged,
-        };
-
-        if (result.isDead) {
-            creature.isDead = true;
-            creature.health = 0;
-            creature.respawnAtMs = nowMs + MONSTER_RESPAWN_MS;
-            outcome.died = {
+            died: {
                 type: 'creature_died',
                 v: PROTOCOL_VERSION,
                 creatureId: creature.id,
@@ -243,10 +248,8 @@ export class RoomCreatureManager {
                 instanceId: state.instanceId,
                 xpReward: creature.xpReward,
                 killerPlayerId: attacker.playerId,
-            };
-        }
-
-        return outcome;
+            },
+        };
     }
 
     private toSnapshot(c: ServerCreature): CreatureSnapshot {
@@ -328,14 +331,10 @@ export class RoomCreatureManager {
                     return this.collision.isWalkable(state.mapId, tx, ty, creature.z);
                 };
 
-                const canStepTo = (tx: number, ty: number) => {
-                    if (!canWalkTerrain(tx, ty)) return false;
-                    if (this.isPlayerAt(players, tx, ty, creature.z)) return false;
-                    if (this.isCreatureAt(state.creatures, tx, ty, creature.z, creature.id)) {
-                        return false;
-                    }
-                    return true;
-                };
+                const canStepTo = (tx: number, ty: number) =>
+                    canWalkTerrain(tx, ty) &&
+                    !this.isPlayerAt(players, tx, ty, creature.z) &&
+                    !this.isCreatureAt(state.creatures, tx, ty, creature.z, creature.id);
 
                 const canGoalTile = (tx: number, ty: number) => {
                     if (!canWalkTerrain(tx, ty)) return false;
@@ -367,25 +366,50 @@ export class RoomCreatureManager {
                 creature.lastSeenPlayerTileY = mobState.lastSeenPlayerTileY;
                 creature.reactAfterMs = mobState.reactAfterMs;
 
-                if (!step) continue;
+                if (step) {
+                    creature.tileX = mobState.tileX;
+                    creature.tileY = mobState.tileY;
+                    creature.lastAggroMoveTime = mobState.lastAggroMoveTime;
+                    creature.direction = step.dir;
 
-                creature.tileX = mobState.tileX;
-                creature.tileY = mobState.tileY;
-                creature.lastAggroMoveTime = mobState.lastAggroMoveTime;
-                creature.direction = step.dir;
+                    moves.push({
+                        type: 'creature_moved',
+                        v: PROTOCOL_VERSION,
+                        creatureId: creature.id,
+                        mapId: state.mapId,
+                        instanceId: state.instanceId,
+                        tileX: creature.tileX,
+                        tileY: creature.tileY,
+                        z: creature.z,
+                        direction: creature.direction,
+                        stepDurationMs: MONSTER_STEP_MS,
+                    });
+                    continue;
+                }
 
-                moves.push({
-                    type: 'creature_moved',
-                    v: PROTOCOL_VERSION,
-                    creatureId: creature.id,
-                    mapId: state.mapId,
-                    instanceId: state.instanceId,
-                    tileX: creature.tileX,
-                    tileY: creature.tileY,
-                    z: creature.z,
-                    direction: creature.direction,
-                    stepDurationMs: MONSTER_STEP_MS,
-                });
+                const faceDir = resolveChaseIdleDirection(
+                    creature.tileX,
+                    creature.tileY,
+                    target.tileX,
+                    target.tileY,
+                    target.z,
+                    creature.z
+                );
+                if (faceDir && faceDir !== creature.direction) {
+                    creature.direction = faceDir;
+                    moves.push({
+                        type: 'creature_moved',
+                        v: PROTOCOL_VERSION,
+                        creatureId: creature.id,
+                        mapId: state.mapId,
+                        instanceId: state.instanceId,
+                        tileX: creature.tileX,
+                        tileY: creature.tileY,
+                        z: creature.z,
+                        direction: creature.direction,
+                        stepDurationMs: MONSTER_STEP_MS,
+                    });
+                }
             }
 
             for (const move of moves) {

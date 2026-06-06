@@ -41,6 +41,28 @@ function snapEntityToTile(entity: GameEntity, tileX: number, tileY: number): voi
     entity.stepDestTileY = undefined;
 }
 
+function isEntityMidSlide(entity: GameEntity, nowMs: number, chaseUntil?: number): boolean {
+    const destX = entity.tileX * TILE_SIZE;
+    const destY = entity.tileY * TILE_SIZE;
+    const farFromTile =
+        Math.abs(entity.worldX - destX) >= 0.5 || Math.abs(entity.worldY - destY) >= 0.5;
+    const chaseGraceActive = chaseUntil !== undefined && nowMs < chaseUntil;
+    return farFromTile || chaseGraceActive;
+}
+
+/** Paridade npcAI.faceSlideDirection — direção do deslize visual, não olhar fixo no alvo. */
+function faceSlideDirection(entity: GameEntity): void {
+    const targetX = entity.tileX * TILE_SIZE;
+    const targetY = entity.tileY * TILE_SIZE;
+    const dx = targetX - entity.worldX;
+    const dy = targetY - entity.worldY;
+    if (Math.abs(dx) > Math.abs(dy)) {
+        entity.setDirection(dx > 0 ? 'right' : 'left');
+    } else if (Math.abs(dy) > 0.5) {
+        entity.setDirection(dy > 0 ? 'down' : 'up');
+    }
+}
+
 /**
  * Criaturas autoritativas do servidor — substituem mobs locais quando online.
  * Deslize contínuo por frame (mesmo modelo do npcAI offline), não interpolação por pacote.
@@ -165,10 +187,13 @@ export class ServerCreatureSync {
         const destY = snap.tileY * TILE_SIZE;
 
         if (tileDelta === 0) {
-            entity.worldX = destX;
-            entity.worldY = destY;
-            entity.stepDestTileX = undefined;
-            entity.stepDestTileY = undefined;
+            const chaseUntil = this.chaseActiveUntil.get(snap.creatureId);
+            if (!isEntityMidSlide(entity, nowMs, chaseUntil)) {
+                entity.worldX = destX;
+                entity.worldY = destY;
+                entity.stepDestTileX = undefined;
+                entity.stepDestTileY = undefined;
+            }
             return;
         }
 
@@ -225,6 +250,10 @@ export class ServerCreatureSync {
             const sliding = !arrived;
             const chaseUntil = this.chaseActiveUntil.get(id);
             const chasing = sliding || (chaseUntil !== undefined && nowMs < chaseUntil);
+
+            if (sliding) {
+                faceSlideDirection(entity);
+            }
 
             entity.isChasing = chasing;
             if (chasing) {

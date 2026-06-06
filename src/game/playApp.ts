@@ -114,6 +114,63 @@ let gameNet: GameNetClient | null = null;
 const remoteSprites = new RemotePlayerSpriteManager();
 const serverCreatures = new ServerCreatureSync();
 
+const CREATURE_SYNC_LOADING_TIMEOUT_MS = 3000;
+let playBootStartedAt = 0;
+let pendingCreatureSyncLoading = false;
+let creatureSyncLoadingTimer: ReturnType<typeof setTimeout> | null = null;
+
+function resolveGameServerUrl(): string | null {
+    const env = import.meta.env.VITE_GAME_SERVER_WS;
+    if (env === 'false' || env === '0') return null;
+    if (env && env.length > 0) return env;
+    if (import.meta.env.DEV) return `ws://localhost:${DEFAULT_WS_PORT}`;
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${proto}//${location.host}`;
+}
+
+function isMultiplayerConfigured(): boolean {
+    return Boolean(resolveGameServerUrl());
+}
+
+function isPlayJoinDebugEnabled(): boolean {
+    try {
+        return localStorage.getItem('debug.play.join') === '1';
+    } catch {
+        return false;
+    }
+}
+
+function logPlayJoinTimeline(event: string, detail?: Record<string, unknown>): void {
+    if (!isPlayJoinDebugEnabled()) return;
+    const elapsed =
+        playBootStartedAt > 0 ? Math.round(performance.now() - playBootStartedAt) : 0;
+    if (detail) {
+        console.log(`[play.join +${elapsed}ms] ${event}`, detail);
+    } else {
+        console.log(`[play.join +${elapsed}ms] ${event}`);
+    }
+}
+
+function releaseCreatureSyncLoading(): void {
+    if (!pendingCreatureSyncLoading) return;
+    pendingCreatureSyncLoading = false;
+    if (creatureSyncLoadingTimer) {
+        clearTimeout(creatureSyncLoadingTimer);
+        creatureSyncLoadingTimer = null;
+    }
+    hideLoading();
+    logPlayJoinTimeline('hideLoading (creature sync ready)');
+}
+
+function beginCreatureSyncLoadingGate(): void {
+    pendingCreatureSyncLoading = true;
+    showLoading('Sincronizando criaturas…');
+    creatureSyncLoadingTimer = setTimeout(() => {
+        logPlayJoinTimeline('creature sync timeout — releasing loading');
+        releaseCreatureSyncLoading();
+    }, CREATURE_SYNC_LOADING_TIMEOUT_MS);
+}
+
 function usesServerCreatures(): boolean {
     return isServerAuthoritativeCreatures(Boolean(gameNet?.isConnected())) && Boolean(currentMapId);
 }
@@ -248,9 +305,16 @@ function updateActiveMapHud(): void {
 }
 
 function respawnEntities(): void {
-    const spawns = usesServerCreatures()
+    const spawns = isMultiplayerConfigured()
         ? worldSpawns.filter((s) => s.type === 'npc')
         : worldSpawns;
+    const localMonsters = spawns.filter((s) => s.type === 'monster').length;
+    logPlayJoinTimeline('respawnEntities', {
+        multiplayer: isMultiplayerConfigured(),
+        serverConnected: Boolean(gameNet?.isConnected()),
+        localMonsters,
+        localNpcs: spawns.filter((s) => s.type === 'npc').length,
+    });
     respawnEntitiesFromSpawns({
         spawns,
         npcs,
@@ -1029,20 +1093,17 @@ function syncProgressToServer(): void {
     gameNet.sendProgressSync(progress.level, progress.experience);
 }
 
-function resolveGameServerUrl(): string | null {
-    const env = import.meta.env.VITE_GAME_SERVER_WS;
-    if (env === 'false' || env === '0') return null;
-    if (env && env.length > 0) return env;
-    if (import.meta.env.DEV) return `ws://localhost:${DEFAULT_WS_PORT}`;
-    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${proto}//${location.host}`;
-}
-
-function setupNetwork(char: CharacterRow, accountId: string): void {
+function setupNetwork(
+    char: CharacterRow,
+    accountId: string,
+    options?: {
+        initialTicket?: string;
+    }
+): void {
     const url = resolveGameServerUrl();
     if (!url) return;
     const localAppearance = appearanceFromCharacter(char);
-    let ticket: string | undefined;
+    let ticket: string | undefined = options?.initialTicket;
 
     const refreshTicket = async (): Promise<string | undefined> => {
         try {
@@ -1088,23 +1149,35 @@ function setupNetwork(char: CharacterRow, accountId: string): void {
         },
         onStatusChange: (status) => {
             if (status === 'connected') {
+                logPlayJoinTimeline('ws connected — stripLocalMonsters');
                 stripLocalMonsters();
             } else if (status === 'disconnected') {
+                logPlayJoinTimeline('ws disconnected — clear server creatures');
                 serverCreatures.clear();
                 respawnEntities();
             }
         },
         onWelcome: () => {
+            logPlayJoinTimeline('welcome received');
             syncProgressToServer();
         },
         onCreatureSync: ({ mapId, instanceId, creatures }) => {
             if (!currentMapId || mapId !== currentMapId) return;
+            logPlayJoinTimeline('onCreatureSync', {
+                count: creatures.length,
+                sample: creatures.slice(0, 3).map((c) => ({
+                    id: c.creatureId,
+                    tile: `${c.tileX},${c.tileY}`,
+                    direction: c.direction,
+                })),
+            });
             stripLocalMonsters();
             serverCreatures.applySync(
                 creatures,
                 mapId,
                 instanceId ?? gameNet?.getNetworkInstanceId()
             );
+            releaseCreatureSyncLoading();
         },
         onCreatureMoved: (msg) => {
             if (!currentMapId || msg.mapId !== currentMapId) return;
@@ -1143,9 +1216,15 @@ function setupNetwork(char: CharacterRow, accountId: string): void {
         },
     });
 
-    void refreshTicket().finally(() => {
-        gameNet!.connect();
-    });
+    if (ticket !== undefined) {
+        logPlayJoinTimeline('connect (prefetched ticket)');
+        gameNet.connect();
+    } else {
+        void refreshTicket().finally(() => {
+            logPlayJoinTimeline('connect (ticket fetched)');
+            gameNet!.connect();
+        });
+    }
 }
 
 export async function startPlay(character: CharacterRow, accountId: string): Promise<void> {
@@ -1198,6 +1277,16 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
         : undefined;
 
     showLoading('Carregando mundo…');
+    playBootStartedAt = performance.now();
+    logPlayJoinTimeline('boot start');
+
+    const ticketPromise = isMultiplayerConfigured()
+        ? resolveEnterTicket(character, accountId).catch((err) => {
+              console.error('[playApp] falha ao prefetch ticket WS:', err);
+              return undefined;
+          })
+        : Promise.resolve<string | undefined>(undefined);
+
     await reloadCreaturePresetsForPlay();
     await loadPlayBorderConfig();
     TILE_TYPES = await prepareTileRegistry();
@@ -1227,7 +1316,16 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
     });
     window.addEventListener('resize', resize);
     resize();
-    hideLoading();
+
+    const prefetchedTicket = await ticketPromise;
+    logPlayJoinTimeline('prefetch ticket ready', { hasTicket: Boolean(prefetchedTicket) });
+
+    if (isMultiplayerConfigured()) {
+        beginCreatureSyncLoadingGate();
+    } else {
+        hideLoading();
+        logPlayJoinTimeline('hideLoading (offline)');
+    }
 
     setupLocationAutosave();
     setupPlayZoomControls();
@@ -1239,6 +1337,6 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
         }
     });
 
-    setupNetwork(character, accountId);
+    setupNetwork(character, accountId, { initialTicket: prefetchedTicket });
     loop();
 }

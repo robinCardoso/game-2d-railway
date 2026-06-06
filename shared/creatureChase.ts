@@ -65,6 +65,61 @@ export function manhattanDist(x1: number, y1: number, x2: number, y2: number): n
     return Math.abs(x2 - x1) + Math.abs(y2 - y1);
 }
 
+/** Direção cardinal dominante de um tile em direção a outro (sem movimento). */
+export function directionTowardTile(
+    fromTileX: number,
+    fromTileY: number,
+    toTileX: number,
+    toTileY: number
+): CardinalDirection {
+    const dx = toTileX - fromTileX;
+    const dy = toTileY - fromTileY;
+    if (Math.abs(dx) > Math.abs(dy)) {
+        return dx > 0 ? 'east' : 'west';
+    }
+    if (dy !== 0) {
+        return dy > 0 ? 'south' : 'north';
+    }
+    return 'south';
+}
+
+/** Direção para olhar ao jogador quando parado no alcance de combate. */
+export function chaseFaceDirectionWhenEngaged(
+    mobTileX: number,
+    mobTileY: number,
+    playerTileX: number,
+    playerTileY: number,
+    config: ChaseMobConfig
+): CardinalDirection | null {
+    const distToPlayer = manhattanDist(mobTileX, mobTileY, playerTileX, playerTileY);
+    const { chaseBehavior, attackRange } = config;
+
+    if (chaseBehavior === 'melee') {
+        if (distToPlayer > 0 && distToPlayer <= attackRange) {
+            return directionTowardTile(mobTileX, mobTileY, playerTileX, playerTileY);
+        }
+    } else if (isRangedInComfortZone(distToPlayer, config)) {
+        return directionTowardTile(mobTileX, mobTileY, playerTileX, playerTileY);
+    }
+
+    return null;
+}
+
+/** Direção quando aggroed mas sem passo (paridade npcAI faceTowardTile / !step). */
+export function resolveChaseIdleDirection(
+    mobTileX: number,
+    mobTileY: number,
+    playerTileX: number,
+    playerTileY: number,
+    playerZ: number,
+    mobZ: number
+): CardinalDirection | null {
+    const distToPlayer = manhattanDist(mobTileX, mobTileY, playerTileX, playerTileY);
+    if (distToPlayer > MONSTER_AGGRO_RADIUS || playerZ !== mobZ) return null;
+    if (distToPlayer === 0) return null;
+    return directionTowardTile(mobTileX, mobTileY, playerTileX, playerTileY);
+}
+
 function tileKey(tx: number, ty: number): string {
     return `${tx},${ty}`;
 }
