@@ -24,11 +24,18 @@ interface ItemOverlayCell {
 /** items[z]["x,y"] — overlay de itens (árvores, etc.). */
 type ItemOverlayByFloor = Record<number, Record<string, ItemOverlayCell>>;
 
+export interface MapPlayerSpawn {
+    x: number;
+    y: number;
+    z: number;
+}
+
 interface LoadedCollisionMap {
     mapId: string;
     size: number;
     worldMap: WorldMapGrids;
     spawns: MapSpawnEntry[];
+    playerSpawn?: MapPlayerSpawn;
     items: ItemOverlayByFloor;
 }
 
@@ -112,6 +119,7 @@ export class MapCollisionStore {
             tiles?: Record<string, { x: number; y: number; id: number }[]>;
             sparseTiles?: [number, number, number, number][];
             spawns?: MapSpawnEntry[];
+            spawn?: { x?: number; y?: number; z?: number };
             layers?: { items?: Record<string, { x: number; y: number; id: number; ref?: string }[]> };
             tileRefs?: Record<string, { ref?: string }>;
         };
@@ -152,6 +160,7 @@ export class MapCollisionStore {
         }
 
         const spawns = this.sanitizeSpawns(raw.spawns, size);
+        const playerSpawn = this.sanitizePlayerSpawn(raw.spawn, size);
         const items = this.parseItemOverlay(raw, size);
 
         this.templates.set(mapId, {
@@ -159,8 +168,31 @@ export class MapCollisionStore {
             size,
             worldMap,
             spawns,
+            playerSpawn,
             items,
         });
+    }
+
+    private sanitizePlayerSpawn(
+        raw: { x?: number; y?: number; z?: number } | undefined,
+        mapSize: number
+    ): MapPlayerSpawn | undefined {
+        if (!raw) return undefined;
+        const x = Number(raw.x);
+        const y = Number(raw.y);
+        const z = Number(raw.z ?? 0);
+        if (
+            !Number.isInteger(x) ||
+            !Number.isInteger(y) ||
+            !Number.isInteger(z) ||
+            x < 0 ||
+            y < 0 ||
+            x >= mapSize ||
+            y >= mapSize
+        ) {
+            return undefined;
+        }
+        return { x, y, z };
     }
 
     private sanitizeSpawns(raw: MapSpawnEntry[] | undefined, mapSize: number): MapSpawnEntry[] {
@@ -208,6 +240,35 @@ export class MapCollisionStore {
         if (item && !item.walkable) return false;
 
         return true;
+    }
+
+    getMapSpawn(mapId: string): MapPlayerSpawn | undefined {
+        return this.templates.get(mapId)?.playerSpawn;
+    }
+
+    /**
+     * Posição autoritativa para join WS: usa tile salvo se walkable,
+     * senão cai no spawn do mapa (alinha cliente `resolveEffectiveSpawn`).
+     */
+    resolveJoinPosition(
+        mapId: string,
+        tileX: number,
+        tileY: number,
+        z: number
+    ): { tileX: number; tileY: number; z: number; corrected: boolean } {
+        if (this.isWalkable(mapId, tileX, tileY, z)) {
+            return { tileX, tileY, z, corrected: false };
+        }
+
+        const spawn = this.getMapSpawn(mapId);
+        if (spawn && this.isWalkable(mapId, spawn.x, spawn.y, spawn.z)) {
+            console.warn(
+                `[MapCollisionStore] Join em (${tileX},${tileY},${z}) não walkable em ${mapId}; usando spawn (${spawn.x},${spawn.y},${spawn.z}).`
+            );
+            return { tileX: spawn.x, tileY: spawn.y, z: spawn.z, corrected: true };
+        }
+
+        return { tileX, tileY, z, corrected: false };
     }
 
     getSpawns(mapId: string): MapSpawnEntry[] {

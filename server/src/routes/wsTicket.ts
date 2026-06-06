@@ -6,12 +6,13 @@ import { appearanceFromCharacterRow } from '../api/playerAppearance.js';
 import { env } from '../config/env.js';
 import { isDatabaseConfigured } from '../db/pool.js';
 import { getCharacterForAccount } from '../db/repositories/characters.repo.js';
+import type { MapCollisionStore } from '../MapCollisionStore.js';
 
 const bodySchema = z.object({
     characterId: z.string().uuid(),
 });
 
-export function createWsTicketRouter(): Router {
+export function createWsTicketRouter(collision: MapCollisionStore): Router {
     const router = Router();
 
     router.use((_req, res, next) => {
@@ -41,14 +42,21 @@ export function createWsTicketRouter(): Router {
                 return;
             }
 
+            const resolved = collision.resolveJoinPosition(
+                character.map_id,
+                character.position_x,
+                character.position_y,
+                character.position_z
+            );
+
             const ticket = createEnterTicket({
                 characterId: character.id,
                 accountId: character.account_id,
                 name: character.name,
                 mapId: character.map_id,
-                tileX: character.position_x,
-                tileY: character.position_y,
-                z: character.position_z,
+                tileX: resolved.tileX,
+                tileY: resolved.tileY,
+                z: resolved.z,
                 direction: character.direction,
                 appearance: appearanceFromCharacterRow(character),
                 level: character.level ?? 1,

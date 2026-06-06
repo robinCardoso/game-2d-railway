@@ -374,6 +374,16 @@ export class GameRoom {
             instanceId = undefined;
         }
 
+        const resolvedJoin = this.collision.resolveJoinPosition(
+            joinMapId,
+            joinTileX,
+            joinTileY,
+            joinZ
+        );
+        joinTileX = resolvedJoin.tileX;
+        joinTileY = resolvedJoin.tileY;
+        joinZ = resolvedJoin.z;
+
         if (!this.isWalkable(joinMapId, joinTileX, joinTileY, joinZ)) {
             this.send(socket, {
                 type: 'error',
@@ -433,6 +443,18 @@ export class GameRoom {
             msg.mapId !== joinMapId
         ) {
             this.sendPositionCorrection(player);
+        }
+
+        if (resolvedJoin.corrected && characterId && accountId) {
+            void this.positionPersistence.saveNow({
+                characterId,
+                accountId,
+                mapId: joinMapId,
+                tileX: joinTileX,
+                tileY: joinTileY,
+                z: joinZ,
+                direction,
+            });
         }
 
         this.broadcastToRoom(

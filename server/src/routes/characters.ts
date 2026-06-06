@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth, type AuthenticatedRequest } from '../auth/requireAuth.js';
 import { isDatabaseConfigured } from '../db/pool.js';
 import { characterToApi } from '../api/characterDto.js';
+import type { MapPlayerSpawn } from '../MapCollisionStore.js';
 import {
     countCharactersByAccount,
     createCharacter,
@@ -42,7 +43,7 @@ const progressSchema = z.object({
     experience: z.number().int().min(0),
 });
 
-export function createCharactersRouter(): Router {
+export function createCharactersRouter(getMapSpawn: (mapId: string) => MapPlayerSpawn | undefined): Router {
     const router = Router();
 
     router.use((_req, res, next) => {
@@ -100,6 +101,7 @@ export function createCharactersRouter(): Router {
             }
 
             const spawnMapId = data.spawnMapId ?? 'rookgaard';
+            const mapSpawn = getMapSpawn(spawnMapId) ?? { x: 54, y: 45, z: 0 };
             const outfitConfig = {
                 ...(data.outfitConfig ?? {}),
                 name: data.name.trim(),
@@ -115,7 +117,7 @@ export function createCharactersRouter(): Router {
                 },
                 gameId: 'default',
                 mapId: spawnMapId,
-                position: { x: 100, y: 100, z: 7 },
+                position: { x: mapSpawn.x, y: mapSpawn.y, z: mapSpawn.z },
                 direction: 'south',
             };
 
@@ -129,9 +131,9 @@ export function createCharactersRouter(): Router {
                 spawnMapId,
                 outfitConfig,
                 mapId: spawnMapId,
-                positionX: 100,
-                positionY: 100,
-                positionZ: 7,
+                positionX: mapSpawn.x,
+                positionY: mapSpawn.y,
+                positionZ: mapSpawn.z,
                 direction: 'south',
             });
             res.status(201).json({ character: characterToApi(row) });

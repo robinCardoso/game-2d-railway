@@ -9,6 +9,7 @@ import { createCharactersRouter } from './routes/characters.js';
 import { createWsTicketRouter } from './routes/wsTicket.js';
 import { createStudioRouter } from './routes/studio/index.js';
 import { isDatabaseConfigured } from './db/pool.js';
+import type { MapCollisionStore } from './MapCollisionStore.js';
 
 const MIME_TYPES: Record<string, string> = {
     '.png': 'image/png',
@@ -19,7 +20,7 @@ const MIME_TYPES: Record<string, string> = {
     '.json': 'application/json',
 };
 
-export function createApp(getOnline?: () => number): Express {
+export function createApp(getOnline: (() => number) | undefined, collision: MapCollisionStore): Express {
     const app = express();
 
     if (env.clientOrigin) {
@@ -53,8 +54,8 @@ export function createApp(getOnline?: () => number): Express {
     });
 
     app.use('/api/auth', createAuthRouter());
-    app.use('/api/characters', createCharactersRouter());
-    app.use('/api/ws-ticket', createWsTicketRouter());
+    app.use('/api/characters', createCharactersRouter((mapId) => collision.getMapSpawn(mapId)));
+    app.use('/api/ws-ticket', createWsTicketRouter(collision));
     app.use('/api', createStudioRouter());
 
     app.get('/stucio.html', (_req, res) => {
