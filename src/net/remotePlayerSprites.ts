@@ -1,7 +1,7 @@
 import { ENGINE_CONFIG } from '../engine/config';
 import type { RemotePlayerDepthEntry } from '../engine/depthSortDraw';
 import { parseStepDurationMs, type PlayerSnapshot } from '../../shared/protocol';
-import { SpriteAnimationController } from '../character/spriteAnimation';
+import { SpriteAnimationController, type Direction } from '../character/spriteAnimation';
 import { DIAGONAL_STEP_DURATION_FACTOR } from '../movement/gridMovement';
 import {
     loadOutfitSpriteConfig,
@@ -23,6 +23,38 @@ const MAX_REMOTE_STEP_WITH_DIAG_MS = 300;
 
 function clamp(v: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, v));
+}
+
+/** Face da outfit a partir do deslize real (não confia só no pacote — desync em movimento rápido). */
+function directionFromWorldDelta(
+    fromX: number,
+    fromY: number,
+    toX: number,
+    toY: number
+): Direction | null {
+    const dx = toX - fromX;
+    const dy = toY - fromY;
+    if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return null;
+    if (Math.abs(dx) >= Math.abs(dy)) {
+        return dx > 0 ? 'right' : 'left';
+    }
+    return dy > 0 ? 'down' : 'up';
+}
+
+function applyRemoteFacing(
+    state: RemoteVisualState,
+    fromX: number,
+    fromY: number,
+    toX: number,
+    toY: number,
+    serverDirection?: PlayerSnapshot['direction']
+): void {
+    const fromMotion = directionFromWorldDelta(fromX, fromY, toX, toY);
+    if (fromMotion) {
+        state.controller.setDirection(fromMotion);
+        return;
+    }
+    state.controller.setDirection(protocolDirectionToSprite(serverDirection));
 }
 
 type RemoteVisualState = {
@@ -100,6 +132,16 @@ export class RemotePlayerSpriteManager {
                 state.visualX = state.fromX + (state.toX - state.fromX) * t;
                 state.visualY = state.fromY + (state.toY - state.fromY) * t;
 
+                const stepDir = directionFromWorldDelta(
+                    state.fromX,
+                    state.fromY,
+                    state.toX,
+                    state.toY
+                );
+                if (stepDir) {
+                    state.controller.setDirection(stepDir);
+                }
+
                 if (t >= 1) {
                     state.visualX = state.toX;
                     state.visualY = state.toY;
@@ -140,8 +182,6 @@ export class RemotePlayerSpriteManager {
         player: PlayerSnapshot,
         nowMs: number
     ): void {
-        state.controller.setDirection(protocolDirectionToSprite(player.direction));
-
         const targetWorldX = player.tileX * TILE_SIZE;
         const targetWorldY = player.tileY * TILE_SIZE;
         const tileChanged =
@@ -163,6 +203,8 @@ export class RemotePlayerSpriteManager {
                 const ty = Math.round(state.toY / TILE_SIZE);
                 const isDiagConfirm = Math.abs(tx - ox) === 1 && Math.abs(ty - oy) === 1;
                 state.moveDurationMs = clampStepDuration(fromServer, isDiagConfirm);
+            } else if (!state.moving && nowMs >= state.idleAfterMs) {
+                state.controller.setDirection(protocolDirectionToSprite(player.direction));
             }
             return;
         }
@@ -184,6 +226,14 @@ export class RemotePlayerSpriteManager {
             if (fromServer !== undefined) {
                 state.moveDurationMs = clampStepDuration(fromServer, isDiagonal);
             }
+            applyRemoteFacing(
+                state,
+                state.fromX,
+                state.fromY,
+                state.toX,
+                state.toY,
+                player.direction
+            );
             return;
         }
 
@@ -192,8 +242,11 @@ export class RemotePlayerSpriteManager {
                 ? clampStepDuration(fromServer, isDiagonal)
                 : this.estimateStepDuration(state, nowMs, isDiagonal);
 
-        state.fromX = state.visualX;
-        state.fromY = state.visualY;
+        const fromX = state.visualX;
+        const fromY = state.visualY;
+
+        state.fromX = fromX;
+        state.fromY = fromY;
         state.toX = targetWorldX;
         state.toY = targetWorldY;
         state.tileX = player.tileX;
@@ -204,6 +257,15 @@ export class RemotePlayerSpriteManager {
         state.lastMovePacketAt = nowMs;
         state.idleAfterMs = nowMs + duration + REMOTE_IDLE_GRACE_MS;
         state.moving = true;
+
+        applyRemoteFacing(
+            state,
+            fromX,
+            fromY,
+            targetWorldX,
+            targetWorldY,
+            player.direction
+        );
     }
 
     private createState(
