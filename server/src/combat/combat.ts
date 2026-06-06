@@ -1,6 +1,6 @@
-import { VocationId } from '../../../shared/types/character';
-import { calculateStatsForLevel, VocationConfig } from '../../../src/engine/character/calculateStats';
-import { calculateMeleeDamage, calculateDistanceDamage, calculateMagicDamage } from '../../../src/engine/combat/calculateDamage';
+import { VocationId } from '../../../shared/types/character.js';
+import { calculateStatsForLevel, VocationConfig } from '../../../src/engine/character/calculateStats.js';
+import { calculateMeleeDamage, calculateDistanceDamage, calculateMagicDamage } from '../../../src/engine/combat/calculateDamage.js';
 
 export interface CombatTarget {
   id: string;

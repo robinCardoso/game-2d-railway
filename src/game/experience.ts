@@ -1,7 +1,7 @@
 import {
     getExpForLevel,
     getLevelFromExp,
-} from '../engine/character/calculateStats';
+} from '../engine/character/calculateStats.js';
 
 export interface CharacterProgress {
     experience: number;

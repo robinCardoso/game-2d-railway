@@ -16,7 +16,10 @@ export function getPool(): pg.Pool {
     if (!pool) {
         pool = new Pool({
             connectionString: env.databaseUrl,
-            ssl: env.databaseSsl ? { rejectUnauthorized: false } : undefined,
+            ssl:
+                env.databaseSsl || /railway\.(app|internal)/i.test(env.databaseUrl)
+                    ? { rejectUnauthorized: false }
+                    : undefined,
         });
     }
     return pool;

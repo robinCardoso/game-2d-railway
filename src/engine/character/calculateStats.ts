@@ -1,4 +1,4 @@
-import { CharacterStats } from '../../../shared/types/character';
+import { CharacterStats } from '../../../shared/types/character.js';
 
 export interface VocationConfig {
   readonly name: string;
