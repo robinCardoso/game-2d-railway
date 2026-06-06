@@ -11,15 +11,15 @@ import {
 const TILE_SIZE = ENGINE_CONFIG.TILE_SIZE;
 
 /** Fallback quando ainda não há histórico de pacotes. */
-const REMOTE_STEP_DURATION_MS = 240;
-const MIN_REMOTE_STEP_MS = 160;
-const MAX_REMOTE_STEP_MS = 320;
+const REMOTE_STEP_DURATION_MS = 180;
+const MIN_REMOTE_STEP_MS = 120;
+const MAX_REMOTE_STEP_MS = 260;
 /** Compensa latência de rede sobre o intervalo medido entre `player_moved`. */
-const REMOTE_SMOOTHING_EXTRA_MS = 40;
+const REMOTE_SMOOTHING_EXTRA_MS = 20;
 /** Mantém walk após chegar no tile, esperando o próximo passo (evita “anda → trava”). */
-const REMOTE_IDLE_GRACE_MS = 120;
+const REMOTE_IDLE_GRACE_MS = 80;
 /** Máximo com diagonal (√2 × MAX_REMOTE_STEP_MS). */
-const MAX_REMOTE_STEP_WITH_DIAG_MS = 600;
+const MAX_REMOTE_STEP_WITH_DIAG_MS = 300;
 
 function clamp(v: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, v));
