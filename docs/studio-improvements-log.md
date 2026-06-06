@@ -56,6 +56,9 @@ Documento de referência para humanos e agentes IA. **Atualizar este arquivo** q
 | **Roadmap de Expansão** | Sem documentação de requisitos para lojas de apps | [docs/playstore-steam-roadmap.md](./playstore-steam-roadmap.md) detalhando Tauri, Capacitor, D-Pad, WS reconect e checklist |
 | **Âncora de mapa na UI** | Falta de inputs para `anchorX` e `anchorY` no painel Criar Sprites | Adicionados inputs na UI; sync com calibrador, load e save no servidor |
 | **Definição de textos/canvas** | Textos entupidos pelo outline grosso e canvas com blur de subpixel | Fonte ajustada para Tahoma/Arial, contorno 2.0; resize() arredonda pixels e fixa estilo |
+| **Árvores no chão (regressão)** | `target_ring.png` em `tiles/effects/` entrou no registry + double-remap corrompeu células com `ref` | Exclusão `effects/`/`characters/`; `resolvedSparseTileRefs`; padronização em `docs/asset-taxonomy.md` |
+| **Padronização tiles/mapas** | IDs numéricos instáveis; layers sem resolve unificado; save sem validação | `shouldRegisterTilePath` sync+async; layers usam `resolveTilesByFloor`; `validateMapDocument`; `npm test` |
+| **Banner level up no login** | `progress_sync` pós-WS com ticket dev sem XP fazia `leveledUp: true` (1→3) | `playSessionLevel` + `shouldCelebrateSessionLevelUp`; sync servidor silencioso; ticket dev com level/exp |
 
 
 

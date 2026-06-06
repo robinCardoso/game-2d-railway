@@ -1,5 +1,6 @@
 import { ENGINE_CONFIG } from './config';
 import type { MapDocument, MapTileEntry, TileRegistry } from './types';
+import { resolveTilesByFloor } from './tileRefResolver';
 import { collectSparseTiles, sparseTilesToWorldMap } from './worldMap';
 
 /** Grade paralela de ids por andar (`-1` = vazio). */
@@ -132,15 +133,15 @@ export function deserializeLayerMaps(
     let borderTiles = doc.layers?.border;
     let itemsTiles = doc.layers?.items;
 
-    if (tileRegistry && doc.tileRefs) {
+    if (tileRegistry) {
         if (grassTiles) {
-            grassTiles = resolveLayerTilesByFloor(grassTiles, doc.tileRefs, tileRegistry);
+            grassTiles = resolveTilesByFloor(grassTiles, doc.tileRefs, tileRegistry);
         }
         if (borderTiles) {
-            borderTiles = resolveLayerTilesByFloor(borderTiles, doc.tileRefs, tileRegistry);
+            borderTiles = resolveTilesByFloor(borderTiles, doc.tileRefs, tileRegistry);
         }
         if (itemsTiles) {
-            itemsTiles = resolveLayerTilesByFloor(itemsTiles, doc.tileRefs, tileRegistry);
+            itemsTiles = resolveTilesByFloor(itemsTiles, doc.tileRefs, tileRegistry);
         }
     }
 
@@ -149,33 +150,4 @@ export function deserializeLayerMaps(
         border: layerFromTilesByFloor(borderTiles, size, emptyId),
         items: layerFromTilesByFloor(itemsTiles, size, emptyId),
     };
-}
-
-function resolveLayerTilesByFloor(
-    tilesByFloor: Record<string, MapTileEntry[]>,
-    tileRefs: MapDocument['tileRefs'],
-    registry: TileRegistry
-): Record<string, MapTileEntry[]> {
-    const out: Record<string, MapTileEntry[]> = {};
-    for (const [zKey, entries] of Object.entries(tilesByFloor)) {
-        out[zKey] = entries.map((entry) => {
-            if (entry.ref && registry) {
-                for (const tile of Object.values(registry)) {
-                    if (tile.fileKey === entry.ref || `${tile.fileKey}` === entry.ref) {
-                        return { ...entry, id: tile.id };
-                    }
-                }
-            }
-            const refEntry = tileRefs?.[String(entry.id)];
-            if (refEntry?.ref) {
-                for (const tile of Object.values(registry)) {
-                    if (tile.fileKey === refEntry.ref) {
-                        return { ...entry, id: tile.id, ref: refEntry.ref };
-                    }
-                }
-            }
-            return entry;
-        });
-    }
-    return out;
 }

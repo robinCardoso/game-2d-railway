@@ -4,6 +4,7 @@ import { mergeCustomTileProperties } from './functions/tileConfig';
 import { AccountType, getRolePermissions } from './functions/roles';
 import { apiFetch } from './shared/apiFetch';
 import { toast, popup } from './utils/popup';
+import { validateMapDocument } from './engine/mapDocumentValidation';
 import { saveMapDocumentToDevPublic, saveTileCatalogToDevPublic } from './utils/mapDevSave';
 import {
     captureOverworldReturnIfNeeded,
@@ -692,9 +693,9 @@ window.addEventListener(ITEM_CATALOG_UPDATED, () => {
 });
 
 window.addEventListener(VOCATIONS_UPDATED_EVENT, (event) => {
-    const detail = (event as CustomEvent<{ vocations: VocationsMap }>).detail;
-    if (detail?.vocations) {
-        applyRuntimeVocations(detail.vocations);
+    const { vocations } = (event as CustomEvent<{ vocations: VocationsMap }>).detail ?? {};
+    if (vocations) {
+        applyRuntimeVocations(vocations);
     }
 });
 
@@ -2122,11 +2123,18 @@ async function saveCurrentMapToPublicDev(filename?: string) {
     }
 
     const doc = buildCurrentMapDocument();
-    const result = await saveMapDocumentToDevPublic(file, doc);
+    const result = await saveMapDocumentToDevPublic(file, doc, { registry: TILE_TYPES });
     if (result.ok) {
         writeStudioLastMapId(entry.id);
         void saveTileCatalogToDevPublic(TILE_TYPES);
-        toast.success(`Mapa "${entry.name}" salvo em ${result.path}. Ao atualizar, o studio reabre este mapa.`);
+        const validation = validateMapDocument(doc, TILE_TYPES);
+        if (validation.warnings.length > 0) {
+            toast.info(
+                `Mapa salvo com ${validation.warnings.length} aviso(s) de ref — veja o console.`
+            );
+        } else {
+            toast.success(`Mapa "${entry.name}" salvo em ${result.path}. Ao atualizar, o studio reabre este mapa.`);
+        }
         console.log(`[Map Dev Save] ${result.path} (mapId=${entry.id})`);
     } else {
         toast.error(result.error);

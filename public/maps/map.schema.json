@@ -58,7 +58,7 @@
           "id": { "type": "integer" },
           "name": { "type": "string" },
           "ref": { "type": "string", "description": "Chave estável do PNG (fileKey)." },
-          "category": { "enum": ["ground", "nature", "walls", "items"] },
+          "category": { "enum": ["ground", "nature", "walls", "items", "border"] },
           "variantGroup": { "type": "string" },
           "variantIndex": { "type": "integer", "minimum": 0 },
           "walkable": { "type": "boolean" }

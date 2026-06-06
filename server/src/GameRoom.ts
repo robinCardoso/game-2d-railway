@@ -744,7 +744,6 @@ export class GameRoom {
         const clientExp = Math.max(0, Math.floor(msg.experience));
         if (clientExp <= player.experience) return;
 
-        const prevLevel = player.level;
         player.experience = clientExp;
         player.level = getLevelFromExp(clientExp);
 
@@ -754,7 +753,7 @@ export class GameRoom {
             playerId: player.id,
             level: player.level,
             experience: player.experience,
-            leveledUp: player.level > prevLevel,
+            leveledUp: false,
         });
     }
 

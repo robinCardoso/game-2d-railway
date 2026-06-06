@@ -11,7 +11,7 @@ Referência detalhada: `docs/studio-improvements-log.md`, `docs/auto-border.md`,
 
 - **Tile visual:** `ENGINE_CONFIG.TILE_SIZE = 32` (`src/engine/config.ts`). Não usar `64` como padrão em HTML/forms.
 - **PNG de mapa:** `tiles/maps/**/*.png` — única pasta escaneada por `GET /api/list-map-sprites`.
-- **Paleta (Tileset):** glob Vite `tiles/**/*.png` via `buildTileRegistryAsync()` — inclui mapas + escadas, etc.
+- **Paleta (Tileset):** glob Vite `tiles/**/*.png` via `buildTileRegistryAsync()` — **exclui** `characters/` e `effects/` (`shouldRegisterTilePath`).
 - **Metadados:** `tiles/tile_properties.json` — chave = **nome do arquivo sem `.png`** (ex. `01_grama`, não `01_grama_randon`).
 - **Grupos 🎲:** `public/tile_variant_groups.json` + campo `variantGroup` em `tile_properties.json`.
 
@@ -21,6 +21,18 @@ Referência detalhada: `docs/studio-improvements-log.md`, `docs/auto-border.md`,
 2. **Variant strips:** detectar com `inferVariantStripFrameCount()` após imagem carregada (largura = N × TILE_SIZE).
 3. **Fail-safe `variantGroup`:** strips `*_variants` / `*_var_variants` sem grupo → inferir em `inferVariantGroupForStrip()` (`grass`, `stone`, etc.).
 4. **fileKey:** strip → `nome#0`…`nome#N-1`; tile único → `nome`.
+5. **Exclusões (NÃO REGREDIR):** `shouldRegisterTilePath()` = path filter (`characters/`, `effects/`) + `shouldSkipTilePath()` (`border_sheet`, `assetType: effect|character`). Sync **e** async usam o mesmo filtro.
+6. **FX/UI:** PNGs em `tiles/effects/**` carregados à parte (fetch) — **nunca** no registry de mapa.
+
+## Assets fora do registry — NÃO REGREDIR
+
+| Pasta | Entra no registry? |
+|-------|-------------------|
+| `tiles/maps/**` | Sim |
+| `tiles/effects/**` | Não (combate, UI) |
+| `tiles/characters/**` | Não (outfits/NPCs) |
+
+Taxonomia de pastas e metadados: `docs/asset-taxonomy.md`.
 
 ## Random vs mapa salvo — NÃO CONFUNDIR
 
@@ -33,9 +45,12 @@ Referência detalhada: `docs/studio-improvements-log.md`, `docs/auto-border.md`,
 
 1. **Bootstrap:** `bootstrapApp()` deve `await tileRegistryReady` antes de `transitionToMap` / `loadMapFile`.
 2. **Resolução por ref:** `loadMapFromJson(raw, spawn, tileRegistry)` → `tileRefResolver.ts` mapeia `ref` / `tileRefs` → id atual do registry.
-3. **Prioridade:** ref da célula → ref em `tileRefs[id]` → id se existir no registry (sem fallback silencioso quando ref explícita falha).
-4. **Reload de registry:** após `reloadTileRegistry()`, remapear `worldMap` via snapshot serializado com refs (`serializeMapDocument` + `loadMapFromJson`).
-5. **`sanitizeTilesByFloor`:** preservar campo `ref` nas células ao importar.
+3. **Prioridade:** ref da célula → ref em `tileRefs[id]` → id se ainda existir no registry (sem fallback silencioso quando ref explícita falha).
+4. **Anti double-remap:** após `resolveTilesByFloor` no sparse `tiles`, **não** chamar `remapWorldMapTileIds` (`resolvedSparseTileRefs` em `worldMap.ts`).
+5. **Layers:** grass/border/items usam `resolveTilesByFloor` (mesmo contrato que `tiles`); não exigir `tileRefs` se célula já tem `ref`.
+6. **Reload de registry:** após `reloadTileRegistry()`, remapear `worldMap` via snapshot serializado com refs (`serializeMapDocument` + `loadMapFromJson`).
+7. **`sanitizeTilesByFloor`:** preservar campo `ref` nas células ao importar.
+8. **Save:** `validateMapDocument()` — bloqueia pincel 9000+; avisa células sem `ref`.
 
 ## Calibrador de mapa (`characterCalibratorModal.ts`)
 
@@ -111,3 +126,5 @@ Em `npm run dev`, o Vite faz **proxy** de `/api/*` para o Express (`:8787`). Imp
 - [ ] Save ainda inclui `layers` quando grass/border não vazios?
 - [ ] Draw ainda usa cache de bordas + viewport culling (não loop 256×256)?
 - [ ] Recalc de borda ainda defer + flush no mouseup?
+- [ ] `effects/` e `characters/` ainda excluídos do registry?
+- [ ] Load sparse `tiles` ainda pula segundo `remapWorldMapTileIds`?

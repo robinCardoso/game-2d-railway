@@ -15,6 +15,8 @@ export interface EnterTicketPayload {
     z: number;
     direction: 'north' | 'south' | 'east' | 'west';
     appearance?: PlayerAppearance;
+    level?: number;
+    experience?: number;
     exp: number;
 }
 
@@ -44,6 +46,8 @@ export interface CreateEnterTicketOptions {
     z?: number;
     direction?: 'north' | 'south' | 'east' | 'west';
     appearance?: PlayerAppearance;
+    level?: number;
+    experience?: number;
     ttlMs?: number;
 }
 
@@ -63,6 +67,8 @@ export async function createEnterTicket(
         z: options.z ?? 0,
         direction: options.direction ?? 'south',
         appearance: options.appearance,
+        level: Math.max(1, Math.floor(options.level ?? 1)),
+        experience: Math.max(0, Math.floor(options.experience ?? 0)),
         exp: Date.now() + (options.ttlMs ?? 120_000),
     };
     const body = base64UrlEncode(JSON.stringify(payload));

@@ -17,9 +17,16 @@ export function resolvePaletteCategory(
     if (
         folder.includes('wall') ||
         pathLower.includes('/walls/') ||
-        pathLower.includes('stone_wall')
+        pathLower.includes('stone_wall') ||
+        pathLower.includes('/mountains/cliff')
     ) {
         return 'walls';
+    }
+    if (pathLower.includes('/mountains/decor')) {
+        return 'nature';
+    }
+    if (pathLower.includes('/mountains/floor')) {
+        return 'ground';
     }
     if (
         folder === 'nature' ||
@@ -61,8 +68,15 @@ function isEffectsTilePath(path: string): boolean {
     return pathNorm.includes('/effects/');
 }
 
-function isExcludedFromTileRegistry(path: string): boolean {
+/** Paths que nunca entram no registry de mapa (personagens, FX). */
+export function isExcludedFromTileRegistry(path: string): boolean {
     return isCharacterTilePath(path) || isEffectsTilePath(path);
+}
+
+/** Filtro unificado sync + async: exclusão de path + metadados em tile_properties. */
+export function shouldRegisterTilePath(path: string, fileName: string): boolean {
+    if (isExcludedFromTileRegistry(path)) return false;
+    return !shouldSkipTilePath(path, fileName);
 }
 
 /** Lê tile_properties.json em runtime (dev server) para pegar strip recém-salvo. */
@@ -99,9 +113,7 @@ export interface VariantStripMismatch {
 const variantStripMismatches: VariantStripMismatch[] = [];
 
 export function takeVariantStripMismatches(): VariantStripMismatch[] {
-    const out = [...variantStripMismatches];
-    variantStripMismatches.length = 0;
-    return out;
+    return variantStripMismatches.splice(0);
 }
 
 /** Detecta strip horizontal N×TILE_SIZE a partir da largura do PNG (metadados só se baterem). */
@@ -119,12 +131,11 @@ export function inferVariantStripFrameCount(
         return explicit;
     }
 
-    const fromImage =
-        h === tileSize && w > tileSize && w % tileSize === 0
-            ? Math.floor(w / tileSize)
-            : 0;
+    if (h === tileSize && w > tileSize && w % tileSize === 0) {
+        return Math.floor(w / tileSize);
+    }
 
-    return fromImage;
+    return 0;
 }
 
 type NextIdAllocator = { next: number; take(): number };
@@ -373,7 +384,7 @@ function registerTileFromPath(
     const parts = path.split('/');
     const fileName = parts.pop()!.replace('.png', '');
 
-    if (shouldSkipTilePath(path, fileName)) {
+    if (!shouldRegisterTilePath(path, fileName)) {
         return Promise.resolve();
     }
 
@@ -411,7 +422,10 @@ export async function buildTileRegistryAsync(options?: { bustImageCache?: boolea
     const ids = createNextIdAllocator(7);
     const tileImagesRaw = getTileImageGlob();
     const paths = Object.keys(tileImagesRaw)
-        .filter((path) => !isExcludedFromTileRegistry(path))
+        .filter((path) => {
+            const fileName = path.split('/').pop()!.replace('.png', '');
+            return shouldRegisterTilePath(path, fileName);
+        })
         .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 
     const imageByPath = new Map<string, HTMLImageElement>();
@@ -438,7 +452,10 @@ export function buildTileRegistry(): TileRegistry {
     const ids = createNextIdAllocator(7);
     const tileImagesRaw = getTileImageGlob();
     const paths = Object.keys(tileImagesRaw)
-        .filter((path) => !isExcludedFromTileRegistry(path))
+        .filter((path) => {
+            const fileName = path.split('/').pop()!.replace('.png', '');
+            return shouldRegisterTilePath(path, fileName);
+        })
         .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 
     for (const path of paths) {

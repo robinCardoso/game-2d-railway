@@ -67,6 +67,7 @@ import { updateCharacterLocation, updateCharacterProgress } from '../shared/char
 import { fetchWsTicket, isServerWsTicketEnabled } from '../shared/wsTicketClient';
 import { updateCharacterStatsUi } from './ui/characterStatsUi';
 import { normalizeCharacterProgress } from './experience';
+import { shouldCelebrateSessionLevelUp } from './playProgress';
 import { getPlayBorderConfig, loadPlayBorderConfig } from './playBorderConfig';
 import { resetPlayCombatInput, tickPlayCombat, getPlayCombatHoverId, getPlayCombatTargetId, updatePlayCombatHover, handlePlayCombatTargetClick, clearPlayCombatTarget, type PlayCombatServerBridge } from './playCombat';
 import { ensureCombatTargetRingLoaded } from './combatTargetRing';
@@ -328,6 +329,8 @@ async function resolveEnterTicket(char: CharacterRow, accountId: string): Promis
         z: char.position?.z ?? player.worldZ,
         direction: char.direction ?? 'south',
         appearance: appearanceFromCharacter(char),
+        level: char.level ?? 1,
+        experience: char.experience ?? 0,
     });
 }
 
@@ -457,6 +460,25 @@ function faceTowardEntity(target: GameEntity): void {
 
 let pendingProgressSave: { level: number; experience: number } | null = null;
 let progressSaveTimerId: number | null = null;
+/** Level conhecido nesta sessão — banner só quando sobe acima deste valor. */
+let playSessionLevel = 1;
+
+function applyPlayProgressUpdate(level: number, experience: number): void {
+    if (!activeCharacter) return;
+
+    const leveledUp = shouldCelebrateSessionLevelUp(playSessionLevel, level);
+
+    activeCharacter.experience = experience;
+    activeCharacter.level = level;
+    characterSpeed.level = level;
+    playSessionLevel = level;
+
+    updateCharacterStatsUi(activeCharacter, { flashLevel: leveledUp });
+    if (leveledUp) {
+        refreshPlayerMovementSpeed(performance.now());
+    }
+    scheduleProgressSave(leveledUp);
+}
 
 function scheduleProgressSave(immediate = false): void {
     if (!activeCharacter) return;
@@ -721,12 +743,8 @@ function update(): void {
                 onMonsterKilled: (target, xpReward) => {
                     target.speak(`+${xpReward} XP`, 1800);
                 },
-                onProgressUpdated: ({ leveledUp }) => {
-                    updateCharacterStatsUi(activeCharacter!, { flashLevel: leveledUp });
-                    if (leveledUp) {
-                        refreshPlayerMovementSpeed(nowMs);
-                    }
-                    scheduleProgressSave(leveledUp);
+                onProgressUpdated: ({ experience, level }) => {
+                    applyPlayProgressUpdate(level, experience);
                 },
             },
         });
@@ -1121,15 +1139,7 @@ function setupNetwork(char: CharacterRow, accountId: string): void {
             serverCreatures.applyRespawned(msg);
         },
         onPlayerProgress: (msg) => {
-            if (!activeCharacter) return;
-            activeCharacter.experience = msg.experience;
-            activeCharacter.level = msg.level;
-            characterSpeed.level = msg.level;
-            updateCharacterStatsUi(activeCharacter, { flashLevel: Boolean(msg.leveledUp) });
-            if (msg.leveledUp) {
-                refreshPlayerMovementSpeed(performance.now());
-            }
-            scheduleProgressSave(Boolean(msg.leveledUp));
+            applyPlayProgressUpdate(msg.level, msg.experience);
         },
     });
 
@@ -1149,6 +1159,7 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
     character.experience = progress.experience;
     character.level = progress.level;
     characterSpeed.level = progress.level;
+    playSessionLevel = progress.level;
 
     if (playCharNameEl) playCharNameEl.textContent = character.name;
     updateCharacterStatsUi(character);

@@ -4,6 +4,7 @@
 
 import { apiFetch } from '../shared/apiFetch';
 import { buildFullTileCatalog } from '../engine/tileCatalog';
+import { validateMapDocument } from '../engine/mapDocumentValidation';
 import { formatMapDocumentJson } from '../engine/mapDocumentFormat';
 import type { MapDocument, TileRegistry } from '../engine/types';
 
@@ -27,11 +28,28 @@ export const isMapDevSaveAvailable = isMapSaveAvailable;
 
 export async function saveMapDocumentToDevPublic(
     filename: string,
-    document: MapDocument
+    document: MapDocument,
+    options?: { registry?: TileRegistry; blockOnValidationErrors?: boolean }
 ): Promise<{ ok: true; path: string } | { ok: false; error: string }> {
     const safeName = sanitizeMapJsonFilename(filename);
     if (!safeName) {
         return { ok: false, error: 'Nome de arquivo inválido. Use apenas a-z, 0-9, _ e -.' };
+    }
+
+    const validation = validateMapDocument(document, options?.registry);
+    for (const warning of validation.warnings) {
+        console.warn(`[MapSave] ${warning}`);
+    }
+    if (validation.errors.length > 0) {
+        for (const err of validation.errors) {
+            console.error(`[MapSave] ${err}`);
+        }
+        if (options?.blockOnValidationErrors !== false) {
+            return {
+                ok: false,
+                error: validation.errors[0] ?? 'Mapa inválido para salvar.',
+            };
+        }
     }
 
     try {

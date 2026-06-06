@@ -185,6 +185,50 @@ Estrutura resumida:
 
 Strip detectado quando largura PNG = `N × tileSize` ou `variantStripFrames` em `tile_properties.json`.
 
+---
+
+## Taxonomia de assets e anti-regressão
+
+Referência completa: [`docs/asset-taxonomy.md`](asset-taxonomy.md).
+
+### O que entra no tile registry
+
+| Pasta | Registry |
+|-------|----------|
+| `tiles/maps/**` | Sim |
+| `tiles/effects/**` | Não — FX carregados via fetch |
+| `tiles/characters/**` | Não — outfits/NPCs |
+
+Filtro: `shouldRegisterTilePath()` em `src/engine/tileRegistry.ts`.
+
+### Categorias (`paletteCategory` / `category`)
+
+| Categoria | Camada ao pintar | Exemplos futuros |
+|-----------|------------------|------------------|
+| `ground` | `worldMap` (base) | pedra, piso de montanha |
+| `nature` | `layers.items` (Y-sort) | árvores, arbustos |
+| `walls` | `layers.items` (Y-sort) | muros, cliff de montanha |
+| `items` | `layers.items` (Y-sort) | decoração pequena |
+| `border` | auto-borda / `layers.border` | máscaras `terra_edges_*` |
+
+Montanhas: piso em `tiles/maps/mountains/floor/` (`ground`); rochas altas em `mountains/cliff/` ou `walls/` (`walls`, `tileRole: neutral`).
+
+### Validação no save
+
+`validateMapDocument()` (`src/engine/mapDocumentValidation.ts`):
+
+- **Erro (bloqueia save):** célula com id de pincel aleatório (9000–9999)
+- **Aviso (console):** célula sem `ref`; `ref` ausente no registry
+
+### Checklist ao adicionar PNG
+
+1. Salvar em `tiles/maps/<categoria>/`
+2. Metadados em `tile_properties.json` (`paletteCategory`, `assetType`, `walkable`)
+3. Recarregar tiles no Studio ou F5 no Play
+4. Re-salvar mapas (gera `ref` + `tileRefs`)
+5. `npm test`
+
+---
 ### Sprites maiores que o tile (âncora)
 
 A célula lógica continua **32×32** (`ENGINE_CONFIG.TILE_SIZE`). Sprites com `frameWidth` / `frameHeight` maiores (ex. árvore 64×64) podem transbordar visualmente; o ponto de referência é o **centro inferior** da célula pintada (mesmo modelo dos personagens).

@@ -15,6 +15,7 @@ Este repositório é um **Studio 2D estilo Tibia** (editor + engine). Leia isto 
 | [docs/studio-improvements-log.md](docs/studio-improvements-log.md) | Log de melhorias + checklist de regressão |
 | [docs/auto-border.md](docs/auto-border.md) | Auto-borda grass_edges, camadas, performance |
 | [docs/map-format.md](docs/map-format.md) | Formato `MapDocument`, `ref`, tileRefs, `layers` |
+| [docs/asset-taxonomy.md](docs/asset-taxonomy.md) | Pastas de tiles, metadados, paredes/montanhas, anti-regressão |
 | [docs/sprite-exporter-walkthrough.md](docs/sprite-exporter-walkthrough.md) | Calibrador, export, exclusão |
 | [docs/architecture.md](docs/architecture.md) | Camadas engine / editor |
 | [docs/ui-menus.md](docs/ui-menus.md) | IDs de UI estáveis |
@@ -27,13 +28,15 @@ Este repositório é um **Studio 2D estilo Tibia** (editor + engine). Leia isto 
 
 1. `ENGINE_CONFIG.TILE_SIZE = 32`
 2. `buildTileRegistryAsync()` antes de carregar mapas
-3. `ref` estável no JSON; `tileRefResolver.ts` no load
-4. Random (`🎲`) **só** em `resolvePaintTileId` — nunca no `draw()`
-5. Strips `*_variants` inferem `variantGroup` se ausente
-6. Exclusão de sprite: `sprite-usage` → `delete-map-sprite` (dev only)
-7. **Save mapa:** `formatMapDocumentJson` inclui `layers.grass` / `layers.border` quando não vazios
-8. **Auto-borda:** grama no overlay; filete na célula de chão vizinha; `collectBorderDrawTileIdsCached` no draw (não recalcular vizinhos todo frame)
-9. **Performance Studio:** viewport culling em `draw()`; cache invalida em load/undo/recalc; Play sempre 60 FPS
+3. `ref` estável no JSON; `tileRefResolver.ts` no load — **obrigatório em mapas salvos**
+4. PNGs em `tiles/effects/**` e `tiles/characters/**` **não** entram no tile registry
+5. Random (`🎲`) **só** em `resolvePaintTileId` — nunca no `draw()`
+6. Strips `*_variants` inferem `variantGroup` se ausente
+7. Exclusão de sprite: `sprite-usage` → `delete-map-sprite` (dev only)
+8. **Save mapa:** `formatMapDocumentJson` inclui `layers.grass` / `layers.border` quando não vazios; `validateMapDocument` bloqueia brush 9000+
+9. **Auto-borda:** grama no overlay; filete na célula de chão vizinha; `collectBorderDrawTileIdsCached` no draw (não recalcular vizinhos todo frame)
+10. **Performance Studio:** viewport culling em `draw()`; cache invalida em load/undo/recalc; Play sempre 60 FPS
+11. **Testes:** `npm test` — ref priority, exclusão effects/, anti double-remap
 
 ## Ao implementar melhorias nesta área
 
@@ -48,6 +51,7 @@ Este repositório é um **Studio 2D estilo Tibia** (editor + engine). Leia isto 
 npm run dev         # Vite :5173 + servidor :8787 (APIs unificadas via proxy)
 npm run dev:web     # só frontend (sem APIs)
 npm run dev:server  # só Express
+npm test            # vitest — tile ref / registry
 ```
 
 Reiniciar `npm run dev` após mudanças em `server/src/studio/` ou rotas `/api/*`.

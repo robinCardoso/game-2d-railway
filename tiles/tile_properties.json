@@ -231,5 +231,44 @@
     "anchorX": -20,
     "anchorY": -5,
     "sheetLayout": "horizontal"
+  },
+  "01_stone_wall": {
+    "walkable": false,
+    "speedModifier": 1,
+    "isStair": false,
+    "nameOverride": "01-stone-wall",
+    "assetType": "terrain",
+    "paletteCategory": "walls",
+    "tileRole": "neutral",
+    "frameWidth": 32,
+    "frameHeight": 64,
+    "anchorX": 0,
+    "anchorY": -16,
+    "sheetLayout": "horizontal"
+  },
+  "01_mountain_floor": {
+    "walkable": true,
+    "speedModifier": 1,
+    "isStair": false,
+    "nameOverride": "01-mountain-floor",
+    "assetType": "terrain",
+    "paletteCategory": "ground",
+    "tileRole": "fill",
+    "variantGroup": "mountain-floor",
+    "sheetLayout": "horizontal"
+  },
+  "01_mountain_cliff": {
+    "walkable": false,
+    "speedModifier": 1,
+    "isStair": false,
+    "nameOverride": "01-mountain-cliff",
+    "assetType": "terrain",
+    "paletteCategory": "walls",
+    "tileRole": "neutral",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "anchorX": -16,
+    "anchorY": -8,
+    "sheetLayout": "horizontal"
   }
 }
