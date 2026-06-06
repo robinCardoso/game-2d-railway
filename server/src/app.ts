@@ -108,7 +108,18 @@ export function createApp(getOnline?: () => number): Express {
         serveDataFile('/outfit_presets.json', paths.outfitPresetsPath);
         serveDataFile('/item_catalog.json', paths.itemCatalogPath);
         serveDataFile('/tile_variant_groups.json', paths.tileVariantGroupsPath);
+        serveDataFile('/vocations.json', paths.vocationsJsonPath);
     }
+
+    app.get('/vocations.json', (_req, res, next) => {
+        if (fs.existsSync(paths.vocationsJsonPath)) {
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.sendFile(paths.vocationsJsonPath);
+            return;
+        }
+        next();
+    });
 
     if (fs.existsSync(paths.distDir)) {
         app.use(express.static(paths.distDir, { index: 'index.html' }));

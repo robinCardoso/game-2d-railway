@@ -5,6 +5,7 @@ import {
     isDefaultVocationId,
     type VocationsMap,
 } from '../game-data/vocationUi';
+import { applyRuntimeVocations } from '../game-data/vocationRegistry';
 import { apiFetch } from '../shared/apiFetch';
 import { toast, popup } from '../utils/popup';
 
@@ -175,6 +176,7 @@ async function saveToServer(selectIdAfter: string | null): Promise<void> {
             vocations = result.vocations;
         }
 
+        applyRuntimeVocations(vocations);
         dispatchVocationsUpdated(vocations);
 
         const playerVocationEl = document.getElementById('charPlayerVocation') as HTMLSelectElement | null;

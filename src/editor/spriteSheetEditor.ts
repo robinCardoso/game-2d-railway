@@ -3,12 +3,12 @@ import type { SpriteAnimationController } from '../character/spriteAnimation';
 import type { CharacterState, Direction } from '../character/spriteAnimation';
 import { resolveAnimationSourceRect } from '../character/sheetFrameLayout';
 import { openCharacterCalibrator } from './characterCalibratorModal';
-import { VOCATIONS } from '../game-data/default/vocations';
 import {
     fillVocationSelect,
     VOCATIONS_UPDATED_EVENT,
     type VocationsMap,
 } from '../game-data/vocationUi';
+import { getRuntimeVocations, loadRuntimeVocations } from '../game-data/vocationRegistry';
 import { apiFetch } from '../shared/apiFetch';
 import { toast, popup } from '../utils/popup';
 import { upscalePixelArtDataUrl } from '../utils/imageProcessor';
@@ -990,10 +990,10 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
         }
     });
 
-    function populateVocationDropdown(source: VocationsMap = VOCATIONS): void {
+    function populateVocationDropdown(source?: VocationsMap): void {
         const playerVocationEl = document.getElementById('charPlayerVocation') as HTMLSelectElement | null;
         if (!playerVocationEl) return;
-        fillVocationSelect(playerVocationEl, source);
+        fillVocationSelect(playerVocationEl, source ?? (getRuntimeVocations() as VocationsMap));
     }
 
     window.addEventListener(VOCATIONS_UPDATED_EVENT, (event) => {
@@ -1003,7 +1003,7 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
         }
     });
 
-    populateVocationDropdown();
+    void loadRuntimeVocations().then(() => populateVocationDropdown());
     applyProfileUi();
     return emptyHandle;
 }

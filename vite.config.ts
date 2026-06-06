@@ -82,6 +82,7 @@ export default defineConfig({
         proxy: {
             '/api': { target: API_TARGET, changeOrigin: true },
             '/health': { target: API_TARGET, changeOrigin: true },
+            '/vocations.json': { target: API_TARGET, changeOrigin: true },
         },
     },
 });

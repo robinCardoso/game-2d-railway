@@ -783,3 +783,29 @@ Sessão dedicada à resolução de problemas de usabilidade que causavam perda d
 - [ ] Play usa HP/defesa/XP/ataque do preset após reload
 - [ ] Loot salvo no JSON (drop in-game ainda N/A)
 
+---
+
+## 34. Correção arquitetural — vocações runtime + XP em produção (2026-06-06)
+
+### 34.1 Registry de vocações
+- **Arquivo:** `src/game-data/vocationRegistry.ts`
+- **Leitura:** `GET /vocations.json` (público; proxy Vite em dev)
+- **Fallback:** bundle `default/vocations.ts` se fetch falhar
+- **API:** `loadRuntimeVocations()`, `getVocationById()`, `applyRuntimeVocations()`
+- **Consumidores:** `playCombat.ts`, `characterStatsUi.ts`, `create.ts`, `spriteSheetEditor.ts`, Studio (`vocationEditorModal` + evento `game:vocations-updated`)
+
+### 34.2 Vocações no Volume Railway
+- **`paths.ts`:** com `DATA_ROOT`, `vocationsJsonPath` → `/data/vocations.json`
+- **Seed:** copia `src/game-data/default/vocations.json` na primeira subida do volume
+- **`save-vocations`:** grava JSON no volume; `vocations.ts` permanece legado dev/HMR
+
+### 34.3 XP/level em produção (WS ticket)
+- **`playApp.ts`:** `scheduleProgressSave` **não** bloqueia mais quando `isServerWsTicketEnabled()`
+- Posição continua autoritativa via WS; progresso salva via `PATCH /api/characters/:id/progress`
+
+### Checklist manual
+- [ ] Criar vocação custom no Studio → Play com personagem dessa vocação usa stats corretos (não knight)
+- [ ] `create.html` lista vocações após reload (fetch `/vocations.json`)
+- [ ] Railway: editar vocações sobrevive redeploy (volume)
+- [ ] Produção: matar mob → XP persiste após sair e reentrar no Play
+

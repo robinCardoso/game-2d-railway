@@ -29,6 +29,11 @@ import { initMobStatsEditor } from './editor/mobStatsEditorModal';
 import { initItemEditor } from './editor/itemEditorModal';
 import { CREATURE_PRESETS_UPDATED } from './game-data/creaturePresetUi';
 import { ITEM_CATALOG_UPDATED } from './game-data/itemCatalogUi';
+import {
+    applyRuntimeVocations,
+    loadRuntimeVocations,
+} from './game-data/vocationRegistry';
+import { VOCATIONS_UPDATED_EVENT, type VocationsMap } from './game-data/vocationUi';
 import { loadItemCatalog } from './game-data/itemCatalog';
 import {
     collectBorderDrawTileIdsCached,
@@ -665,6 +670,7 @@ function setupMovementDevControls(): void {
 }
 
 async function refreshCreatureCatalog(): Promise<void> {
+    await loadRuntimeVocations();
     await loadItemCatalog();
     await loadCreaturePresets();
     spawnEditorController?.refresh();
@@ -683,6 +689,13 @@ window.addEventListener(CREATURE_PRESETS_UPDATED, () => {
 
 window.addEventListener(ITEM_CATALOG_UPDATED, () => {
     void loadItemCatalog();
+});
+
+window.addEventListener(VOCATIONS_UPDATED_EVENT, (event) => {
+    const detail = (event as CustomEvent<{ vocations: VocationsMap }>).detail;
+    if (detail?.vocations) {
+        applyRuntimeVocations(detail.vocations);
+    }
 });
 
 function parseSpriteProfile(value: string | undefined): SpriteProfileId {

@@ -5,12 +5,12 @@ import { track } from '../shared/analytics';
 import type { Gender, VocationId } from '../../shared/types/character';
 import { loadOutfitPresets, filterOutfitsByVocationAndGender, findOutfitPreset, type OutfitPreset } from '../game-data/default/loadOutfitPresets';
 import { resolveAnimationSourceRect } from '../character/sheetFrameLayout';
-import { VOCATIONS } from '../game-data/default/vocations';
 import {
     fillVocationSelect,
     VOCATIONS_UPDATED_EVENT,
     type VocationsMap,
 } from '../game-data/vocationUi';
+import { getRuntimeVocations, loadRuntimeVocations } from '../game-data/vocationRegistry';
 
 const session = await requireAuth();
 const errEl = document.getElementById('createError') as HTMLElement;
@@ -206,12 +206,15 @@ function stopPreview(): void {
 
 // ---- Fim preview animado ----
 
-function populateVocationPresetSelect(source: VocationsMap = VOCATIONS): void {
+function populateVocationPresetSelect(source?: VocationsMap): void {
     if (!presetSelect) return;
-    fillVocationSelect(presetSelect, source, { includeKeyInLabel: true });
+    fillVocationSelect(presetSelect, source ?? (getRuntimeVocations() as VocationsMap), {
+        includeKeyInLabel: true,
+    });
 }
 
 async function init() {
+    await loadRuntimeVocations();
     populateVocationPresetSelect();
 
     window.addEventListener(VOCATIONS_UPDATED_EVENT, (event) => {

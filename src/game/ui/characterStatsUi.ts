@@ -1,5 +1,5 @@
 import { calculateStatsForLevel } from '../../engine/character/calculateStats';
-import { VOCATIONS } from '../../game-data/default/vocations';
+import { getVocationById } from '../../game-data/vocationRegistry';
 import { VocationId } from '../../../shared/types/character';
 import type { CharacterRow } from '../../shared/types';
 import { getExpProgress, normalizeCharacterProgress } from '../experience';
@@ -13,7 +13,7 @@ export function updateCharacterStatsUi(
   const level = progress.level;
   const experience = progress.experience;
 
-  const vocationConfig = VOCATIONS[vocationId] || VOCATIONS.knight;
+  const vocationConfig = getVocationById(vocationId);
   const stats = calculateStatsForLevel(vocationConfig, level);
   const expProgress = getExpProgress(experience, level);
 

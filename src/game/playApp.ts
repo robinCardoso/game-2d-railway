@@ -66,6 +66,7 @@ import { updateCharacterStatsUi } from './ui/characterStatsUi';
 import { getPlayBorderConfig, loadPlayBorderConfig } from './playBorderConfig';
 import { normalizeCharacterProgress } from './experience';
 import { resetPlayCombatInput, tickPlayCombat } from './playCombat';
+import { loadRuntimeVocations } from '../game-data/vocationRegistry';
 
 const TILE_SIZE_SCREEN = ENGINE_CONFIG.TILE_SIZE;
 let TILE_TYPES = buildTileRegistry();
@@ -332,7 +333,7 @@ let pendingProgressSave: { level: number; experience: number } | null = null;
 let progressSaveTimerId: number | null = null;
 
 function scheduleProgressSave(immediate = false): void {
-    if (isServerWsTicketEnabled() || !activeCharacter) return;
+    if (!activeCharacter) return;
     pendingProgressSave = {
         level: activeCharacter.level ?? 1,
         experience: activeCharacter.experience ?? 0,
@@ -872,6 +873,8 @@ function setupNetwork(char: CharacterRow, accountId: string): void {
 export async function startPlay(character: CharacterRow, accountId: string): Promise<void> {
     activeCharacter = character;
     resetPlayCombatInput();
+
+    await loadRuntimeVocations();
 
     const progress = normalizeCharacterProgress(character.experience, character.level);
     character.experience = progress.experience;

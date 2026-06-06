@@ -1,6 +1,6 @@
 import { calculateStatsForLevel } from '../engine/character/calculateStats';
 import { calculateMeleeDamage } from '../engine/combat/calculateDamage';
-import { VOCATIONS } from '../game-data/default/vocations';
+import { getVocationById } from '../game-data/vocationRegistry';
 import type { VocationId } from '../../shared/types/character';
 import type { GameEntity } from '../character/entity';
 import type { CharacterRow } from '../shared/types';
@@ -71,7 +71,7 @@ export function tickPlayCombat(options: {
     options.callbacks.faceToward(target);
 
     const vocationId = (options.character.vocation as VocationId) || 'knight';
-    const vocationConfig = VOCATIONS[vocationId] || VOCATIONS.knight;
+    const vocationConfig = getVocationById(vocationId);
     const level = options.characterSpeed.level || options.character.level || 1;
     const stats = calculateStatsForLevel(vocationConfig, level);
     const damageResult = calculateMeleeDamage(stats.melee, target.combatDefense);

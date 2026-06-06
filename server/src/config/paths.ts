@@ -95,6 +95,11 @@ function seedDataRoot(dataRoot: string): void {
     for (const file of publicFiles) {
         copyFileIfMissing(path.join(repoPublic, file), path.join(dataRoot, file));
     }
+
+    copyFileIfMissing(
+        path.join(projectRoot, 'src/game-data/default/vocations.json'),
+        path.join(dataRoot, 'vocations.json')
+    );
 }
 
 function buildPaths(): AppPaths {
@@ -124,7 +129,7 @@ function buildPaths(): AppPaths {
             tileVariantGroupsPath: path.join(env.dataRoot, 'tile_variant_groups.json'),
             gameConfigPath: path.join(projectRoot, 'game_config.json'),
             vocationsConfigPath: path.join(projectRoot, 'src/game-data/default/vocations.ts'),
-            vocationsJsonPath: path.join(projectRoot, 'src/game-data/default/vocations.json'),
+            vocationsJsonPath: path.join(env.dataRoot, 'vocations.json'),
         };
     }
 
