@@ -965,7 +965,11 @@ Sessão dedicada à resolução de problemas de usabilidade que causavam perda d
 
 ### 41.3 Protocolo WS
 - **`resync_request`** (C→S) — rate limit 2s no `GameRoom`
-- Resposta: `state_sync` + `creature_sync` + `player_progress` (HUD)
+- Resposta: `state_sync` + `creature_sync` + `position_correction` (tile local) + `player_progress` (HUD)
+
+### 41.4 Hardening alt-tab no meio do passo (pós-revisão GPT)
+- **`onHidden`:** `syncPositionIfChanged()` antes de limpar `stepping`; depois snap visual com `syncGridPlayerVisual`
+- **`handleResyncRequest`:** inclui `position_correction` para alinhar jogador local ao tile autoritativo
 
 ### Checklist manual
 - [ ] Railway: mob continua ativo com aba em background

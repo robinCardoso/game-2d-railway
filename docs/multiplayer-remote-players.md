@@ -130,7 +130,8 @@ Rodar após mudanças em protocolo, `GameRoom`, `remotePlayerSprites` ou `depthS
 
 - Browser pausa `requestAnimationFrame` em aba oculta — render e input local param (esperado).
 - **Servidor** não depende do foco: mobs, combate e cooldowns usam `setInterval` no Node.
-- Ao voltar (`visibilitychange` → visible): cliente envia `resync_request`; servidor responde com `state_sync`, `creature_sync` e `player_progress`.
+- Ao voltar (`visibilitychange` → visible): cliente envia `resync_request`; servidor responde com `state_sync`, `creature_sync`, `position_correction` (jogador local) e `player_progress`.
+- Ao perder foco (`hidden`): cliente envia último `syncPositionIfChanged`, limpa input e snap visual local antes do browser throttlar rAF.
 - Offline (`VITE_GAME_SERVER_WS=false`): simulação inteira no cliente — pausa com a aba é aceitável.
 
 ---

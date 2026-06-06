@@ -1061,7 +1061,11 @@ function clearPlayMovementInput(): void {
 }
 
 function handlePlayPageHidden(): void {
+    if (gameNet?.isConnected()) {
+        gameNet.syncPositionIfChanged();
+    }
     clearPlayMovementInput();
+    syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
 }
 
 function handlePlayPageVisible(): void {

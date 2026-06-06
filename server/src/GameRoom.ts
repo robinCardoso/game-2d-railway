@@ -799,6 +799,7 @@ export class GameRoom {
             players: this.playersInRoom(room),
         });
         this.sendCreatureSync(socket, room, player.mapId, player.instanceId);
+        this.sendPositionCorrection(player);
         this.send(socket, {
             type: 'player_progress',
             v: PROTOCOL_VERSION,
