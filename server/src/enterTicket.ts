@@ -13,6 +13,8 @@ export interface EnterTicketPayload {
     z: number;
     direction: 'north' | 'south' | 'east' | 'west';
     appearance?: PlayerAppearance;
+    level: number;
+    experience: number;
     exp: number;
 }
 
@@ -72,10 +74,14 @@ export function verifyEnterTicket(ticket: string): EnterTicketPayload | null {
         const dir = payload.direction;
         if (dir && !['north', 'south', 'east', 'west'].includes(dir)) return null;
         const appearance = parsePlayerAppearance(payload.appearance);
+        const level = Math.max(1, Math.floor(Number(payload.level) || 1));
+        const experience = Math.max(0, Math.floor(Number(payload.experience) || 0));
         return {
             ...payload,
             direction: dir ?? 'south',
             appearance,
+            level,
+            experience,
         };
     } catch {
         return null;

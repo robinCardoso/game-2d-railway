@@ -51,6 +51,8 @@ export function createWsTicketRouter(): Router {
                 z: character.position_z,
                 direction: character.direction,
                 appearance: appearanceFromCharacterRow(character),
+                level: character.level ?? 1,
+                experience: Math.max(0, Math.floor(Number(character.experience) || 0)),
             });
 
             res.json({ ticket, expiresAt: Date.now() + env.wsTicketTtlMs });

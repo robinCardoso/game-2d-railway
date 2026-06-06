@@ -1,17 +1,216 @@
+import type { GameEntity } from './entity';
+import type { CollisionQueryContext } from '../engine/types';
+
 export interface NpcAIController {
     tickNpcAI(options: {
         nowMs: number;
-        npcs: any[];
-        player: any;
+        npcs: GameEntity[];
+        player: {
+            tileX: number;
+            tileY: number;
+            worldZ: number;
+        };
         TILE_SIZE_SCREEN: number;
         MAP_SIZE: number;
         isEntityAtTile: (tx: number, ty: number, z: number, excludeId?: string) => boolean;
-        queryWalkable: (context: any, x: number, y: number, z: number) => any;
-        createCollisionContext: () => any;
+        queryWalkable: (context: CollisionQueryContext, x: number, y: number, z: number) => { walkable: boolean };
+        createCollisionContext: () => CollisionQueryContext;
     }): void;
 }
 
+const MONSTER_AGGRO_RADIUS = 7;
+/** Intervalo entre passos lógicos do monstro (ms) — alinhado à interpolação visual. */
+const MONSTER_STEP_MS = 360;
+const RANDOM_WANDER_INTERVAL_MS = 3000;
+
+const CARDINAL_DIRS = [
+    { dx: 1, dy: 0, dir: 'right' as const },
+    { dx: -1, dy: 0, dir: 'left' as const },
+    { dx: 0, dy: 1, dir: 'down' as const },
+    { dx: 0, dy: -1, dir: 'up' as const },
+];
+
 let lastNpcMoveTime = 0;
+
+function tileKey(tx: number, ty: number): string {
+    return `${tx},${ty}`;
+}
+
+function manhattanDist(x1: number, y1: number, x2: number, y2: number): number {
+    return Math.abs(x2 - x1) + Math.abs(y2 - y1);
+}
+
+function isAtTileCenter(npc: GameEntity, tileSize: number): boolean {
+    const targetX = npc.tileX * tileSize;
+    const targetY = npc.tileY * tileSize;
+    return Math.abs(npc.worldX - targetX) < 0.5 && Math.abs(npc.worldY - targetY) < 0.5;
+}
+
+function faceTowardTile(npc: GameEntity, targetX: number, targetY: number): void {
+    const dx = targetX - npc.tileX;
+    const dy = targetY - npc.tileY;
+    if (Math.abs(dx) > Math.abs(dy)) {
+        npc.setDirection(dx > 0 ? 'right' : 'left');
+    } else if (dy !== 0) {
+        npc.setDirection(dy > 0 ? 'down' : 'up');
+    }
+}
+
+/** Direção do deslize visual (não olhar fixo no jogador enquanto contorna). */
+function faceSlideDirection(npc: GameEntity, tileSize: number): void {
+    const targetX = npc.tileX * tileSize;
+    const targetY = npc.tileY * tileSize;
+    const dx = targetX - npc.worldX;
+    const dy = targetY - npc.worldY;
+    if (Math.abs(dx) > Math.abs(dy)) {
+        npc.setDirection(dx > 0 ? 'right' : 'left');
+    } else if (Math.abs(dy) > 0.5) {
+        npc.setDirection(dy > 0 ? 'down' : 'up');
+    }
+}
+
+/** Tiles ortogonais ao jogador onde o mob pode ficar para melee (exclui tile do player). */
+function findMeleeGoalTiles(
+    playerTileX: number,
+    playerTileY: number,
+    canWalkTo: (tx: number, ty: number) => boolean
+): Array<{ tx: number; ty: number }> {
+    const goals: Array<{ tx: number; ty: number }> = [];
+    for (const { dx, dy } of CARDINAL_DIRS) {
+        const tx = playerTileX + dx;
+        const ty = playerTileY + dy;
+        if (canWalkTo(tx, ty)) {
+            goals.push({ tx, ty });
+        }
+    }
+    return goals;
+}
+
+function pickMeleeGoalTile(
+    npc: GameEntity,
+    playerTileX: number,
+    playerTileY: number,
+    canWalkTo: (tx: number, ty: number) => boolean,
+    reservedGoals: Set<string>
+): { tx: number; ty: number } {
+    const goals = findMeleeGoalTiles(playerTileX, playerTileY, canWalkTo);
+    let best: { tx: number; ty: number } | null = null;
+    let bestDist = Infinity;
+
+    for (const goal of goals) {
+        const key = tileKey(goal.tx, goal.ty);
+        if (reservedGoals.has(key)) continue;
+        const d = manhattanDist(npc.tileX, npc.tileY, goal.tx, goal.ty);
+        if (d < bestDist) {
+            bestDist = d;
+            best = goal;
+        }
+    }
+
+    if (best) {
+        reservedGoals.add(tileKey(best.tx, best.ty));
+        return best;
+    }
+
+    // Todos os slots adjacentes ocupados/reservados — aproximar do jogador sem pisar nele
+    return { tx: playerTileX, ty: playerTileY };
+}
+
+function pickMonsterChaseStep(
+    npc: GameEntity,
+    goalX: number,
+    goalY: number,
+    canWalkTo: (tx: number, ty: number) => boolean
+): (typeof CARDINAL_DIRS)[number] | null {
+    const currentGoalDist = manhattanDist(npc.tileX, npc.tileY, goalX, goalY);
+
+    let bestCloser: (typeof CARDINAL_DIRS)[number] | null = null;
+    let bestCloserDist = currentGoalDist;
+
+    let bestSidestep: (typeof CARDINAL_DIRS)[number] | null = null;
+    let bestSidestepDist = Infinity;
+
+    let bestAny: (typeof CARDINAL_DIRS)[number] | null = null;
+    let bestAnyDist = Infinity;
+
+    for (const step of CARDINAL_DIRS) {
+        const nx = npc.tileX + step.dx;
+        const ny = npc.tileY + step.dy;
+        if (!canWalkTo(nx, ny)) continue;
+
+        const d = manhattanDist(nx, ny, goalX, goalY);
+
+        if (d < bestCloserDist) {
+            bestCloserDist = d;
+            bestCloser = step;
+        }
+
+        // Contorno: passo lateral (distância igual ou +1) quando o caminho direto está bloqueado
+        if (d >= currentGoalDist && d <= currentGoalDist + 1 && d < bestSidestepDist) {
+            bestSidestepDist = d;
+            bestSidestep = step;
+        }
+
+        if (d < bestAnyDist) {
+            bestAnyDist = d;
+            bestAny = step;
+        }
+    }
+
+    if (bestCloser) return bestCloser;
+    if (bestSidestep) return bestSidestep;
+    return bestAny;
+}
+
+function tickMonsterChase(
+    npc: GameEntity,
+    player: { tileX: number; tileY: number; worldZ: number },
+    nowMs: number,
+    tileSize: number,
+    mapSize: number,
+    canWalkTo: (tx: number, ty: number) => boolean,
+    reservedGoals: Set<string>
+): void {
+    const distToPlayer = manhattanDist(npc.tileX, npc.tileY, player.tileX, player.tileY);
+
+    const isAggroed = distToPlayer <= MONSTER_AGGRO_RADIUS && player.worldZ === npc.worldZ;
+    npc.isChasing = isAggroed && distToPlayer > 1;
+
+    if (!npc.isChasing) return;
+
+    if (!isAtTileCenter(npc, tileSize)) {
+        faceSlideDirection(npc, tileSize);
+        return;
+    }
+
+    if (distToPlayer <= 1) {
+        faceTowardTile(npc, player.tileX, player.tileY);
+        return;
+    }
+
+    if (nowMs - npc.lastAggroMoveTime < MONSTER_STEP_MS) {
+        faceTowardTile(npc, player.tileX, player.tileY);
+        return;
+    }
+
+    const goal = pickMeleeGoalTile(npc, player.tileX, player.tileY, canWalkTo, reservedGoals);
+    const step = pickMonsterChaseStep(npc, goal.tx, goal.ty, canWalkTo);
+    if (!step) {
+        npc.setState('idle');
+        faceTowardTile(npc, player.tileX, player.tileY);
+        return;
+    }
+
+    const nx = npc.tileX + step.dx;
+    const ny = npc.tileY + step.dy;
+    if (nx < 0 || nx >= mapSize || ny < 0 || ny >= mapSize) return;
+
+    npc.tileX = nx;
+    npc.tileY = ny;
+    npc.setState('walk');
+    npc.setDirection(step.dir);
+    npc.lastAggroMoveTime = nowMs;
+}
 
 export const NpcAI: NpcAIController = {
     tickNpcAI(options) {
@@ -23,191 +222,118 @@ export const NpcAI: NpcAIController = {
             MAP_SIZE,
             isEntityAtTile,
             queryWalkable,
-            createCollisionContext
+            createCollisionContext,
         } = options;
 
-        npcs.forEach(npc => {
+        const moveSpeedPx = TILE_SIZE_SCREEN / (MONSTER_STEP_MS / (1000 / 60));
+        const reservedMeleeGoals = new Set<string>();
+
+        npcs.forEach((npc) => {
             if (npc.isDead) return;
-            // 1. VERIFICAÇÃO DE PROXIMIDADE DO JOGADOR (Interação)
-            const dxToPlayer = player.tileX - npc.tileX;
-            const dyToPlayer = player.tileY - npc.tileY;
-            const distToPlayer = Math.abs(dxToPlayer) + Math.abs(dyToPlayer);
-            
+
+            const canWalkTo = (tx: number, ty: number) => {
+                if (tx < 0 || tx >= MAP_SIZE || ty < 0 || ty >= MAP_SIZE) return false;
+                const scenarioWalkable = queryWalkable(
+                    createCollisionContext(),
+                    tx * TILE_SIZE_SCREEN,
+                    ty * TILE_SIZE_SCREEN,
+                    npc.worldZ
+                ).walkable;
+                const occupiedByEntity = isEntityAtTile(tx, ty, npc.worldZ, npc.id);
+                const occupiedByPlayer = isEntityAtTile(tx, ty, npc.worldZ, 'player');
+                return scenarioWalkable && !occupiedByEntity && !occupiedByPlayer;
+            };
+
             if (npc.type === 'npc') {
-                const isNearPlayer = (distToPlayer <= 1.5 && player.worldZ === npc.worldZ);
+                const distToPlayer = manhattanDist(npc.tileX, npc.tileY, player.tileX, player.tileY);
+                const isNearPlayer = distToPlayer <= 1.5 && player.worldZ === npc.worldZ;
 
                 if (isNearPlayer) {
-                    // Se o jogador estiver muito perto, o NPC para e olha na direção dele!
                     if (npc.animController.currentState === 'walk') {
                         npc.setState('idle');
                     }
-                    
-                    // Determina a direção olhando para o jogador
-                    if (Math.abs(dxToPlayer) > Math.abs(dyToPlayer)) {
-                        npc.setDirection(dxToPlayer > 0 ? 'right' : 'left');
-                    } else {
-                        npc.setDirection(dyToPlayer > 0 ? 'down' : 'up');
-                    }
+                    faceTowardTile(npc, player.tileX, player.tileY);
 
-                    // Fala aleatoriamente se ainda não estiver falando
                     if (!npc.dialogueText && Math.random() < 0.005) {
                         const phrases = [
-                            "Olá, aventureiro!",
-                            "Belo dia para explorar!",
-                            "Precisa de ajuda?",
-                            "Aperte Espaço para atacar!",
-                            "Aperte X para sentar!",
-                            "Aperte H para morrer!"
+                            'Olá, aventureiro!',
+                            'Belo dia para explorar!',
+                            'Precisa de ajuda?',
+                            'Aperte Espaço para atacar!',
+                            'Aperte X para sentar!',
+                            'Aperte H para morrer!',
                         ];
                         npc.speak(phrases[Math.floor(Math.random() * phrases.length)]);
                     }
-                    return; // Interrompe o movimento aleatório enquanto interage
+                    return;
                 }
             } else if (npc.type === 'monster') {
-                const aggroRadius = 7;
-                const isAggroed = (distToPlayer <= aggroRadius && player.worldZ === npc.worldZ);
-
-                if (isAggroed && distToPlayer > 1) { // Maior que 1 para não sobrepor o tile do jogador
-                    // Adiciona um tempo de recarga de movimento local ao mob para não ser instantâneo
-                    const mobRef = npc as any;
-                    if (!mobRef.lastAggroMoveTime) mobRef.lastAggroMoveTime = 0;
-
-                    // Monstro tenta andar a cada 800ms
-                    if (nowMs - mobRef.lastAggroMoveTime > 800) {
-                        let tryDx = 0;
-                        let tryDy = 0;
-
-                        if (Math.abs(dxToPlayer) > Math.abs(dyToPlayer)) {
-                            tryDx = dxToPlayer > 0 ? 1 : -1;
-                        } else {
-                            tryDy = dyToPlayer > 0 ? 1 : -1;
-                        }
-
-                        let targetX = npc.tileX + tryDx;
-                        let targetY = npc.tileY + tryDy;
-
-                        // Função para testar se o tile é andável
-                        const canWalkTo = (tx: number, ty: number) => {
-                            if (tx < 0 || tx >= MAP_SIZE || ty < 0 || ty >= MAP_SIZE) return false;
-                            const scenarioWalkable = queryWalkable(createCollisionContext(), tx * TILE_SIZE_SCREEN, ty * TILE_SIZE_SCREEN, npc.worldZ).walkable;
-                            const occupiedByEntity = isEntityAtTile(tx, ty, npc.worldZ, npc.id);
-                            const occupiedByPlayer = isEntityAtTile(tx, ty, npc.worldZ, 'player'); // evita pisar no jogador
-                            return scenarioWalkable && !occupiedByEntity && !occupiedByPlayer;
-                        };
-
-                        let moved = false;
-
-                        if (canWalkTo(targetX, targetY)) {
-                            npc.tileX = targetX;
-                            npc.tileY = targetY;
-                            moved = true;
-                        } else {
-                            // Sistema de Slide (Deslizamento)
-                            // Se travou no X, tenta mover no Y, e vice-versa
-                            if (tryDx !== 0) { // Tentou X e travou, tentar Y
-                                const altDy = dyToPlayer > 0 ? 1 : (dyToPlayer < 0 ? -1 : 0);
-                                if (altDy !== 0 && canWalkTo(npc.tileX, npc.tileY + altDy)) {
-                                    npc.tileY += altDy;
-                                    tryDx = 0; tryDy = altDy;
-                                    moved = true;
-                                }
-                            } else if (tryDy !== 0) { // Tentou Y e travou, tentar X
-                                const altDx = dxToPlayer > 0 ? 1 : (dxToPlayer < 0 ? -1 : 0);
-                                if (altDx !== 0 && canWalkTo(npc.tileX + altDx, npc.tileY)) {
-                                    npc.tileX += altDx;
-                                    tryDx = altDx; tryDy = 0;
-                                    moved = true;
-                                }
-                            }
-                        }
-
-                        if (moved) {
-                            npc.setState('walk');
-                            if (tryDx > 0) npc.setDirection('right');
-                            else if (tryDx < 0) npc.setDirection('left');
-                            else if (tryDy > 0) npc.setDirection('down');
-                            else if (tryDy < 0) npc.setDirection('up');
-
-                            mobRef.lastAggroMoveTime = nowMs;
-                        }
-                        
-                        // Independente se conseguiu mover ou não, enquanto estiver no aggro ele não fica passeando aleatório
-                        return;
-                    } else {
-                        // Está no aggro mas no cooldown de mover, também não passeia aleatoriamente
-                        return;
-                    }
-                }
+                tickMonsterChase(
+                    npc,
+                    player,
+                    nowMs,
+                    TILE_SIZE_SCREEN,
+                    MAP_SIZE,
+                    canWalkTo,
+                    reservedMeleeGoals
+                );
+                if (npc.isChasing) return;
             }
 
-            // 2. MOVIMENTAÇÃO ALEATÓRIA DENTRO DO SPAWN RADIUS
-            if (nowMs - lastNpcMoveTime > 3000) {
-                if (Math.random() < 0.4) { // 40% de chance de decidir andar
-                    const dirs = ['up', 'down', 'left', 'right'] as const;
-                    const randomDir = dirs[Math.floor(Math.random() * dirs.length)];
-                    npc.setDirection(randomDir);
-                    
-                    let dx = 0;
-                    let dy = 0;
-                    if (randomDir === 'up') dy = -1;
-                    else if (randomDir === 'down') dy = 1;
-                    else if (randomDir === 'left') dx = -1;
-                    else if (randomDir === 'right') dx = 1;
-                    
-                    const newTileX = npc.tileX + dx;
-                    const newTileY = npc.tileY + dy;
-                    
-                    // Valida se a nova coordenada está dentro do Raio Máximo (maxRadius) em relação ao Spawn Original!
-                    const isWithinRadius = Math.abs(newTileX - npc.spawnX) <= npc.maxRadius &&
-                                           Math.abs(newTileY - npc.spawnY) <= npc.maxRadius;
-                    
-                    if (isWithinRadius && newTileX >= 0 && newTileX < MAP_SIZE && newTileY >= 0 && newTileY < MAP_SIZE) {
-                        const targetPixelX = newTileX * TILE_SIZE_SCREEN;
-                        const targetPixelY = newTileY * TILE_SIZE_SCREEN;
-                        
-                        // Valida colisão de cenário AND se o tile já está ocupado por outro NPC ou pelo Jogador!
-                        const isOccupied = isEntityAtTile(newTileX, newTileY, npc.worldZ, npc.id);
-                        const scenarioWalkable = queryWalkable(createCollisionContext(), targetPixelX, targetPixelY, npc.worldZ).walkable;
-                        
-                        if (scenarioWalkable && !isOccupied) {
-                            npc.tileX = newTileX;
-                            npc.tileY = newTileY;
-                            npc.setState('walk');
-                        }
-                    }
+            npc.isChasing = false;
+
+            if (nowMs - lastNpcMoveTime > RANDOM_WANDER_INTERVAL_MS && Math.random() < 0.4) {
+                const randomDir = CARDINAL_DIRS[Math.floor(Math.random() * CARDINAL_DIRS.length)];
+                npc.setDirection(randomDir.dir);
+
+                const newTileX = npc.tileX + randomDir.dx;
+                const newTileY = npc.tileY + randomDir.dy;
+
+                const isWithinRadius =
+                    Math.abs(newTileX - npc.spawnX) <= npc.maxRadius &&
+                    Math.abs(newTileY - npc.spawnY) <= npc.maxRadius;
+
+                if (isWithinRadius && canWalkTo(newTileX, newTileY)) {
+                    npc.tileX = newTileX;
+                    npc.tileY = newTileY;
+                    npc.setState('walk');
                 }
             }
         });
 
-        if (nowMs - lastNpcMoveTime > 3000) {
+        if (nowMs - lastNpcMoveTime > RANDOM_WANDER_INTERVAL_MS) {
             lastNpcMoveTime = nowMs;
         }
-        
-        // Suaviza a posição física dos NPCs em direção ao tile alvo (interpolação simples)
-        npcs.forEach(npc => {
+
+        npcs.forEach((npc) => {
             if (npc.isDead) {
                 npc.update(nowMs);
                 return;
             }
+
             const targetWorldX = npc.tileX * TILE_SIZE_SCREEN;
             const targetWorldY = npc.tileY * TILE_SIZE_SCREEN;
-            const speed = 2.5; // Pixels por frame para caminhar fluido
-            
-            if (npc.worldX < targetWorldX) npc.worldX = Math.min(targetWorldX, npc.worldX + speed);
-            else if (npc.worldX > targetWorldX) npc.worldX = Math.max(targetWorldX, npc.worldX - speed);
-            
-            if (npc.worldY < targetWorldY) npc.worldY = Math.min(targetWorldY, npc.worldY + speed);
-            else if (npc.worldY > targetWorldY) npc.worldY = Math.max(targetWorldY, npc.worldY - speed);
-            
-            if (npc.worldX === targetWorldX && npc.worldY === targetWorldY) {
-                if (npc.animController.currentState === 'walk') {
+
+            if (npc.worldX < targetWorldX) npc.worldX = Math.min(targetWorldX, npc.worldX + moveSpeedPx);
+            else if (npc.worldX > targetWorldX) npc.worldX = Math.max(targetWorldX, npc.worldX - moveSpeedPx);
+
+            if (npc.worldY < targetWorldY) npc.worldY = Math.min(targetWorldY, npc.worldY + moveSpeedPx);
+            else if (npc.worldY > targetWorldY) npc.worldY = Math.max(targetWorldY, npc.worldY - moveSpeedPx);
+
+            const arrived =
+                Math.abs(npc.worldX - targetWorldX) < 0.5 && Math.abs(npc.worldY - targetWorldY) < 0.5;
+
+            if (arrived) {
+                npc.worldX = targetWorldX;
+                npc.worldY = targetWorldY;
+                if (npc.animController.currentState === 'walk' && !npc.isChasing) {
                     npc.setState('idle');
                 }
             } else {
                 npc.setState('walk');
             }
-            
+
             npc.update(nowMs);
         });
-    }
+    },
 };

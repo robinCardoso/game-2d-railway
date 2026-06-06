@@ -20,6 +20,8 @@ export interface PlayerMovementController {
         ENGINE_CONFIG: any;
         editingFloor: number;
         isWalkable: (x: number, y: number, z: number) => any;
+        isTerrainWalkable?: (x: number, y: number, z: number) => any;
+        canCommitStepToTile?: (destTileX: number, destTileY: number, z: number) => boolean;
         isStairHoleAtTile: (tx: number, ty: number, z: number) => boolean;
         getStepDurationForTile: (tx: number, ty: number, z: number) => number;
         updateFloorButtons: () => void;
@@ -88,6 +90,10 @@ export const PlayerMovement: PlayerMovementController = {
                 minFloorZ: ENGINE_CONFIG.MIN_FLOOR_Z,
                 maxFloorZ: ENGINE_CONFIG.MAX_FLOOR_Z,
                 isWalkablePixels: (x, y, z) => options.isWalkable(x, y, z),
+                isTerrainWalkablePixels: options.isTerrainWalkable
+                    ? (x, y, z) => options.isTerrainWalkable!(x, y, z)
+                    : undefined,
+                canCommitStepToTile: options.canCommitStepToTile,
                 isStairHoleAtTile: (tx, ty, z) => options.isStairHoleAtTile(tx, ty, z),
                 getStepDurationMs: (tx, ty, z) => options.getStepDurationForTile(tx, ty, z),
             },

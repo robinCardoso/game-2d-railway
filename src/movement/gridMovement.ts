@@ -139,9 +139,17 @@ export interface TileGridDeps {
         worldY: number,
         z: number
     ) => { walkable: boolean; isStair: boolean; stairDir?: 'up' | 'down' };
+    /** Só terreno/itens — usado no anti-corte de canto diagonal (mobs não bloqueiam o “vão”). */
+    isTerrainWalkablePixels?: (
+        worldX: number,
+        worldY: number,
+        z: number
+    ) => { walkable: boolean; isStair: boolean; stairDir?: 'up' | 'down' };
     isStairHoleAtTile: (tileX: number, tileY: number, z: number) => boolean;
     /** Duração do deslize para o tile de destino (stat + buffs + terreno). */
     getStepDurationMs: (tileX: number, tileY: number, z: number) => number;
+    /** Revalida destino ao concluir deslize (ex.: mob entrou no tile durante o passo). */
+    canCommitStepToTile?: (destTileX: number, destTileY: number, z: number) => boolean;
 }
 
 export function syncGridPlayerVisual(
@@ -463,10 +471,11 @@ function canStepToTile(
 
     if (ntx === tx || nty === ty) return true;
 
+    const terrainProbe = deps.isTerrainWalkablePixels ?? deps.isWalkablePixels;
     const sideX = tileToWorld(ntx, ty, tileSize);
     const sideY = tileToWorld(tx, nty, tileSize);
-    if (!deps.isWalkablePixels(sideX.x, sideX.y, z).walkable) return false;
-    if (!deps.isWalkablePixels(sideY.x, sideY.y, z).walkable) return false;
+    if (!terrainProbe(sideX.x, sideX.y, z).walkable) return false;
+    if (!terrainProbe(sideY.x, sideY.y, z).walkable) return false;
     return true;
 }
 
@@ -538,7 +547,8 @@ function beginStep(
 function advanceStepVisual(
     ctrl: GridMovementController,
     player: GridPlayerMotion,
-    nowMs: number
+    nowMs: number,
+    deps?: Pick<TileGridDeps, 'canCommitStepToTile'>
 ): boolean {
     if (!ctrl.stepping) return true;
 
@@ -549,6 +559,18 @@ function advanceStepVisual(
     player.worldY = ctrl.fromY + (ctrl.toY - ctrl.fromY) * t;
 
     if (t >= 1) {
+        const canCommit =
+            !deps?.canCommitStepToTile ||
+            deps.canCommitStepToTile(ctrl.destTileX, ctrl.destTileY, player.worldZ);
+
+        if (!canCommit) {
+            player.worldX = ctrl.fromX;
+            player.worldY = ctrl.fromY;
+            ctrl.stepping = false;
+            ctrl.activeStepFacing = null;
+            return true;
+        }
+
         ctrl.lastCompletedStepDurationMs = ctrl.stepDurationMs;
         commitTilePosition(player, ctrl.destTileX, ctrl.destTileY);
         player.worldX = ctrl.toX;
@@ -684,7 +706,7 @@ export function tickGridMovement(params: TickGridMovementParams): boolean {
     const { player, controller: ctrl, keys: k, nowMs, deps } = params;
 
     if (ctrl.stepping) {
-        const done = advanceStepVisual(ctrl, player, nowMs);
+        const done = advanceStepVisual(ctrl, player, nowMs, deps);
         if (!done) return false;
     }
 

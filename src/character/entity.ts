@@ -29,6 +29,8 @@ export class GameEntity {
     race: MobRace = 'beast';
     lootTable: MobLootEntry[] = [];
     isDead = false;
+    isChasing = false;
+    lastAggroMoveTime = 0;
 
     constructor(
         id: string,

@@ -2396,6 +2396,24 @@ function isEntityAtTile(tx: number, ty: number, z: number, excludeId?: string): 
     return false;
 }
 
+function isTerrainWalkable(
+    worldX: number,
+    worldY: number,
+    z: number
+): {
+    walkable: boolean;
+    speed: number;
+    isStair: boolean;
+    stairDir?: 'up' | 'down';
+} {
+    try {
+        return queryWalkable(createCollisionContext(), worldX, worldY, z);
+    } catch (err) {
+        console.error('Erro em isTerrainWalkable:', err);
+        return { walkable: false, speed: 0, isStair: false };
+    }
+}
+
 function isWalkable(
     worldX: number,
     worldY: number,
@@ -2407,7 +2425,7 @@ function isWalkable(
     stairDir?: 'up' | 'down';
 } {
     try {
-        const result = queryWalkable(createCollisionContext(), worldX, worldY, z);
+        const result = isTerrainWalkable(worldX, worldY, z);
         if (!result.walkable) return result;
         
         // Impede o jogador de passar por cima de NPCs
@@ -2460,6 +2478,7 @@ function update() {
         ENGINE_CONFIG,
         editingFloor,
         isWalkable: (x, y, z) => isWalkable(x, y, z),
+        isTerrainWalkable: (x, y, z) => isTerrainWalkable(x, y, z),
         isStairHoleAtTile: (tx, ty, z) => isStairHoleAtTile(tx, ty, z),
         getStepDurationForTile: (tx, ty, z) => getStepDurationForTile(tx, ty, z),
         updateFloorButtons: () => updateFloorButtons(),

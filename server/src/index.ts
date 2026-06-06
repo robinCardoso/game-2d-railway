@@ -4,6 +4,8 @@ import { createApp } from './app.js';
 import { GameRoom } from './GameRoom.js';
 import { MapCollisionStore } from './MapCollisionStore.js';
 import { MapInstanceStore } from './MapInstanceStore.js';
+import { CreaturePresetStore } from './game/CreaturePresetStore.js';
+import { VocationStore } from './game/VocationStore.js';
 import { runMigrations } from './db/migrate.js';
 import { env } from './config/env.js';
 
@@ -11,12 +13,17 @@ await runMigrations();
 
 const collision = new MapCollisionStore();
 const instances = new MapInstanceStore();
+const creaturePresets = new CreaturePresetStore();
+const vocations = new VocationStore();
+
+await Promise.all([collision.loadAll(), creaturePresets.load(), vocations.load()]);
+
 const room = new GameRoom(collision, instances, {
     requireWsTicket: env.requireWsTicket,
     positionSaveIntervalMs: env.wsPositionSaveIntervalMs,
+    creaturePresets,
+    vocations,
 });
-
-await collision.loadAll();
 
 const app = createApp(() => room.getStats().online);
 const httpServer = createServer(app);

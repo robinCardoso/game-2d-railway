@@ -1,5 +1,6 @@
 import type {
     ClientMessage,
+    CreatureSnapshot,
     PlayerAppearance,
     PlayerSnapshot,
     ServerMessage,
@@ -29,6 +30,10 @@ export interface GameNetClientOptions {
         direction?: 'north' | 'south' | 'east' | 'west';
         appearance?: PlayerAppearance;
         stepDurationMs?: number;
+        steppingDestTileX?: number;
+        steppingDestTileY?: number;
+        level?: number;
+        experience?: number;
     };
     onStatusChange?: (status: NetStatus) => void;
     /** Servidor atribuiu instanceId (dungeon instanciada). */
@@ -42,6 +47,55 @@ export interface GameNetClientOptions {
         tileX: number;
         tileY: number;
         z: number;
+    }) => void;
+    /** Snapshot inicial ou resync de criaturas da sala. */
+    onCreatureSync?: (payload: {
+        mapId: string;
+        instanceId?: string;
+        creatures: CreatureSnapshot[];
+    }) => void;
+    /** Passo autoritativo de uma criatura. */
+    onCreatureMoved?: (payload: {
+        creatureId: string;
+        mapId: string;
+        instanceId?: string;
+        tileX: number;
+        tileY: number;
+        z: number;
+        direction?: CreatureSnapshot['direction'];
+        stepDurationMs?: number;
+    }) => void;
+    onCreatureDamaged?: (payload: {
+        creatureId: string;
+        mapId: string;
+        instanceId?: string;
+        health: number;
+        maxHealth: number;
+        damage: number;
+        attackerPlayerId?: string;
+    }) => void;
+    onCreatureDied?: (payload: {
+        creatureId: string;
+        mapId: string;
+        instanceId?: string;
+        xpReward: number;
+        killerPlayerId?: string;
+    }) => void;
+    onCreatureRespawned?: (payload: {
+        creatureId: string;
+        mapId: string;
+        instanceId?: string;
+        tileX: number;
+        tileY: number;
+        z: number;
+        health: number;
+        maxHealth: number;
+    }) => void;
+    onPlayerProgress?: (payload: {
+        playerId: string;
+        level: number;
+        experience: number;
+        leveledUp?: boolean;
     }) => void;
 }
 
@@ -62,6 +116,8 @@ export class GameNetClient {
         tileY: -1,
         z: -999,
         direction: undefined as 'north' | 'south' | 'east' | 'west' | undefined,
+        steppingDestTileX: undefined as number | undefined,
+        steppingDestTileY: undefined as number | undefined,
     };
     private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     private proactiveTimer: ReturnType<typeof setInterval> | null = null;
@@ -83,7 +139,6 @@ export class GameNetClient {
         return this.networkInstanceId;
     }
 
-    /** Outros jogadores na mesma sala (mapId + instanceId). */
     getRemotePlayers(mapId: string, instanceId?: string | null): PlayerSnapshot[] {
         const local = {
             mapId,
@@ -101,6 +156,18 @@ export class GameNetClient {
 
     isConnected(): boolean {
         return this.status === 'connected' && this.ws?.readyState === WebSocket.OPEN;
+    }
+
+    /** Intenção de ataque melee — combate autoritativo (Fase 3). */
+    sendAttack(creatureId: string, mapId: string, instanceId?: string | null): void {
+        if (!this.isConnected()) return;
+        this.send({
+            type: 'attack',
+            v: PROTOCOL_VERSION,
+            creatureId,
+            mapId,
+            instanceId: instanceId ?? this.networkInstanceId ?? undefined,
+        });
     }
 
     connect(): void {
@@ -174,18 +241,31 @@ export class GameNetClient {
 
         const state = this.options.getLocalState();
         const instanceId = state.instanceId ?? this.networkInstanceId ?? undefined;
-        const { mapId, tileX, tileY, z, direction, stepDurationMs } = state;
+        const {
+            mapId,
+            tileX,
+            tileY,
+            z,
+            direction,
+            stepDurationMs,
+            steppingDestTileX,
+            steppingDestTileY,
+        } = state;
         const last = this.lastSynced;
 
         const tileChanged =
             last.tileX !== tileX || last.tileY !== tileY || last.z !== z;
         const directionChanged = last.direction !== direction;
+        const steppingDestChanged =
+            last.steppingDestTileX !== steppingDestTileX ||
+            last.steppingDestTileY !== steppingDestTileY;
 
         if (
             last.mapId === mapId &&
             last.instanceId === instanceId &&
             !tileChanged &&
-            !directionChanged
+            !directionChanged &&
+            !steppingDestChanged
         ) {
             return;
         }
@@ -226,10 +306,21 @@ export class GameNetClient {
                 z,
                 direction,
                 stepDurationMs,
+                steppingDestTileX,
+                steppingDestTileY,
             });
         }
 
-        this.lastSynced = { mapId, instanceId, tileX, tileY, z, direction };
+        this.lastSynced = {
+            mapId,
+            instanceId,
+            tileX,
+            tileY,
+            z,
+            direction,
+            steppingDestTileX,
+            steppingDestTileY,
+        };
     }
 
     private async reconnectWithFreshTicket(): Promise<void> {
@@ -287,6 +378,8 @@ export class GameNetClient {
             tileY: -1,
             z: -999,
             direction: undefined,
+            steppingDestTileX: undefined,
+            steppingDestTileY: undefined,
         };
         this.send({
             type: 'join',
@@ -300,6 +393,8 @@ export class GameNetClient {
             z: state.z,
             direction: state.direction,
             appearance: state.appearance,
+            level: state.level,
+            experience: state.experience,
         });
     }
 
@@ -335,13 +430,24 @@ export class GameNetClient {
                         tileY: s.tileY,
                         z: s.z,
                         direction: s.direction,
+                        steppingDestTileX: s.steppingDestTileX,
+                        steppingDestTileY: s.steppingDestTileY,
                     };
                 }
                 console.log(
                     `[GameNet] conectado como ${msg.playerId}` +
                         (msg.instanceId ? ` · sala inst_${msg.instanceId.slice(-8)}` : '') +
-                        ` · ${msg.players.length} jogador(es) na sala`
+                        ` · ${msg.players.length} jogador(es) na sala` +
+                        (msg.creatures ? ` · ${msg.creatures.length} criatura(s)` : '')
                 );
+                if (msg.creatures) {
+                    const s = this.options.getLocalState();
+                    this.options.onCreatureSync?.({
+                        mapId: s.mapId,
+                        instanceId: msg.instanceId ?? s.instanceId ?? undefined,
+                        creatures: msg.creatures,
+                    });
+                }
                 break;
             case 'instance_assigned':
                 this.networkInstanceId = msg.instanceId;
@@ -400,6 +506,8 @@ export class GameNetClient {
                     tileY: msg.tileY,
                     z: msg.z,
                     direction: this.lastSynced.direction,
+                    steppingDestTileX: undefined,
+                    steppingDestTileY: undefined,
                 };
                 this.options.onPositionCorrection?.({
                     mapId: msg.mapId,
@@ -413,6 +521,68 @@ export class GameNetClient {
                 console.warn(`[GameNet] ${msg.code}: ${msg.message}`);
                 break;
             case 'pong':
+                break;
+            case 'creature_sync': {
+                this.options.onCreatureSync?.({
+                    mapId: msg.mapId,
+                    instanceId: msg.instanceId,
+                    creatures: msg.creatures,
+                });
+                break;
+            }
+            case 'creature_moved':
+                this.options.onCreatureMoved?.({
+                    creatureId: msg.creatureId,
+                    mapId: msg.mapId,
+                    instanceId: msg.instanceId,
+                    tileX: msg.tileX,
+                    tileY: msg.tileY,
+                    z: msg.z,
+                    direction: msg.direction,
+                    stepDurationMs: msg.stepDurationMs,
+                });
+                break;
+            case 'creature_damaged':
+                this.options.onCreatureDamaged?.({
+                    creatureId: msg.creatureId,
+                    mapId: msg.mapId,
+                    instanceId: msg.instanceId,
+                    health: msg.health,
+                    maxHealth: msg.maxHealth,
+                    damage: msg.damage,
+                    attackerPlayerId: msg.attackerPlayerId,
+                });
+                break;
+            case 'creature_died':
+                this.options.onCreatureDied?.({
+                    creatureId: msg.creatureId,
+                    mapId: msg.mapId,
+                    instanceId: msg.instanceId,
+                    xpReward: msg.xpReward,
+                    killerPlayerId: msg.killerPlayerId,
+                });
+                break;
+            case 'creature_respawned':
+                this.options.onCreatureRespawned?.({
+                    creatureId: msg.creatureId,
+                    mapId: msg.mapId,
+                    instanceId: msg.instanceId,
+                    tileX: msg.tileX,
+                    tileY: msg.tileY,
+                    z: msg.z,
+                    health: msg.health,
+                    maxHealth: msg.maxHealth,
+                });
+                break;
+            case 'player_progress':
+                if (msg.playerId === this.localPlayerId) {
+                    this.options.onPlayerProgress?.({
+                        playerId: msg.playerId,
+                        level: msg.level,
+                        experience: msg.experience,
+                        leveledUp: msg.leveledUp,
+                    });
+                }
                 break;
         }
     }

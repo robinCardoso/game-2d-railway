@@ -20,11 +20,18 @@ import type { MapInstanceStore } from './MapInstanceStore.js';
 import { isInstancedMap } from './mapRegistry.js';
 import { verifyEnterTicket } from './enterTicket.js';
 import { PositionPersistence } from './game/PositionPersistence.js';
+import { ProgressPersistence } from './game/ProgressPersistence.js';
+import { RoomCreatureManager } from './game/RoomCreatureManager.js';
+import type { CreaturePresetStore } from './game/CreaturePresetStore.js';
+import type { VocationStore } from './game/VocationStore.js';
+import { applyExperienceGain } from '../../src/game/experience.js';
+import type { VocationId } from '../../shared/types/character.js';
 
 /** Tolerância de jitter de rede no intervalo mínimo entre passos (0.85 = 15% mais rápido que o step). */
 const MOVE_RATE_LIMIT_TOLERANCE = 0.85;
 /** Intervalo mínimo entre `error` + `position_correction` por rejeição de movimento (anti-spam). */
 const MOVE_REJECTION_THROTTLE_MS = 400;
+const ATTACK_COOLDOWN_MS = 550;
 
 const DEFAULT_APPEARANCE: PlayerAppearance = {
     outfitId: 'knight',
@@ -52,6 +59,12 @@ interface ConnectedPlayer {
     /** Intervalo real entre os últimos passos aceitos (ms) — calibra rate limit. */
     lastObservedMoveIntervalMs: number;
     /** Última rejeição de movimento com resposta ao cliente (throttle de spam). */
+    /** Tile reservado durante deslize (colisão de mobs; posição autoritativa ainda é tileX/tileY). */
+    steppingDestTileX?: number;
+    steppingDestTileY?: number;
+    level: number;
+    experience: number;
+    lastAttackAtMs: number;
     lastMoveRejectionSentAtMs: number;
     socket: WebSocket;
 }
@@ -59,6 +72,8 @@ interface ConnectedPlayer {
 export interface GameRoomOptions {
     requireWsTicket?: boolean;
     positionSaveIntervalMs?: number;
+    creaturePresets: CreaturePresetStore;
+    vocations: VocationStore;
 }
 
 export class GameRoom {
@@ -66,14 +81,63 @@ export class GameRoom {
     private socketToPlayerId = new Map<WebSocket, string>();
     private readonly requireWsTicket: boolean;
     private readonly positionPersistence: PositionPersistence;
+    private readonly progressPersistence: ProgressPersistence;
+    private readonly creatures: RoomCreatureManager;
 
     constructor(
         private readonly collision: MapCollisionStore,
         private readonly instances: MapInstanceStore,
-        options: GameRoomOptions = {}
+        options: GameRoomOptions
     ) {
         this.requireWsTicket = options.requireWsTicket ?? false;
         this.positionPersistence = new PositionPersistence(options.positionSaveIntervalMs ?? 20_000);
+        this.progressPersistence = new ProgressPersistence();
+        this.creatures = new RoomCreatureManager(
+            this.collision,
+            options.creaturePresets,
+            options.vocations,
+            (room, message) => this.broadcastToRoom(room, message),
+            (room) => this.playersInRoomAsRefs(room)
+        );
+        this.creatures.start();
+    }
+
+    private playersInRoomAsRefs(room: string): Array<{
+        tileX: number;
+        tileY: number;
+        z: number;
+        steppingDestTileX?: number;
+        steppingDestTileY?: number;
+    }> {
+        const out: Array<{
+            tileX: number;
+            tileY: number;
+            z: number;
+            steppingDestTileX?: number;
+            steppingDestTileY?: number;
+        }> = [];
+        for (const p of this.players.values()) {
+            if (this.roomKey(p) !== room) continue;
+            out.push({
+                tileX: p.tileX,
+                tileY: p.tileY,
+                z: p.z,
+                steppingDestTileX: p.steppingDestTileX,
+                steppingDestTileY: p.steppingDestTileY,
+            });
+        }
+        return out;
+    }
+
+    private sendCreatureSync(socket: WebSocket, room: string, mapId: string, instanceId?: string): void {
+        const snapshots = this.creatures.ensureRoom(room, mapId, instanceId);
+        this.send(socket, {
+            type: 'creature_sync',
+            v: PROTOCOL_VERSION,
+            mapId,
+            instanceId,
+            creatures: snapshots,
+        });
     }
 
     private generatePlayerId(): string {
@@ -216,6 +280,9 @@ export class GameRoom {
             case 'map_change':
                 this.handleMove(socket, msg, true);
                 break;
+            case 'attack':
+                this.handleAttack(socket, msg);
+                break;
             case 'ping':
                 this.send(socket, { type: 'pong', v: PROTOCOL_VERSION, t: msg.t });
                 break;
@@ -252,6 +319,8 @@ export class GameRoom {
         let joinTileX = msg.tileX;
         let joinTileY = msg.tileY;
         let joinZ = msg.z;
+        let joinLevel = msg.level ?? 1;
+        let joinExperience = msg.experience ?? 0;
 
         if (msg.enterTicket) {
             const ticket = verifyEnterTicket(msg.enterTicket);
@@ -272,6 +341,8 @@ export class GameRoom {
             joinTileX = ticket.tileX;
             joinTileY = ticket.tileY;
             joinZ = ticket.z;
+            joinLevel = ticket.level;
+            joinExperience = ticket.experience;
             if (ticket.appearance) {
                 appearance = ticket.appearance;
             }
@@ -296,7 +367,7 @@ export class GameRoom {
             return;
         }
 
-        let instanceId = msg.instanceId;
+        let { instanceId } = msg;
         if (isInstancedMap(joinMapId)) {
             instanceId = this.instances.resolveInstanceId(joinMapId, instanceId);
         } else {
@@ -332,6 +403,9 @@ export class GameRoom {
             lastMoveAcceptedAtMs: 0,
             lastObservedMoveIntervalMs: 0,
             lastMoveRejectionSentAtMs: 0,
+            level: joinLevel,
+            experience: joinExperience,
+            lastAttackAtMs: 0,
             socket,
         };
 
@@ -341,6 +415,7 @@ export class GameRoom {
 
         const room = this.roomKey(player);
         const others = this.playersInRoom(room, id);
+        const creatureSnapshots = this.creatures.ensureRoom(room, joinMapId, instanceId);
 
         this.send(socket, {
             type: 'welcome',
@@ -348,6 +423,7 @@ export class GameRoom {
             playerId: id,
             instanceId,
             players: others,
+            creatures: creatureSnapshots,
         });
 
         if (
@@ -394,7 +470,7 @@ export class GameRoom {
             return;
         }
 
-        let instanceId = msg.instanceId;
+        let { instanceId } = msg;
         if (isInstancedMap(msg.mapId)) {
             if (!instanceId && player.instanceId) {
                 instanceId = player.instanceId;
@@ -405,6 +481,34 @@ export class GameRoom {
         } else {
             instanceId = undefined;
         }
+
+        const steppingDestTileX = msg.type === 'move' ? msg.steppingDestTileX : undefined;
+        const steppingDestTileY = msg.type === 'move' ? msg.steppingDestTileY : undefined;
+        const isSteppingReserveOnly =
+            !isMapChange &&
+            msg.type === 'move' &&
+            steppingDestTileX !== undefined &&
+            steppingDestTileY !== undefined &&
+            msg.tileX === player.tileX &&
+            msg.tileY === player.tileY &&
+            msg.z === player.z &&
+            player.mapId === msg.mapId &&
+            (player.instanceId ?? undefined) === (instanceId ?? undefined);
+
+        if (isSteppingReserveOnly) {
+            if (!isValidTile(msg.mapId, steppingDestTileX, steppingDestTileY, msg.z)) {
+                return;
+            }
+            if (!this.isWalkable(msg.mapId, steppingDestTileX, steppingDestTileY, msg.z)) {
+                return;
+            }
+            player.steppingDestTileX = steppingDestTileX;
+            player.steppingDestTileY = steppingDestTileY;
+            return;
+        }
+
+        player.steppingDestTileX = undefined;
+        player.steppingDestTileY = undefined;
 
         if (!this.isWalkable(msg.mapId, msg.tileX, msg.tileY, msg.z)) {
             this.rejectMove(
@@ -543,6 +647,7 @@ export class GameRoom {
                 },
                 player.id
             );
+            this.sendCreatureSync(player.socket, newRoom, player.mapId, player.instanceId);
         } else {
             this.broadcastToRoom(newRoom, payload, player.id);
         }
@@ -557,6 +662,82 @@ export class GameRoom {
                     acceptedAt - player.lastMoveAcceptedAtMs;
             }
             player.lastMoveAcceptedAtMs = acceptedAt;
+        }
+    }
+
+    private handleAttack(
+        socket: WebSocket,
+        msg: Extract<ClientMessage, { type: 'attack' }>
+    ): void {
+        const playerId = this.socketToPlayerId.get(socket);
+        if (!playerId) return;
+
+        const player = this.players.get(playerId);
+        if (!player) return;
+
+        let { instanceId } = msg;
+        if (isInstancedMap(msg.mapId)) {
+            instanceId = player.instanceId ?? instanceId;
+        } else {
+            instanceId = undefined;
+        }
+
+        if (player.mapId !== msg.mapId || (player.instanceId ?? undefined) !== (instanceId ?? undefined)) {
+            return;
+        }
+
+        const room = this.roomKey(player);
+        const vocationId = (player.appearance.vocationId || 'knight') as VocationId;
+        const outcome = this.creatures.processAttack(
+            room,
+            {
+                playerId: player.id,
+                tileX: player.tileX,
+                tileY: player.tileY,
+                z: player.z,
+                level: player.level,
+                vocationId,
+                lastAttackAtMs: player.lastAttackAtMs,
+            },
+            msg.creatureId,
+            Date.now(),
+            ATTACK_COOLDOWN_MS
+        );
+
+        if (!outcome.ok) return;
+
+        if (outcome.newLastAttackAtMs !== undefined) {
+            player.lastAttackAtMs = outcome.newLastAttackAtMs;
+        }
+
+        if (outcome.damaged) {
+            this.broadcastToRoom(room, outcome.damaged);
+        }
+
+        if (outcome.died) {
+            this.broadcastToRoom(room, outcome.died);
+
+            const gain = applyExperienceGain(player.experience, outcome.died.xpReward);
+            player.experience = gain.experience;
+            player.level = gain.level;
+
+            this.send(player.socket, {
+                type: 'player_progress',
+                v: PROTOCOL_VERSION,
+                playerId: player.id,
+                level: gain.level,
+                experience: gain.experience,
+                leveledUp: gain.leveledUp,
+            });
+
+            if (player.characterId && player.accountId) {
+                void this.progressPersistence.saveNow({
+                    characterId: player.characterId,
+                    accountId: player.accountId,
+                    level: gain.level,
+                    experience: gain.experience,
+                });
+            }
         }
     }
 

@@ -1,0 +1,400 @@
+import type {
+    CreatureDamagedMessage,
+    CreatureDiedMessage,
+    CreatureMovedMessage,
+    CreatureRespawnedMessage,
+    CreatureSnapshot,
+    ServerMessage,
+} from '../../../shared/protocol.js';
+import {
+    MONSTER_STEP_MS,
+    tickMonsterChaseStep,
+    type CardinalDirection,
+} from '../../../shared/creatureChase.js';
+import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
+import type { VocationId } from '../../../shared/types/character.js';
+import { processAttack } from '../combat/combat.js';
+import type { MapCollisionStore } from '../MapCollisionStore.js';
+import type { CreaturePresetStore } from './CreaturePresetStore.js';
+import type { VocationStore } from './VocationStore.js';
+
+interface RoomPlayerRef {
+    tileX: number;
+    tileY: number;
+    z: number;
+    steppingDestTileX?: number;
+    steppingDestTileY?: number;
+}
+
+interface ServerCreature {
+    id: string;
+    name: string;
+    creatureType: 'monster' | 'npc';
+    mapId: string;
+    instanceId?: string;
+    tileX: number;
+    tileY: number;
+    z: number;
+    spawnX: number;
+    spawnY: number;
+    maxRadius: number;
+    direction: CardinalDirection;
+    lastAggroMoveTime: number;
+    maxHealth: number;
+    health: number;
+    defense: number;
+    xpReward: number;
+    isDead: boolean;
+    respawnAtMs?: number;
+}
+
+interface RoomCreatureState {
+    mapId: string;
+    instanceId?: string;
+    creatures: ServerCreature[];
+}
+
+export interface CombatAttackContext {
+    playerId: string;
+    tileX: number;
+    tileY: number;
+    z: number;
+    level: number;
+    vocationId: VocationId;
+    lastAttackAtMs: number;
+}
+
+export interface CombatAttackOutcome {
+    ok: boolean;
+    code?: string;
+    newLastAttackAtMs?: number;
+    damaged?: CreatureDamagedMessage;
+    died?: CreatureDiedMessage;
+    respawned?: CreatureRespawnedMessage;
+}
+
+const MONSTER_RESPAWN_MS = 45_000;
+
+export class RoomCreatureManager {
+    private rooms = new Map<string, RoomCreatureState>();
+    private tickTimer: ReturnType<typeof setInterval> | null = null;
+
+    constructor(
+        private readonly collision: MapCollisionStore,
+        private readonly presets: CreaturePresetStore,
+        private readonly vocations: VocationStore,
+        private readonly broadcastToRoom: (room: string, message: ServerMessage) => void,
+        private readonly getPlayersInRoom: (room: string) => RoomPlayerRef[]
+    ) {}
+
+    start(): void {
+        if (this.tickTimer) return;
+        this.tickTimer = setInterval(() => this.tick(Date.now()), 100);
+    }
+
+    stop(): void {
+        if (this.tickTimer) {
+            clearInterval(this.tickTimer);
+            this.tickTimer = null;
+        }
+    }
+
+    ensureRoom(room: string, mapId: string, instanceId?: string): CreatureSnapshot[] {
+        let state = this.rooms.get(room);
+        if (!state) {
+            const spawns = this.collision.getSpawns(mapId);
+            const creatures: ServerCreature[] = spawns.map((spawn) => {
+                const stats = this.presets.getStats(spawn.name);
+                return {
+                    id: spawn.id,
+                    name: spawn.name,
+                    creatureType: spawn.type,
+                    mapId,
+                    instanceId,
+                    tileX: spawn.x,
+                    tileY: spawn.y,
+                    z: spawn.z,
+                    spawnX: spawn.x,
+                    spawnY: spawn.y,
+                    maxRadius: spawn.type === 'monster' ? 5 : 3,
+                    direction: 'south' as CardinalDirection,
+                    lastAggroMoveTime: 0,
+                    maxHealth: stats.maxHealth,
+                    health: stats.maxHealth,
+                    defense: stats.defense,
+                    xpReward: stats.xpReward,
+                    isDead: false,
+                };
+            });
+            state = { mapId, instanceId, creatures };
+            this.rooms.set(room, state);
+            console.log(
+                `[RoomCreatureManager] sala ${room}: ${creatures.length} criatura(s) de ${mapId}`
+            );
+        }
+        return state.creatures.map((c) => this.toSnapshot(c));
+    }
+
+    processAttack(
+        room: string,
+        attacker: CombatAttackContext,
+        creatureId: string,
+        nowMs: number,
+        attackCooldownMs: number
+    ): CombatAttackOutcome {
+        const state = this.rooms.get(room);
+        if (!state) {
+            return { ok: false, code: 'ROOM_NOT_FOUND' };
+        }
+
+        if (nowMs - attacker.lastAttackAtMs < attackCooldownMs) {
+            return { ok: false, code: 'ATTACK_COOLDOWN' };
+        }
+
+        const creature = state.creatures.find((c) => c.id === creatureId);
+        if (!creature || creature.creatureType !== 'monster') {
+            return { ok: false, code: 'CREATURE_NOT_FOUND' };
+        }
+        if (creature.isDead) {
+            return { ok: false, code: 'CREATURE_DEAD' };
+        }
+        if (creature.z !== attacker.z) {
+            return { ok: false, code: 'NOT_ADJACENT' };
+        }
+        const dist =
+            Math.abs(creature.tileX - attacker.tileX) +
+            Math.abs(creature.tileY - attacker.tileY);
+        if (dist !== 1) {
+            return { ok: false, code: 'NOT_ADJACENT' };
+        }
+
+        const vocationConfig = this.vocations.get(attacker.vocationId);
+        if (!vocationConfig) {
+            return { ok: false, code: 'INVALID_VOCATION' };
+        }
+
+        const result = processAttack(
+            {
+                id: attacker.playerId,
+                name: '',
+                vocation: attacker.vocationId,
+                level: attacker.level,
+            },
+            {
+                id: creature.id,
+                name: creature.name,
+                health: creature.health,
+                maxHealth: creature.maxHealth,
+                defense: creature.defense,
+            },
+            'melee',
+            vocationConfig
+        );
+
+        creature.health = Math.max(0, creature.health - result.finalDamage);
+
+        const damaged: CreatureDamagedMessage = {
+            type: 'creature_damaged',
+            v: PROTOCOL_VERSION,
+            creatureId: creature.id,
+            mapId: state.mapId,
+            instanceId: state.instanceId,
+            health: creature.health,
+            maxHealth: creature.maxHealth,
+            damage: result.finalDamage,
+            attackerPlayerId: attacker.playerId,
+        };
+
+        const outcome: CombatAttackOutcome = {
+            ok: true,
+            newLastAttackAtMs: nowMs,
+            damaged,
+        };
+
+        if (result.isDead) {
+            creature.isDead = true;
+            creature.health = 0;
+            creature.respawnAtMs = nowMs + MONSTER_RESPAWN_MS;
+            outcome.died = {
+                type: 'creature_died',
+                v: PROTOCOL_VERSION,
+                creatureId: creature.id,
+                mapId: state.mapId,
+                instanceId: state.instanceId,
+                xpReward: creature.xpReward,
+                killerPlayerId: attacker.playerId,
+            };
+        }
+
+        return outcome;
+    }
+
+    private toSnapshot(c: ServerCreature): CreatureSnapshot {
+        return {
+            creatureId: c.id,
+            name: c.name,
+            mapId: c.mapId,
+            instanceId: c.instanceId,
+            tileX: c.tileX,
+            tileY: c.tileY,
+            z: c.z,
+            direction: c.direction,
+            stepDurationMs: MONSTER_STEP_MS,
+            creatureType: c.creatureType,
+            health: c.health,
+            maxHealth: c.maxHealth,
+            isDead: c.isDead,
+        };
+    }
+
+    sendSyncToRoom(room: string): CreatureSnapshot[] {
+        const state = this.rooms.get(room);
+        if (!state) return [];
+        return state.creatures.map((c) => this.toSnapshot(c));
+    }
+
+    private tick(nowMs: number): void {
+        for (const [room, state] of this.rooms.entries()) {
+            const respawns: CreatureRespawnedMessage[] = [];
+            for (const creature of state.creatures) {
+                if (!creature.isDead || !creature.respawnAtMs || nowMs < creature.respawnAtMs) {
+                    continue;
+                }
+                creature.isDead = false;
+                creature.health = creature.maxHealth;
+                creature.tileX = creature.spawnX;
+                creature.tileY = creature.spawnY;
+                creature.direction = 'south';
+                creature.lastAggroMoveTime = 0;
+                creature.respawnAtMs = undefined;
+                respawns.push({
+                    type: 'creature_respawned',
+                    v: PROTOCOL_VERSION,
+                    creatureId: creature.id,
+                    mapId: state.mapId,
+                    instanceId: state.instanceId,
+                    tileX: creature.tileX,
+                    tileY: creature.tileY,
+                    z: creature.z,
+                    health: creature.health,
+                    maxHealth: creature.maxHealth,
+                });
+            }
+            for (const msg of respawns) {
+                this.broadcastToRoom(room, msg);
+            }
+
+            const players = this.getPlayersInRoom(room);
+            if (players.length === 0) continue;
+
+            const mapSize = this.collision.getMapSize(state.mapId);
+            const reservedGoals = new Set<string>();
+            const moves: CreatureMovedMessage[] = [];
+
+            for (const creature of state.creatures) {
+                if (creature.creatureType !== 'monster' || creature.isDead) continue;
+
+                const target = this.pickChaseTarget(creature, players);
+                if (!target) continue;
+
+                const canWalkTo = (tx: number, ty: number) => {
+                    if (tx < 0 || tx >= mapSize || ty < 0 || ty >= mapSize) return false;
+                    if (!this.collision.isWalkable(state.mapId, tx, ty, creature.z)) return false;
+                    if (this.isPlayerAt(players, tx, ty, creature.z)) return false;
+                    if (this.isCreatureAt(state.creatures, tx, ty, creature.z, creature.id)) {
+                        return false;
+                    }
+                    return true;
+                };
+
+                const mobState = {
+                    tileX: creature.tileX,
+                    tileY: creature.tileY,
+                    z: creature.z,
+                    lastAggroMoveTime: creature.lastAggroMoveTime,
+                };
+
+                const step = tickMonsterChaseStep(
+                    mobState,
+                    target,
+                    nowMs,
+                    canWalkTo,
+                    reservedGoals
+                );
+
+                if (!step) continue;
+
+                creature.tileX = mobState.tileX;
+                creature.tileY = mobState.tileY;
+                creature.lastAggroMoveTime = mobState.lastAggroMoveTime;
+                creature.direction = step.dir;
+
+                moves.push({
+                    type: 'creature_moved',
+                    v: PROTOCOL_VERSION,
+                    creatureId: creature.id,
+                    mapId: state.mapId,
+                    instanceId: state.instanceId,
+                    tileX: creature.tileX,
+                    tileY: creature.tileY,
+                    z: creature.z,
+                    direction: creature.direction,
+                    stepDurationMs: MONSTER_STEP_MS,
+                });
+            }
+
+            for (const move of moves) {
+                this.broadcastToRoom(room, move);
+            }
+        }
+    }
+
+    private pickChaseTarget(
+        creature: ServerCreature,
+        players: RoomPlayerRef[]
+    ): RoomPlayerRef | null {
+        let best: RoomPlayerRef | null = null;
+        let bestDist = Infinity;
+        for (const p of players) {
+            if (p.z !== creature.z) continue;
+            const d =
+                Math.abs(p.tileX - creature.tileX) + Math.abs(p.tileY - creature.tileY);
+            if (d < bestDist) {
+                bestDist = d;
+                best = p;
+            }
+        }
+        return best;
+    }
+
+    private isPlayerAt(
+        players: RoomPlayerRef[],
+        tx: number,
+        ty: number,
+        z: number
+    ): boolean {
+        for (const p of players) {
+            if (p.z !== z) continue;
+            if (p.tileX === tx && p.tileY === ty) return true;
+            if (p.steppingDestTileX === tx && p.steppingDestTileY === ty) return true;
+        }
+        return false;
+    }
+
+    private isCreatureAt(
+        creatures: ServerCreature[],
+        tx: number,
+        ty: number,
+        z: number,
+        excludeId: string
+    ): boolean {
+        return creatures.some(
+            (c) =>
+                !c.isDead &&
+                c.id !== excludeId &&
+                c.tileX === tx &&
+                c.tileY === ty &&
+                c.z === z
+        );
+    }
+}

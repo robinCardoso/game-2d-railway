@@ -55,8 +55,10 @@ import {
     isInsideMapInstance,
 } from '../engine/mapInstance';
 import { DEFAULT_WS_PORT } from '../../shared/protocol';
+import { MONSTER_STEP_MS } from '../../shared/creatureChase';
 import { GameNetClient } from '../net/gameNetClient';
 import { RemotePlayerSpriteManager } from '../net/remotePlayerSprites';
+import { ServerCreatureSync } from '../net/serverCreatureSync';
 import { appearanceFromCharacter } from '../world/playerAppearance';
 import { createEnterTicket } from '../shared/enterTicket';
 import type { CharacterRow } from '../shared/types';
@@ -67,6 +69,10 @@ import { getPlayBorderConfig, loadPlayBorderConfig } from './playBorderConfig';
 import { normalizeCharacterProgress } from './experience';
 import { resetPlayCombatInput, tickPlayCombat } from './playCombat';
 import { loadRuntimeVocations } from '../game-data/vocationRegistry';
+import {
+    isServerAuthoritativeCreatures,
+    isServerAuthoritativePosition,
+} from './serverAuthority';
 
 const TILE_SIZE_SCREEN = ENGINE_CONFIG.TILE_SIZE;
 let TILE_TYPES = buildTileRegistry();
@@ -102,6 +108,27 @@ const characterSpeed: CharacterSpeedState = createDefaultCharacterSpeed();
 let activeCharacterController: SpriteAnimationController;
 let gameNet: GameNetClient | null = null;
 const remoteSprites = new RemotePlayerSpriteManager();
+const serverCreatures = new ServerCreatureSync();
+
+function usesServerCreatures(): boolean {
+    return isServerAuthoritativeCreatures(Boolean(gameNet?.isConnected())) && Boolean(currentMapId);
+}
+
+function stripLocalMonsters(): void {
+    for (let i = npcs.length - 1; i >= 0; i--) {
+        if (npcs[i].type === 'monster') {
+            npcs.splice(i, 1);
+        }
+    }
+}
+
+/** Entidades locais + mobs autoritativos do servidor (quando online). */
+function getPlayEntities(): GameEntity[] {
+    if (usesServerCreatures()) {
+        return [...npcs.filter((n) => n.type === 'npc'), ...serverCreatures.getEntities()];
+    }
+    return npcs;
+}
 
 const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -130,6 +157,24 @@ function createCollisionContext(): CollisionQueryContext {
     };
 }
 
+function isTerrainWalkable(
+    worldX: number,
+    worldY: number,
+    z: number
+): {
+    walkable: boolean;
+    speed: number;
+    isStair: boolean;
+    stairDir?: 'up' | 'down';
+} {
+    try {
+        return queryWalkable(createCollisionContext(), worldX, worldY, z);
+    } catch (err) {
+        console.error('Erro em isTerrainWalkable:', err);
+        return { walkable: false, speed: 0, isStair: false };
+    }
+}
+
 function isWalkable(
     worldX: number,
     worldY: number,
@@ -141,10 +186,10 @@ function isWalkable(
     stairDir?: 'up' | 'down';
 } {
     try {
-        const result = queryWalkable(createCollisionContext(), worldX, worldY, z);
+        const result = isTerrainWalkable(worldX, worldY, z);
         if (!result.walkable) return result;
 
-        // Impede o jogador de passar por cima de NPCs
+        // Impede o jogador de passar por cima de NPCs/mobs
         const tx = Math.floor(worldX / TILE_SIZE_SCREEN);
         const ty = Math.floor(worldY / TILE_SIZE_SCREEN);
         if (isEntityAtTile(tx, ty, z, 'player')) {
@@ -199,8 +244,11 @@ function updateActiveMapHud(): void {
 }
 
 function respawnEntities(): void {
+    const spawns = usesServerCreatures()
+        ? worldSpawns.filter((s) => s.type === 'npc')
+        : worldSpawns;
     respawnEntitiesFromSpawns({
-        spawns: worldSpawns,
+        spawns,
         npcs,
         mapSize: activeMapSize,
         tileSize: TILE_SIZE_SCREEN,
@@ -281,7 +329,7 @@ async function resolveEnterTicket(char: CharacterRow, accountId: string): Promis
 }
 
 async function saveCurrentCharacterLocation(): Promise<void> {
-    if (isServerWsTicketEnabled()) return;
+    if (isServerAuthoritativePosition()) return;
     if (!activeCharacter || !currentMapId) return;
     const entry = getMapById(currentMapId);
     if (!entry || entry.instanced) {
@@ -373,7 +421,7 @@ async function flushProgressSave(): Promise<void> {
 }
 
 function setupLocationAutosave(): void {
-    if (isServerWsTicketEnabled()) return;
+    if (isServerAuthoritativePosition()) return;
     if (locationAutosaveStarted) return;
     locationAutosaveStarted = true;
 
@@ -463,11 +511,30 @@ function hideLoading(): void {
     }
 }
 
-function isEntityAtTile(tx: number, ty: number, z: number, excludeId?: string): boolean {
-    if (excludeId !== 'player' && player.tileX === tx && player.tileY === ty && player.worldZ === z) {
+function isPlayerOccupyingTile(tx: number, ty: number, z: number): boolean {
+    if (player.worldZ !== z) return false;
+    if (player.tileX === tx && player.tileY === ty) return true;
+    if (
+        gridMovement.stepping &&
+        gridMovement.destTileX === tx &&
+        gridMovement.destTileY === ty
+    ) {
         return true;
     }
-    for (const npc of npcs) {
+    return false;
+}
+
+function canCommitPlayerStepToTile(destTileX: number, destTileY: number, z: number): boolean {
+    const wx = destTileX * TILE_SIZE_SCREEN;
+    const wy = destTileY * TILE_SIZE_SCREEN;
+    return isWalkable(wx, wy, z).walkable;
+}
+
+function isEntityAtTile(tx: number, ty: number, z: number, excludeId?: string): boolean {
+    if (excludeId !== 'player' && isPlayerOccupyingTile(tx, ty, z)) {
+        return true;
+    }
+    for (const npc of getPlayEntities()) {
         if (npc.id !== excludeId && !npc.isDead && npc.tileX === tx && npc.tileY === ty && npc.worldZ === z) {
             return true;
         }
@@ -477,16 +544,25 @@ function isEntityAtTile(tx: number, ty: number, z: number, excludeId?: string): 
 
 function update(): void {
     const nowMs = performance.now();
-    NpcAI.tickNpcAI({
-        nowMs,
-        npcs,
-        player,
-        TILE_SIZE_SCREEN,
-        MAP_SIZE: activeMapSize,
-        isEntityAtTile,
-        queryWalkable: (ctx, px, py, z) => queryWalkable(ctx, px, py, z),
-        createCollisionContext: () => createCollisionContext(),
-    });
+    const playEntities = getPlayEntities();
+    const aiEntities = usesServerCreatures() ? npcs.filter((n) => n.type === 'npc') : npcs;
+
+    if (aiEntities.length > 0) {
+        NpcAI.tickNpcAI({
+            nowMs,
+            npcs: aiEntities,
+            player,
+            TILE_SIZE_SCREEN,
+            MAP_SIZE: activeMapSize,
+            isEntityAtTile,
+            queryWalkable: (ctx, px, py, z) => queryWalkable(ctx, px, py, z),
+            createCollisionContext: () => createCollisionContext(),
+        });
+    }
+
+    if (usesServerCreatures()) {
+        serverCreatures.tick(nowMs);
+    }
     speedBuffs.tick(nowMs);
     const result = PlayerMovement.updateMovement({
         keys,
@@ -500,6 +576,8 @@ function update(): void {
         ENGINE_CONFIG,
         editingFloor,
         isWalkable: (x, y, z) => isWalkable(x, y, z),
+        isTerrainWalkable: (x, y, z) => isTerrainWalkable(x, y, z),
+        canCommitStepToTile: canCommitPlayerStepToTile,
         isStairHoleAtTile,
         getStepDurationForTile,
         updateFloorButtons: () => {},
@@ -549,10 +627,23 @@ function update(): void {
             nowMs,
             keys,
             stepping: gridMovement.stepping,
-            npcs,
+            npcs: playEntities,
             player,
             character: activeCharacter,
             characterSpeed,
+            server:
+                gameNet?.isConnected() && currentMapId
+                    ? {
+                          wsConnected: true,
+                          sendAttack: (creatureId) => {
+                              gameNet!.sendAttack(
+                                  creatureId,
+                                  currentMapId!,
+                                  gameNet!.getNetworkInstanceId()
+                              );
+                          },
+                      }
+                    : undefined,
             callbacks: {
                 faceToward: faceTowardEntity,
                 onDamage: (target, damage) => {
@@ -740,7 +831,7 @@ function draw(): void {
                 mapSize: activeMapSize,
                 edgeFadePx: DEFAULT_ITEM_EDGE_FADE_PX,
             }),
-            ...collectNpcDepthDrawables(npcs, z, camState, TILE_SIZE_SCREEN, { drawNames: true }),
+            ...collectNpcDepthDrawables(getPlayEntities(), z, camState, TILE_SIZE_SCREEN, { drawNames: true }),
         ];
 
         if (currentMapId && gameNet) {
@@ -851,6 +942,10 @@ function setupNetwork(char: CharacterRow, accountId: string): void {
             appearance: localAppearance,
             stepDurationMs:
                 gridMovement.lastCompletedStepDurationMs || gridMovement.stepDurationMs,
+            steppingDestTileX: gridMovement.stepping ? gridMovement.destTileX : undefined,
+            steppingDestTileY: gridMovement.stepping ? gridMovement.destTileY : undefined,
+            level: activeCharacter?.level,
+            experience: activeCharacter?.experience,
         }),
         isMovementStepping: () => gridMovement.stepping,
         onPositionCorrection: (pos) => {
@@ -863,10 +958,70 @@ function setupNetwork(char: CharacterRow, accountId: string): void {
             resetGridMovementInputState(gridMovement);
             syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
         },
+        onStatusChange: (status) => {
+            if (status === 'connected') {
+                stripLocalMonsters();
+            } else if (status === 'disconnected') {
+                serverCreatures.clear();
+                respawnEntities();
+            }
+        },
+        onCreatureSync: ({ mapId, instanceId, creatures }) => {
+            if (!currentMapId || mapId !== currentMapId) return;
+            stripLocalMonsters();
+            serverCreatures.applySync(
+                creatures,
+                mapId,
+                instanceId ?? gameNet?.getNetworkInstanceId()
+            );
+        },
+        onCreatureMoved: (msg) => {
+            if (!currentMapId || msg.mapId !== currentMapId) return;
+            serverCreatures.applyMoved(
+                msg,
+                msg.stepDurationMs ?? MONSTER_STEP_MS,
+                performance.now()
+            );
+        },
+        onCreatureDamaged: (msg) => {
+            if (!currentMapId || msg.mapId !== currentMapId) return;
+            serverCreatures.applyDamaged(
+                msg.creatureId,
+                msg.health,
+                msg.maxHealth,
+                msg.damage
+            );
+        },
+        onCreatureDied: (msg) => {
+            if (!currentMapId || msg.mapId !== currentMapId) return;
+            const entity = serverCreatures.applyDied(msg.creatureId);
+            if (
+                entity &&
+                msg.killerPlayerId &&
+                msg.killerPlayerId === gameNet?.getLocalPlayerId()
+            ) {
+                entity.speak(`+${msg.xpReward} XP`, 1800);
+            }
+        },
+        onCreatureRespawned: (msg) => {
+            if (!currentMapId || msg.mapId !== currentMapId) return;
+            serverCreatures.applyRespawned(msg);
+        },
+        onPlayerProgress: (msg) => {
+            if (!activeCharacter) return;
+            activeCharacter.experience = msg.experience;
+            activeCharacter.level = msg.level;
+            characterSpeed.level = msg.level;
+            updateCharacterStatsUi(activeCharacter, { flashLevel: Boolean(msg.leveledUp) });
+            if (msg.leveledUp) {
+                refreshPlayerMovementSpeed(performance.now());
+            }
+            scheduleProgressSave(Boolean(msg.leveledUp));
+        },
     });
 
-    void refreshTicket().then((t) => {
-        if (t) gameNet!.connect();
+    void refreshTicket().finally(() => {
+        gameNet!.connect();
     });
 }
 

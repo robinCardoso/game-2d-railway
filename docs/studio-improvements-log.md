@@ -809,3 +809,76 @@ Sessão dedicada à resolução de problemas de usabilidade que causavam perda d
 - [ ] Railway: editar vocações sobrevive redeploy (volume)
 - [ ] Produção: matar mob → XP persiste após sair e reentrar no Play
 
+---
+
+## 35. Mobs compartilhados multiplayer (Fase 1–2)
+
+### 35.1 Servidor autoritativo
+- **`MapCollisionStore`:** carrega `spawns` do JSON do mapa
+- **`RoomCreatureManager`:** estado por sala `mapId@instanceId`; IA chase (shared `creatureChase.ts`); tick 100ms / passo 360ms
+- **`GameRoom`:** `welcome.creatures` + `creature_sync` em troca de mapa; broadcast `creature_moved`
+
+### 35.2 Protocolo (`shared/protocol.ts`)
+- `CreatureSnapshot`, `creature_sync`, `creature_moved`
+- `welcome.creatures[]` opcional
+
+### 35.3 Cliente Play
+- **`ServerCreatureSync`:** substitui mobs locais quando WS conectado
+- **`playApp.ts`:** sem `respawn` de monsters locais online; `NpcAI` só NPCs; combate/draw usam entidades do servidor
+- **`gameNetClient`:** callbacks `onCreatureSync` / `onCreatureMoved`
+
+### Checklist manual
+- [ ] 2 abas Play mesmo mapa — cada aba vê **2** mobs (não 4); posições iguais
+- [ ] Mobs perseguem jogador mais próximo na sala
+- [ ] Offline (sem WS): mobs locais como antes
+- [ ] Troca de mapa online: `creature_sync` repovoa sala nova
+
+### Backlog (Fase 4+)
+- Loot autoritativo no servidor
+- Respawn configurável por spawn
+
+---
+
+## 37. Combate autoritativo multiplayer (2026-06-06)
+
+### 37.1 Protocolo
+- **C→S:** `attack` `{ creatureId, mapId, instanceId? }`
+- **S→C:** `creature_damaged`, `creature_died`, `creature_respawned`, `player_progress`
+
+### 37.2 Servidor
+- `RoomCreatureManager.processAttack` — valida adjacência, cooldown, calcula dano via `server/combat/combat.ts`
+- HP/XP dos mobs via `CreaturePresetStore` (`creature_presets.json`)
+- Vocações via `VocationStore` (`vocations.json`)
+- XP persistido no PostgreSQL via `ProgressPersistence` (ticket join traz level/exp)
+- Respawn de mob morto após 45s no spawn
+
+### 37.3 Cliente
+- `isServerAuthoritativeCombat(wsConnected)` — online envia intenção; offline mantém combate local
+- `gameNetClient.sendAttack` + handlers em `serverCreatureSync`
+- XP/level só aplicados via `player_progress` do servidor quando online
+
+### Checklist manual
+- [ ] 2 abas: dano e morte do mob sincronizados
+- [ ] XP sobe só após `player_progress` (não localmente quando WS ativo)
+- [ ] Mob morto reaparece no spawn após ~45s em ambas as abas
+- [ ] Offline (sem WS): combate local continua funcionando
+
+---
+
+## 36. Autoridade explícita + reserva de tile (2026-06-06)
+
+### 36.1 Flags (`src/game/serverAuthority.ts`)
+- `isServerAuthoritativePosition()` — posição via WS/ticket (prod)
+- `isServerAuthoritativeCreatures(wsConnected)` — mobs do GameRoom
+- `isServerAuthoritativeCombat(wsConnected)` — combate via servidor quando WS conectado
+
+### 36.2 Reserva de tile durante deslize
+- **Cliente:** `isPlayerOccupyingTile()` reserva `gridMovement.destTileX/Y` em `isEntityAtTile`
+- **Cliente:** `canCommitStepToTile` — cancela passo se destino ficou bloqueado ao terminar animação
+- **Protocolo:** `move.steppingDestTileX/Y` — reserva no servidor sem mover tile autoritativo
+- **Servidor:** `RoomCreatureManager` trata tile reservado como ocupado pelo jogador
+
+### Checklist manual
+- [ ] Mob online não entra no tile para onde o player está deslizando
+- [ ] Player não “aterriza” em tile com mob se este entrou durante o passo
+
