@@ -225,12 +225,15 @@ export function deserializeMapDocument(
     }
 
     let map: WorldMap;
+    /** Células já resolvidas por ref no sparse `tiles` — segundo remap corromperia ids. */
+    let resolvedSparseTileRefs = false;
 
     if (doc.tiles && typeof doc.tiles === 'object') {
         let tiles = sanitizeTilesByFloor(doc.tiles, doc.size);
         if (Object.keys(tiles).length > 0) {
             if (tileRegistry) {
                 tiles = resolveTilesByFloor(tiles, doc.tileRefs, tileRegistry);
+                resolvedSparseTileRefs = true;
             }
             map = sparseTilesToWorldMap(tilesByFloorToSparseEntries(tiles), doc.size);
         } else {
@@ -249,7 +252,12 @@ export function deserializeMapDocument(
         map = ensureAllFloors(map, doc.size);
     }
 
-    if (tileRegistry && doc.tileRefs && Object.keys(doc.tileRefs).length > 0) {
+    if (
+        tileRegistry &&
+        doc.tileRefs &&
+        Object.keys(doc.tileRefs).length > 0 &&
+        !resolvedSparseTileRefs
+    ) {
         map = remapWorldMapTileIds(map, doc, tileRegistry);
     }
 

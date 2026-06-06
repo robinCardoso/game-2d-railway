@@ -5,7 +5,7 @@ export const env = {
     port: Number(process.env.PORT ?? process.env.GAME_SERVER_PORT ?? DEFAULT_WS_PORT),
     host:
         process.env.HOST ??
-        (process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost'),
+        (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1'),
     dataRoot: process.env.DATA_ROOT?.trim() || null,
     databaseUrl: process.env.DATABASE_URL?.trim() || null,
     databaseSsl: process.env.DATABASE_SSL === 'true',

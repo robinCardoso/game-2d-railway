@@ -48,6 +48,9 @@ export interface CreaturePresetEntry {
     chaseBehavior?: MobChaseBehavior;
     /** Distância Manhattan de combate (1 = corpo a corpo; mago usa ~3). */
     attackRange?: number;
+    /** Ranged: para de corrigir posição dentro desta faixa (padrão: attackRange ± 1). */
+    minRange?: number;
+    maxRange?: number;
     /** Persistido para loot futuro; gameplay ainda não consome. */
     loot?: MobLootEntry[];
 }
@@ -136,23 +139,41 @@ export function sanitizeCreaturePresetEntry(raw: unknown): CreaturePresetEntry |
         race: parseRace(row.race),
         chaseBehavior: parseChaseBehavior(row.chaseBehavior),
         attackRange: coerceOptionalPositiveInt(row.attackRange),
+        minRange: coerceOptionalPositiveInt(row.minRange),
+        maxRange: coerceOptionalPositiveInt(row.maxRange),
         loot: sanitizeLoot(row.loot),
     };
 
     return entry;
 }
 
-/** Perseguição efetiva — defaults: melee/1 SQM, ranged/3 SQM. */
+/** Perseguição efetiva — defaults: melee/1 SQM, ranged/3 SQM com zona min/max. */
 export function resolveMobChaseConfig(preset?: CreaturePresetEntry): ChaseMobConfig {
     const chaseBehavior: MobChaseBehavior =
         preset?.chaseBehavior === 'ranged' ? 'ranged' : 'melee';
     const defaultRange = chaseBehavior === 'ranged' ? 3 : 1;
     let attackRange = preset?.attackRange ?? defaultRange;
     attackRange = Math.max(1, Math.min(MONSTER_AGGRO_RADIUS - 1, Math.floor(attackRange)));
+
     if (chaseBehavior === 'melee') {
-        attackRange = 1;
+        return {
+            chaseBehavior,
+            attackRange: 1,
+            minRange: 1,
+            maxRange: 1,
+        };
     }
-    return { chaseBehavior, attackRange };
+
+    let minRange = preset?.minRange ?? Math.max(1, attackRange - 1);
+    let maxRange = preset?.maxRange ?? attackRange + 1;
+    minRange = Math.max(1, Math.min(minRange, attackRange));
+    maxRange = Math.max(attackRange, Math.min(MONSTER_AGGRO_RADIUS - 1, maxRange));
+    if (minRange > maxRange) {
+        minRange = Math.max(1, attackRange - 1);
+        maxRange = attackRange + 1;
+    }
+
+    return { chaseBehavior, attackRange, minRange, maxRange };
 }
 
 export interface ResolvedMobCombatStats {

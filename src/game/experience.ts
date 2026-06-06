@@ -46,13 +46,11 @@ export function applyExperienceGain(
 
 export function normalizeCharacterProgress(
     experience: number | undefined,
-    level: number | undefined
+    _level?: number | undefined
 ): CharacterProgress {
     const exp = Math.max(0, Math.floor(experience ?? 0));
-    const derivedLevel = getLevelFromExp(exp);
-    const storedLevel = Math.max(1, Math.floor(level ?? derivedLevel));
     return {
         experience: exp,
-        level: Math.max(storedLevel, derivedLevel),
+        level: getLevelFromExp(exp),
     };
 }

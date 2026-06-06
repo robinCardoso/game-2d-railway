@@ -6,7 +6,7 @@
     "description": "Magao bruto testando ele",
     "color": "#fb7185",
     "visualSize": "boss",
-    "maxHealth": 350,
+    "maxHealth": 250,
     "defense": 12,
     "attack": 45,
     "attackSpeed": 1200,

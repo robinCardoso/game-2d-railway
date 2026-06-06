@@ -97,6 +97,8 @@ export interface GameNetClientOptions {
         experience: number;
         leveledUp?: boolean;
     }) => void;
+    /** Após `welcome` — sincronizar XP local com o servidor (dev/mock). */
+    onWelcome?: () => void;
 }
 
 /**
@@ -167,6 +169,16 @@ export class GameNetClient {
             creatureId,
             mapId,
             instanceId: instanceId ?? this.networkInstanceId ?? undefined,
+        });
+    }
+
+    sendProgressSync(level: number, experience: number): void {
+        if (!this.isConnected()) return;
+        this.send({
+            type: 'progress_sync',
+            v: PROTOCOL_VERSION,
+            level: Math.max(1, Math.floor(level)),
+            experience: Math.max(0, Math.floor(experience)),
         });
     }
 
@@ -448,6 +460,7 @@ export class GameNetClient {
                         creatures: msg.creatures,
                     });
                 }
+                this.options.onWelcome?.();
                 break;
             case 'instance_assigned':
                 this.networkInstanceId = msg.instanceId;

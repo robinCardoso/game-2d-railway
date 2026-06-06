@@ -32,6 +32,8 @@ export interface CharacterSpriteConfig {
     gapY?: number;    // Espaçamento vertical entre linhas de frames
     anchorX?: number; // Ajuste fino de âncora/renderização no mapa (X)
     anchorY?: number; // Ajuste fino de âncora/renderização no mapa (Y)
+    /** Âncora Y extra quando morto (corpo/esqueleto no chão). */
+    corpseAnchorY?: number;
     /** Escala visual no tile; movimento/colisão permanecem no grid da engine. */
     drawScale?: number;
     chromaKey?: boolean; // Se ativo, remove o fundo rosa (#FF00FF)
@@ -119,18 +121,20 @@ export class SpriteAnimationController {
         const anim = this.getCurrentAnimation();
         if (!anim) return;
 
+        const { speedFps: baseSpeedFps, frames, loop } = anim;
+
         if (this.lastFrameTime === 0) {
             this.lastFrameTime = nowMs;
             return;
         }
 
         // Sincronização dinâmica de velocidade da animação com o movimento real
-        let speedFps = anim.speedFps;
+        let speedFps = baseSpeedFps;
         if (this.currentState === 'walk' && movementStepDurationMs && movementStepDurationMs > 0) {
             // Se um passo leva X ms, e temos N frames, a velocidade deve fazer
             // todos os frames rodarem exatamente na duração do passo.
             const totalDurationSec = movementStepDurationMs / 1000;
-            speedFps = anim.frames / totalDurationSec;
+            speedFps = frames / totalDurationSec;
         }
 
         const frameDurationMs = 1000 / speedFps;
@@ -141,11 +145,11 @@ export class SpriteAnimationController {
             this.currentFrameIndex += newFrames;
             this.lastFrameTime = nowMs - (elapsed % frameDurationMs);
 
-            if (this.currentFrameIndex >= anim.frames) {
-                if (anim.loop) {
-                    this.currentFrameIndex = this.currentFrameIndex % anim.frames;
+            if (this.currentFrameIndex >= frames) {
+                if (loop) {
+                    this.currentFrameIndex %= frames;
                 } else {
-                    this.currentFrameIndex = anim.frames - 1;
+                    this.currentFrameIndex = frames - 1;
                     if (this.onAnimationEndCallback) {
                         this.onAnimationEndCallback();
                     }

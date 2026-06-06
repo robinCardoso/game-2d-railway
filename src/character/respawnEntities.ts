@@ -2,6 +2,7 @@ import { ENGINE_CONFIG } from '../engine/config';
 import type { CreatureSpawn } from '../engine/types';
 import { getCreaturePreset } from '../editor/creaturePresets';
 import { resolveCreatureCombatStats } from '../game/creatureCombatStats';
+import { armMonsterWakeDelay } from '../../shared/creatureChase';
 import { createCreatureConfigForSpawn } from './creatureConfigs';
 import { GameEntity } from './entity';
 
@@ -15,6 +16,7 @@ export interface RespawnEntitiesOptions {
 /** Reconstrói entidades ativas a partir dos spawns pintados no mapa. */
 export function respawnEntitiesFromSpawns(options: RespawnEntitiesOptions): void {
     const { spawns, npcs, mapSize, tileSize = ENGINE_CONFIG.TILE_SIZE } = options;
+    const nowMs = performance.now();
     npcs.length = 0;
 
     spawns.forEach((spawn) => {
@@ -47,6 +49,7 @@ export function respawnEntitiesFromSpawns(options: RespawnEntitiesOptions): void
         if (spawn.type === 'monster') {
             const preset = getCreaturePreset(spawn.name);
             entity.initCombatStats(resolveCreatureCombatStats(preset));
+            armMonsterWakeDelay(entity, nowMs);
         }
         npcs.push(entity);
     });

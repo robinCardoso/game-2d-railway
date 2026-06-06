@@ -19,6 +19,7 @@ export type ClientMessage =
     | MoveMessage
     | MapChangeMessage
     | AttackMessage
+    | ProgressSyncMessage
     | PingMessage
     | LeaveMessage;
 
@@ -108,6 +109,13 @@ export interface AttackMessage {
     creatureId: string;
     mapId: string;
     instanceId?: string;
+}
+
+export interface ProgressSyncMessage {
+    type: 'progress_sync';
+    v: number;
+    level: number;
+    experience: number;
 }
 
 export interface MoveMessage {
@@ -427,6 +435,17 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
                 creatureId,
                 mapId: typeof m.mapId === 'string' ? m.mapId.slice(0, 48) : 'mainland',
                 instanceId,
+            };
+        }
+        case 'progress_sync': {
+            const experience = parseOptionalNonNegativeInt(m.experience);
+            if (experience === undefined) return null;
+            const level = parseOptionalPositiveInt(m.level) ?? 1;
+            return {
+                type: 'progress_sync',
+                v: PROTOCOL_VERSION,
+                level,
+                experience,
             };
         }
         case 'ping':

@@ -14,6 +14,7 @@ import {
     type WorldMap,
 } from '../engine';
 import {
+    collectCombatTargetRingDrawable,
     collectItemDepthDrawables,
     DEFAULT_ITEM_EDGE_FADE_PX,
     collectLocalPlayerDepthDrawable,
@@ -65,9 +66,11 @@ import type { CharacterRow } from '../shared/types';
 import { updateCharacterLocation, updateCharacterProgress } from '../shared/characterStore';
 import { fetchWsTicket, isServerWsTicketEnabled } from '../shared/wsTicketClient';
 import { updateCharacterStatsUi } from './ui/characterStatsUi';
-import { getPlayBorderConfig, loadPlayBorderConfig } from './playBorderConfig';
 import { normalizeCharacterProgress } from './experience';
-import { resetPlayCombatInput, tickPlayCombat } from './playCombat';
+import { getPlayBorderConfig, loadPlayBorderConfig } from './playBorderConfig';
+import { resetPlayCombatInput, tickPlayCombat, getPlayCombatHoverId, getPlayCombatTargetId, updatePlayCombatHover, handlePlayCombatTargetClick, clearPlayCombatTarget, type PlayCombatServerBridge } from './playCombat';
+import { ensureCombatTargetRingLoaded } from './combatTargetRing';
+import { tickOfflineMonsterDeathAndRespawn } from './creatureDeathLifecycle';
 import { loadRuntimeVocations } from '../game-data/vocationRegistry';
 import {
     isServerAuthoritativeCreatures,
@@ -367,6 +370,80 @@ function handleBeforeUnload(): void {
     void flushProgressSave();
 }
 
+function triggerPlayAttackAnimation(): void {
+    activeCharacterController.setState('attack');
+    activeCharacterController.onAnimationEndCallback = () => {
+        if (gridMovement.stepping) {
+            activeCharacterController.setState('walk');
+        } else {
+            activeCharacterController.setState('idle');
+        }
+    };
+}
+
+function setupPlayCombatControls(): void {
+    const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+
+    canvas.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (!activeCharacter) return;
+        handlePlayCombatTargetClick({
+            clientX: e.clientX,
+            clientY: e.clientY,
+            canvas,
+            camera,
+            npcs: getPlayEntities(),
+            playerZ: player.worldZ,
+            tileSize: TILE_SIZE_SCREEN,
+        });
+    });
+
+    canvas.addEventListener('pointerdown', (e) => {
+        const isTouch = e.pointerType === 'touch';
+        const isCoarseTap = coarsePointer && e.button === 0 && e.pointerType === 'mouse';
+        if (!isTouch && !isCoarseTap) return;
+        if (!activeCharacter) return;
+
+        const selected = handlePlayCombatTargetClick({
+            clientX: e.clientX,
+            clientY: e.clientY,
+            canvas,
+            camera,
+            npcs: getPlayEntities(),
+            playerZ: player.worldZ,
+            tileSize: TILE_SIZE_SCREEN,
+        });
+        if (selected) e.preventDefault();
+    });
+
+    if (!coarsePointer) {
+        canvas.addEventListener('mousemove', (e) => {
+            updatePlayCombatHover({
+                clientX: e.clientX,
+                clientY: e.clientY,
+                canvas,
+                camera,
+                npcs: getPlayEntities(),
+                playerZ: player.worldZ,
+                tileSize: TILE_SIZE_SCREEN,
+                enabled: true,
+            });
+        });
+        canvas.addEventListener('mouseleave', () => {
+            updatePlayCombatHover({
+                clientX: 0,
+                clientY: 0,
+                canvas,
+                camera,
+                npcs: getPlayEntities(),
+                playerZ: player.worldZ,
+                tileSize: TILE_SIZE_SCREEN,
+                enabled: false,
+            });
+        });
+    }
+}
+
 function faceTowardEntity(target: GameEntity): void {
     const foot = target.getFootTile(TILE_SIZE_SCREEN);
     const dx = foot.tileX - player.tileX;
@@ -564,6 +641,8 @@ function update(): void {
 
     if (usesServerCreatures()) {
         serverCreatures.tick(nowMs);
+    } else {
+        tickOfflineMonsterDeathAndRespawn(npcs, nowMs, TILE_SIZE_SCREEN);
     }
     speedBuffs.tick(nowMs);
     const result = PlayerMovement.updateMovement({
@@ -627,29 +706,17 @@ function update(): void {
     if (activeCharacter) {
         tickPlayCombat({
             nowMs,
-            keys,
             stepping: gridMovement.stepping,
             npcs: playEntities,
             player,
             character: activeCharacter,
             characterSpeed,
-            server:
-                gameNet?.isConnected() && currentMapId
-                    ? {
-                          wsConnected: true,
-                          sendAttack: (creatureId) => {
-                              gameNet!.sendAttack(
-                                  creatureId,
-                                  currentMapId!,
-                                  gameNet!.getNetworkInstanceId()
-                              );
-                          },
-                      }
-                    : undefined,
+            server: buildPlayCombatServerBridge(),
             callbacks: {
                 faceToward: faceTowardEntity,
+                onAttackSwing: triggerPlayAttackAnimation,
                 onDamage: (target, damage) => {
-                    target.speak(`-${damage}`, 900);
+                    target.spawnFloatingDamage(damage, nowMs);
                 },
                 onMonsterKilled: (target, xpReward) => {
                     target.speak(`+${xpReward} XP`, 1800);
@@ -749,7 +816,10 @@ function setupPlayZoomControls(): void {
 
 function draw(): void {
     const zoom = camera.zoom || 1;
+    const nowMs = performance.now();
 
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
     ctx.fillStyle = '#0a0b0e';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -833,7 +903,19 @@ function draw(): void {
                 mapSize: activeMapSize,
                 edgeFadePx: DEFAULT_ITEM_EDGE_FADE_PX,
             }),
-            ...collectNpcDepthDrawables(getPlayEntities(), z, camState, TILE_SIZE_SCREEN, { drawNames: true }),
+            ...collectCombatTargetRingDrawable(
+                getPlayEntities(),
+                getPlayCombatTargetId(),
+                z,
+                camState,
+                TILE_SIZE_SCREEN,
+                nowMs
+            ),
+            ...collectNpcDepthDrawables(getPlayEntities(), z, camState, TILE_SIZE_SCREEN, {
+                drawNames: true,
+                highlightEntityId: getPlayCombatHoverId(),
+                nowMs,
+            }),
         ];
 
         if (currentMapId && gameNet) {
@@ -903,6 +985,32 @@ function resize(): void {
     ctx.imageSmoothingEnabled = false;
 }
 
+function resolveGameServerUrlForPlay(): string | null {
+    return resolveGameServerUrl();
+}
+
+function buildPlayCombatServerBridge(): PlayCombatServerBridge | undefined {
+    if (!resolveGameServerUrlForPlay()) return undefined;
+    return {
+        wsConnected: gameNet?.isConnected() ?? false,
+        multiplayerConfigured: true,
+        sendAttack: (creatureId) => {
+            if (gameNet?.isConnected() && currentMapId) {
+                gameNet.sendAttack(creatureId, currentMapId, gameNet.getNetworkInstanceId());
+            }
+        },
+    };
+}
+
+function syncProgressToServer(): void {
+    if (!activeCharacter || !gameNet?.isConnected()) return;
+    const progress = normalizeCharacterProgress(activeCharacter.experience, activeCharacter.level);
+    activeCharacter.experience = progress.experience;
+    activeCharacter.level = progress.level;
+    characterSpeed.level = progress.level;
+    gameNet.sendProgressSync(progress.level, progress.experience);
+}
+
 function resolveGameServerUrl(): string | null {
     const env = import.meta.env.VITE_GAME_SERVER_WS;
     if (env === 'false' || env === '0') return null;
@@ -968,6 +1076,9 @@ function setupNetwork(char: CharacterRow, accountId: string): void {
                 respawnEntities();
             }
         },
+        onWelcome: () => {
+            syncProgressToServer();
+        },
         onCreatureSync: ({ mapId, instanceId, creatures }) => {
             if (!currentMapId || mapId !== currentMapId) return;
             stripLocalMonsters();
@@ -1030,6 +1141,7 @@ function setupNetwork(char: CharacterRow, accountId: string): void {
 export async function startPlay(character: CharacterRow, accountId: string): Promise<void> {
     activeCharacter = character;
     resetPlayCombatInput();
+    ensureCombatTargetRingLoaded();
 
     await loadRuntimeVocations();
 
@@ -1095,6 +1207,9 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
 
     window.addEventListener('keydown', (e) => {
         keys[e.key.toLowerCase()] = true;
+        if (e.key === 'Escape') {
+            clearPlayCombatTarget();
+        }
     });
     window.addEventListener('keyup', (e) => {
         keys[e.key.toLowerCase()] = false;
@@ -1105,6 +1220,7 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
 
     setupLocationAutosave();
     setupPlayZoomControls();
+    setupPlayCombatControls();
 
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {

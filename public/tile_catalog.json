@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-06-06T17:31:44.692Z",
+  "generatedAt": "2026-06-06T19:52:37.901Z",
   "tileSize": 32,
   "format": "game-2d/map-sparse-v1",
   "coordSystem": {
@@ -20,7 +20,6 @@
       "brushId": 9000,
       "label": "01 Grass Random",
       "memberIds": [
-        20,
         21,
         22,
         23,
@@ -34,14 +33,14 @@
         31,
         32,
         33,
-        34
+        34,
+        35
       ]
     },
     "01-water-randon": {
       "brushId": 9001,
       "label": "01 Water Randon",
       "memberIds": [
-        43,
         44,
         45,
         46,
@@ -58,123 +57,131 @@
         57,
         58,
         59,
-        60
+        60,
+        61
       ]
     },
     "02-grass-random": {
       "brushId": 9002,
       "label": "02 Grass Random",
       "memberIds": [
-        35,
         36,
-        37
+        37,
+        38
       ]
     },
     "ground": {
       "brushId": 9003,
       "label": "Ground aleatório",
       "memberIds": [
-        38,
         39,
         40,
-        41
+        41,
+        42
       ]
     }
   },
   "tiles": [
     {
       "id": 7,
+      "name": "target ring",
+      "ref": "target_ring",
+      "category": "ground",
+      "walkable": true
+    },
+    {
+      "id": 8,
       "name": "01-bordas-grama · máscara 1",
       "ref": "terra_edges_mask_1",
       "category": "border",
       "walkable": true
     },
     {
-      "id": 8,
+      "id": 9,
       "name": "01-bordas-grama · máscara 12",
       "ref": "terra_edges_mask_12",
       "category": "border",
       "walkable": true
     },
     {
-      "id": 9,
+      "id": 10,
       "name": "01-bordas-grama · máscara 128",
       "ref": "terra_edges_mask_128",
       "category": "border",
       "walkable": true
     },
     {
-      "id": 10,
+      "id": 11,
       "name": "01-bordas-grama · máscara 16",
       "ref": "terra_edges_mask_16",
       "category": "border",
       "walkable": true
     },
     {
-      "id": 11,
+      "id": 12,
       "name": "01-bordas-grama · máscara 2",
       "ref": "terra_edges_mask_2",
       "category": "border",
       "walkable": true
     },
     {
-      "id": 12,
+      "id": 13,
       "name": "01-bordas-grama · máscara 3",
       "ref": "terra_edges_mask_3",
       "category": "border",
       "walkable": true
     },
     {
-      "id": 13,
+      "id": 14,
       "name": "01-bordas-grama · máscara 32",
       "ref": "terra_edges_mask_32",
       "category": "border",
       "walkable": true
     },
     {
-      "id": 14,
+      "id": 15,
       "name": "01-bordas-grama · máscara 4",
       "ref": "terra_edges_mask_4",
       "category": "border",
       "walkable": true
     },
     {
-      "id": 15,
+      "id": 16,
       "name": "01-bordas-grama · máscara 6",
       "ref": "terra_edges_mask_6",
       "category": "border",
       "walkable": true
     },
     {
-      "id": 16,
+      "id": 17,
       "name": "01-bordas-grama · máscara 64",
       "ref": "terra_edges_mask_64",
       "category": "border",
       "walkable": true
     },
     {
-      "id": 17,
+      "id": 18,
       "name": "01-bordas-grama · máscara 8",
       "ref": "terra_edges_mask_8",
       "category": "border",
       "walkable": true
     },
     {
-      "id": 18,
+      "id": 19,
       "name": "01-bordas-grama · máscara 9",
       "ref": "terra_edges_mask_9",
       "category": "border",
       "walkable": true
     },
     {
-      "id": 19,
+      "id": 20,
       "name": "01-bordas-grama (spritesheet)",
       "ref": "terra_edges_sheet",
       "category": "border",
       "walkable": true
     },
     {
-      "id": 20,
+      "id": 21,
       "name": "01-grama-randon_variants · 1",
       "ref": "01_grama_randon_variants#0",
       "category": "ground",
@@ -183,7 +190,7 @@
       "variantIndex": 0
     },
     {
-      "id": 21,
+      "id": 22,
       "name": "01-grama-randon_variants · 2",
       "ref": "01_grama_randon_variants#1",
       "category": "ground",
@@ -192,7 +199,7 @@
       "variantIndex": 1
     },
     {
-      "id": 22,
+      "id": 23,
       "name": "01-grama-randon_variants · 3",
       "ref": "01_grama_randon_variants#2",
       "category": "ground",
@@ -201,7 +208,7 @@
       "variantIndex": 2
     },
     {
-      "id": 23,
+      "id": 24,
       "name": "01-grama-randon_variants · 4",
       "ref": "01_grama_randon_variants#3",
       "category": "ground",
@@ -210,7 +217,7 @@
       "variantIndex": 3
     },
     {
-      "id": 24,
+      "id": 25,
       "name": "01-grama-randon_variants · 5",
       "ref": "01_grama_randon_variants#4",
       "category": "ground",
@@ -219,7 +226,7 @@
       "variantIndex": 4
     },
     {
-      "id": 25,
+      "id": 26,
       "name": "01-grama-randon_variants · 6",
       "ref": "01_grama_randon_variants#5",
       "category": "ground",
@@ -228,7 +235,7 @@
       "variantIndex": 5
     },
     {
-      "id": 26,
+      "id": 27,
       "name": "01-grama-randon_variants · 7",
       "ref": "01_grama_randon_variants#6",
       "category": "ground",
@@ -237,7 +244,7 @@
       "variantIndex": 6
     },
     {
-      "id": 27,
+      "id": 28,
       "name": "01-grama-randon_variants · 8",
       "ref": "01_grama_randon_variants#7",
       "category": "ground",
@@ -246,7 +253,7 @@
       "variantIndex": 7
     },
     {
-      "id": 28,
+      "id": 29,
       "name": "01-grama-randon_variants · 9",
       "ref": "01_grama_randon_variants#8",
       "category": "ground",
@@ -255,7 +262,7 @@
       "variantIndex": 8
     },
     {
-      "id": 29,
+      "id": 30,
       "name": "01-grama-randon_variants · 10",
       "ref": "01_grama_randon_variants#9",
       "category": "ground",
@@ -264,7 +271,7 @@
       "variantIndex": 9
     },
     {
-      "id": 30,
+      "id": 31,
       "name": "01-grama-randon_variants · 11",
       "ref": "01_grama_randon_variants#10",
       "category": "ground",
@@ -273,7 +280,7 @@
       "variantIndex": 10
     },
     {
-      "id": 31,
+      "id": 32,
       "name": "01-grama-randon_variants · 12",
       "ref": "01_grama_randon_variants#11",
       "category": "ground",
@@ -282,7 +289,7 @@
       "variantIndex": 11
     },
     {
-      "id": 32,
+      "id": 33,
       "name": "01-grama-randon_variants · 13",
       "ref": "01_grama_randon_variants#12",
       "category": "ground",
@@ -291,7 +298,7 @@
       "variantIndex": 12
     },
     {
-      "id": 33,
+      "id": 34,
       "name": "01-grama-randon_variants · 14",
       "ref": "01_grama_randon_variants#13",
       "category": "ground",
@@ -300,7 +307,7 @@
       "variantIndex": 13
     },
     {
-      "id": 34,
+      "id": 35,
       "name": "01-grama-randon_variants · 15",
       "ref": "01_grama_randon_variants#14",
       "category": "ground",
@@ -309,7 +316,7 @@
       "variantIndex": 14
     },
     {
-      "id": 35,
+      "id": 36,
       "name": "02-grama-random_variants · 1",
       "ref": "02_grama_random_variants#0",
       "category": "ground",
@@ -318,7 +325,7 @@
       "variantIndex": 0
     },
     {
-      "id": 36,
+      "id": 37,
       "name": "02-grama-random_variants · 2",
       "ref": "02_grama_random_variants#1",
       "category": "ground",
@@ -327,7 +334,7 @@
       "variantIndex": 1
     },
     {
-      "id": 37,
+      "id": 38,
       "name": "02-grama-random_variants · 3",
       "ref": "02_grama_random_variants#2",
       "category": "ground",
@@ -336,7 +343,7 @@
       "variantIndex": 2
     },
     {
-      "id": 38,
+      "id": 39,
       "name": "01-ground-pedra_variants · 1",
       "ref": "01_ground_pedra_variants#0",
       "category": "ground",
@@ -345,7 +352,7 @@
       "variantIndex": 0
     },
     {
-      "id": 39,
+      "id": 40,
       "name": "01-ground-pedra_variants · 2",
       "ref": "01_ground_pedra_variants#1",
       "category": "ground",
@@ -354,7 +361,7 @@
       "variantIndex": 1
     },
     {
-      "id": 40,
+      "id": 41,
       "name": "01-ground-pedra_variants · 3",
       "ref": "01_ground_pedra_variants#2",
       "category": "ground",
@@ -363,7 +370,7 @@
       "variantIndex": 2
     },
     {
-      "id": 41,
+      "id": 42,
       "name": "01-ground-pedra_variants · 4",
       "ref": "01_ground_pedra_variants#3",
       "category": "ground",
@@ -372,7 +379,7 @@
       "variantIndex": 3
     },
     {
-      "id": 42,
+      "id": 43,
       "name": "01-arvore",
       "ref": "01_arvore",
       "category": "nature",
@@ -380,7 +387,7 @@
       "walkable": false
     },
     {
-      "id": 43,
+      "id": 44,
       "name": "01-mar-random_variants · 1",
       "ref": "01_mar_random_variants#0",
       "category": "ground",
@@ -389,7 +396,7 @@
       "variantIndex": 0
     },
     {
-      "id": 44,
+      "id": 45,
       "name": "01-mar-random_variants · 2",
       "ref": "01_mar_random_variants#1",
       "category": "ground",
@@ -398,7 +405,7 @@
       "variantIndex": 1
     },
     {
-      "id": 45,
+      "id": 46,
       "name": "01-mar-random_variants · 3",
       "ref": "01_mar_random_variants#2",
       "category": "ground",
@@ -407,7 +414,7 @@
       "variantIndex": 2
     },
     {
-      "id": 46,
+      "id": 47,
       "name": "01-mar-random_variants · 4",
       "ref": "01_mar_random_variants#3",
       "category": "ground",
@@ -416,7 +423,7 @@
       "variantIndex": 3
     },
     {
-      "id": 47,
+      "id": 48,
       "name": "01-mar-random_variants · 5",
       "ref": "01_mar_random_variants#4",
       "category": "ground",
@@ -425,7 +432,7 @@
       "variantIndex": 4
     },
     {
-      "id": 48,
+      "id": 49,
       "name": "01-mar-random_variants · 6",
       "ref": "01_mar_random_variants#5",
       "category": "ground",
@@ -434,7 +441,7 @@
       "variantIndex": 5
     },
     {
-      "id": 49,
+      "id": 50,
       "name": "01-mar-random_variants · 7",
       "ref": "01_mar_random_variants#6",
       "category": "ground",
@@ -443,7 +450,7 @@
       "variantIndex": 6
     },
     {
-      "id": 50,
+      "id": 51,
       "name": "01-mar-random_variants · 8",
       "ref": "01_mar_random_variants#7",
       "category": "ground",
@@ -452,7 +459,7 @@
       "variantIndex": 7
     },
     {
-      "id": 51,
+      "id": 52,
       "name": "01-mar-random_variants · 9",
       "ref": "01_mar_random_variants#8",
       "category": "ground",
@@ -461,7 +468,7 @@
       "variantIndex": 8
     },
     {
-      "id": 52,
+      "id": 53,
       "name": "01-mar-random_variants · 10",
       "ref": "01_mar_random_variants#9",
       "category": "ground",
@@ -470,7 +477,7 @@
       "variantIndex": 9
     },
     {
-      "id": 53,
+      "id": 54,
       "name": "01-mar-random_variants · 11",
       "ref": "01_mar_random_variants#10",
       "category": "ground",
@@ -479,7 +486,7 @@
       "variantIndex": 10
     },
     {
-      "id": 54,
+      "id": 55,
       "name": "01-mar-random_variants · 12",
       "ref": "01_mar_random_variants#11",
       "category": "ground",
@@ -488,7 +495,7 @@
       "variantIndex": 11
     },
     {
-      "id": 55,
+      "id": 56,
       "name": "01-mar-random_variants · 13",
       "ref": "01_mar_random_variants#12",
       "category": "ground",
@@ -497,7 +504,7 @@
       "variantIndex": 12
     },
     {
-      "id": 56,
+      "id": 57,
       "name": "01-mar-random_variants · 14",
       "ref": "01_mar_random_variants#13",
       "category": "ground",
@@ -506,7 +513,7 @@
       "variantIndex": 13
     },
     {
-      "id": 57,
+      "id": 58,
       "name": "01-mar-random_variants · 15",
       "ref": "01_mar_random_variants#14",
       "category": "ground",
@@ -515,7 +522,7 @@
       "variantIndex": 14
     },
     {
-      "id": 58,
+      "id": 59,
       "name": "01-mar-random_variants · 16",
       "ref": "01_mar_random_variants#15",
       "category": "ground",
@@ -524,7 +531,7 @@
       "variantIndex": 15
     },
     {
-      "id": 59,
+      "id": 60,
       "name": "01-mar-random_variants · 17",
       "ref": "01_mar_random_variants#16",
       "category": "ground",
@@ -533,7 +540,7 @@
       "variantIndex": 16
     },
     {
-      "id": 60,
+      "id": 61,
       "name": "01-mar-random_variants · 18",
       "ref": "01_mar_random_variants#17",
       "category": "ground",

@@ -6,7 +6,9 @@ import { resolveMobChaseConfig } from '../game-data/mobPresetTypes';
 import {
     MONSTER_AGGRO_RADIUS,
     MONSTER_STEP_MS,
+    isMonsterWakePaused,
     manhattanDist,
+    isRangedInComfortZone,
     tickMonsterChaseStep,
     type CardinalDirection,
 } from '../../shared/creatureChase';
@@ -82,7 +84,7 @@ function isMobInCombatPosition(
     if (chaseConfig.chaseBehavior === 'melee') {
         return distToPlayer <= chaseConfig.attackRange;
     }
-    return distToPlayer === chaseConfig.attackRange;
+    return isRangedInComfortZone(distToPlayer, chaseConfig);
 }
 
 function tickMonsterChase(
@@ -95,6 +97,11 @@ function tickMonsterChase(
     canGoalTile: (tx: number, ty: number) => boolean,
     reservedGoals: Set<string>
 ): void {
+    if (isMonsterWakePaused(npc, nowMs)) {
+        npc.isChasing = false;
+        return;
+    }
+
     const chaseConfig = resolveMobChaseConfig(getCreaturePreset(npc.name));
     const distToPlayer = manhattanDist(npc.tileX, npc.tileY, player.tileX, player.tileY);
     const isAggroed = distToPlayer <= MONSTER_AGGRO_RADIUS && player.worldZ === npc.worldZ;
@@ -172,6 +179,14 @@ export const NpcAI: NpcAIController = {
 
         npcs.forEach((npc) => {
             if (npc.isDead) return;
+
+            if (npc.type === 'monster' && isMonsterWakePaused(npc, nowMs)) {
+                npc.isChasing = false;
+                if (npc.animController.currentState === 'walk') {
+                    npc.setState('idle');
+                }
+                return;
+            }
 
             const canWalkTerrain = (tx: number, ty: number) => {
                 if (tx < 0 || tx >= MAP_SIZE || ty < 0 || ty >= MAP_SIZE) return false;

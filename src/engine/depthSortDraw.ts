@@ -1,4 +1,6 @@
-import { getSpriteTilePlacement, type SpriteSourceRect, type SpriteTilePlacement } from '../character/spriteDraw';
+import { getSpriteTilePlacement, drawSpriteYellowPulseHighlight, type SpriteSourceRect, type SpriteTilePlacement } from '../character/spriteDraw';
+import { shouldDrawCreatureCorpse } from '../game/creatureDeathLifecycle';
+import { drawCombatTargetRing } from '../game/combatTargetRing';
 import type { GameEntity } from '../character/entity';
 import type { SpriteAnimationController } from '../character/spriteAnimation';
 import { ENGINE_CONFIG } from './config';
@@ -41,6 +43,35 @@ export function drawOutlinedEntityName(
     drawCtx.strokeText(text, x, y);
     drawCtx.fillStyle = fillColor;
     drawCtx.fillText(text, x, y);
+}
+
+/** Barra de HP estilo Tibia — abaixo do nome do mob. */
+export function drawEntityHealthBar(
+    drawCtx: CanvasRenderingContext2D,
+    centerX: number,
+    bottomY: number,
+    current: number,
+    max: number,
+    width = 36,
+    height = 4
+): void {
+    if (max <= 0) return;
+
+    const ratio = Math.max(0, Math.min(1, current / max));
+    const x = Math.round(centerX - width / 2);
+    const y = Math.round(bottomY - height);
+
+    drawCtx.fillStyle = '#450a0a';
+    drawCtx.fillRect(x, y, width, height);
+
+    if (ratio > 0) {
+        drawCtx.fillStyle = ratio > 0.35 ? '#22c55e' : '#ef4444';
+        drawCtx.fillRect(x, y, Math.max(1, Math.round(width * ratio)), height);
+    }
+
+    drawCtx.strokeStyle = '#000000';
+    drawCtx.lineWidth = 1;
+    drawCtx.strokeRect(x + 0.5, y + 0.5, width - 1, height - 1);
 }
 
 function nameTagPosition(placement: SpriteTilePlacement, offsetY = 8): { x: number; y: number } {
@@ -205,7 +236,7 @@ function computeEdgeFadeAlpha(
     );
 
     if (overflow <= 0) return 1;
-    if (!placementIntersectsView(placement, viewW, viewH)) return 0;
+    else if (!placementIntersectsView(placement, viewW, viewH)) return 0;
 
     const minA = ITEM_EDGE_FADE_MIN_ALPHA;
     if (overflow >= fadePx) return minA;
@@ -287,9 +318,9 @@ export function collectItemDepthDrawables(options: {
                         drawCtx.globalAlpha = alpha;
                         drawRegistryTile(drawCtx, tile, screenX, screenY, tileSize);
                         drawCtx.restore();
-                        return;
+                    } else {
+                        drawRegistryTile(drawCtx, tile, screenX, screenY, tileSize);
                     }
-                    drawRegistryTile(drawCtx, tile, screenX, screenY, tileSize);
                 },
             });
         }
@@ -303,18 +334,26 @@ export function collectNpcDepthDrawables(
     z: number,
     camera: DepthSortCamera,
     tileSize: number,
-    options?: { drawNames?: boolean }
+    options?: {
+        drawNames?: boolean;
+        highlightEntityId?: string | null;
+        nowMs?: number;
+    }
 ): DepthDrawable[] {
     const drawables: DepthDrawable[] = [];
     const zoom = camera.zoom ?? 1;
     const drawNames = options?.drawNames ?? true;
+    const highlightEntityId = options?.highlightEntityId ?? null;
+    const nowMs = options?.nowMs ?? 0;
 
     for (const npc of npcs) {
         if (npc.worldZ !== z) continue;
-        if (npc.isDead) continue;
+        if (!shouldDrawCreatureCorpse(npc, nowMs)) continue;
         if (!npc.animController.isLoaded || !npc.animController.image) continue;
 
-        const rect = npc.animController.getSourceRect();
+        const isCorpse = npc.isDead;
+
+        const rect = npc.getDrawSourceRect();
         const drawScale = npc.animController.config.drawScale ?? 1;
         const { sortY, sortX } = getEntityFootSortKey(
             npc.worldX,
@@ -329,16 +368,97 @@ export function collectNpcDepthDrawables(
             sortX,
             draw: (drawCtx) => {
                 npc.draw(drawCtx, camera, tileSize);
-                if (!drawNames) return;
 
                 const placement = npc.getDrawPlacement({ ...camera, zoom }, tileSize);
-                const { x, y } = nameTagPosition(placement);
-                drawOutlinedEntityName(drawCtx, npc.name, x, y, ENTITY_NAME_COLORS.creature);
+
+                if (
+                    !isCorpse &&
+                    npc.type === 'monster' &&
+                    highlightEntityId === npc.id &&
+                    nowMs > 0
+                ) {
+                    const pulse = 0.35 + 0.45 * (0.5 + 0.5 * Math.sin(nowMs * 0.008));
+                    drawSpriteYellowPulseHighlight(
+                        drawCtx,
+                        npc.animController.image!,
+                        rect.sx,
+                        rect.sy,
+                        rect.sw,
+                        rect.sh,
+                        placement.drawX,
+                        placement.drawY,
+                        placement.drawW,
+                        placement.drawH,
+                        pulse
+                    );
+                }
+
+                if (!drawNames || isCorpse) return;
+
+                const { x, y: nameY } = nameTagPosition(placement);
+
+                drawOutlinedEntityName(drawCtx, npc.name, x, nameY, ENTITY_NAME_COLORS.creature);
+
+                if (npc.type === 'monster' && npc.combatMaxHealth > 0) {
+                    drawEntityHealthBar(
+                        drawCtx,
+                        x,
+                        nameY + 6,
+                        npc.combatHealth,
+                        npc.combatMaxHealth
+                    );
+                }
             },
         });
     }
 
     return drawables;
+}
+
+/** Anel de alvo de combate — no chão, atrás do mob (sortY ligeiramente menor). */
+export function collectCombatTargetRingDrawable(
+    npcs: GameEntity[],
+    targetId: string | null,
+    z: number,
+    camera: DepthSortCamera,
+    tileSize: number,
+    nowMs: number
+): DepthDrawable[] {
+    if (!targetId) return [];
+
+    const target = npcs.find((npc) => npc.id === targetId);
+    if (
+        !target ||
+        target.type !== 'monster' ||
+        target.isDead ||
+        target.worldZ !== z ||
+        !shouldDrawCreatureCorpse(target, nowMs)
+    ) {
+        return [];
+    }
+
+    const sortY = target.worldY + tileSize - 0.5;
+    const sortX = target.worldX + tileSize / 2;
+    const zoom = camera.zoom ?? 1;
+
+    return [
+        {
+            sortY,
+            sortX,
+            draw: (drawCtx) => {
+                drawCombatTargetRing(
+                    drawCtx,
+                    target.worldX,
+                    target.worldY,
+                    camera.x,
+                    camera.y,
+                    tileSize,
+                    zoom,
+                    nowMs
+                );
+            },
+        },
+    ];
 }
 
 export function collectRemoteDepthDrawables(
@@ -499,9 +619,7 @@ export function collectLocalPlayerDepthDrawable(
                 drawOutlinedEntityName(drawCtx, name, x, y, ENTITY_NAME_COLORS.localPlayer);
             },
         };
-    }
-
-    if (fallbackTile?.image?.complete) {
+    } else if (fallbackTile?.image?.complete) {
         const tileX = Math.floor(worldX / tileSize);
         const tileY = Math.floor(worldY / tileSize);
         const { sortY, sortX } = getRegistryTileFootSortKey(fallbackTile, tileX, tileY, tileSize);

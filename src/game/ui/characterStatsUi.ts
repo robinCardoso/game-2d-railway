@@ -3,15 +3,14 @@ import { getVocationById } from '../../game-data/vocationRegistry';
 import { VocationId } from '../../../shared/types/character';
 import type { CharacterRow } from '../../shared/types';
 import { getExpProgress, normalizeCharacterProgress } from '../experience';
+import { showLevelUpBanner } from './levelUpBanner';
 
 export function updateCharacterStatsUi(
     character: CharacterRow,
     options?: { flashLevel?: boolean }
 ): void {
   const vocationId = (character.vocation as VocationId) || 'knight';
-  const progress = normalizeCharacterProgress(character.experience, character.level);
-  const level = progress.level;
-  const experience = progress.experience;
+  const { level, experience } = normalizeCharacterProgress(character.experience, character.level);
 
   const vocationConfig = getVocationById(vocationId);
   const stats = calculateStatsForLevel(vocationConfig, level);
@@ -29,13 +28,14 @@ export function updateCharacterStatsUi(
   const elExpBar = document.getElementById('statExpBarFill');
 
   if (elVocation) elVocation.textContent = vocationId.toUpperCase();
-  if (elLevel) {
-    elLevel.textContent = String(level);
-    if (options?.flashLevel) {
-      elLevel.classList.add('stat-level-flash');
-      window.setTimeout(() => elLevel.classList.remove('stat-level-flash'), 1200);
+    if (elLevel) {
+        elLevel.textContent = String(level);
+        if (options?.flashLevel) {
+            elLevel.classList.add('stat-level-flash');
+            window.setTimeout(() => elLevel.classList.remove('stat-level-flash'), 1200);
+            showLevelUpBanner(level);
+        }
     }
-  }
   if (elMelee) elMelee.textContent = String(stats.melee);
   if (elDistance) elDistance.textContent = String(stats.distanceAttack);
   if (elMagic) elMagic.textContent = String(stats.magicAttack);

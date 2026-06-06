@@ -117,6 +117,20 @@ export function initMobStatsEditor(): void {
     document.getElementById('mobChaseBehaviorSelect')?.addEventListener('change', () => {
         syncAttackRangeFieldState();
     });
+    document.getElementById('mobMinRangeInput')?.addEventListener('input', () => {
+        if (!activePresetName) return;
+        const preset = presets.find((p) => p.name === activePresetName);
+        if (!preset) return;
+        const draft = readDraftFromForm(preset);
+        updatePreview(getMobStatsFormDefaults(draft), resolveMobChaseConfig(draft));
+    });
+    document.getElementById('mobMaxRangeInput')?.addEventListener('input', () => {
+        if (!activePresetName) return;
+        const preset = presets.find((p) => p.name === activePresetName);
+        if (!preset) return;
+        const draft = readDraftFromForm(preset);
+        updatePreview(getMobStatsFormDefaults(draft), resolveMobChaseConfig(draft));
+    });
 
     confirmBtn.onclick = async () => {
         if (!activePresetName) {
@@ -175,8 +189,21 @@ function readDraftFromForm(base: CreaturePresetEntry): CreaturePresetEntry {
             chaseBehavior === 'melee'
                 ? 1
                 : readNum('mobAttackRangeInput', chaseDefaults.attackRange),
+        minRange:
+            chaseBehavior === 'melee'
+                ? undefined
+                : readNum('mobMinRangeInput', chaseDefaults.minRange),
+        maxRange:
+            chaseBehavior === 'melee'
+                ? undefined
+                : readNum('mobMaxRangeInput', chaseDefaults.maxRange),
         loot: readLootFromForm(),
     };
+
+    if (chaseBehavior === 'melee') {
+        delete draft.minRange;
+        delete draft.maxRange;
+    }
 
     if (!draft.loot || draft.loot.length === 0) {
         delete draft.loot;
@@ -188,10 +215,22 @@ function readDraftFromForm(base: CreaturePresetEntry): CreaturePresetEntry {
 function syncAttackRangeFieldState(): void {
     const chaseEl = document.getElementById('mobChaseBehaviorSelect') as HTMLSelectElement | null;
     const rangeEl = document.getElementById('mobAttackRangeInput') as HTMLInputElement | null;
+    const minEl = document.getElementById('mobMinRangeInput') as HTMLInputElement | null;
+    const maxEl = document.getElementById('mobMaxRangeInput') as HTMLInputElement | null;
+    const minWrap = document.getElementById('mobMinRangeWrap');
+    const maxWrap = document.getElementById('mobMaxRangeWrap');
     if (!chaseEl || !rangeEl) return;
     const isMelee = chaseEl.value === 'melee';
     rangeEl.disabled = isMelee;
     rangeEl.value = isMelee ? '1' : rangeEl.value || '3';
+    if (minEl) minEl.disabled = isMelee;
+    if (maxEl) maxEl.disabled = isMelee;
+    if (minWrap) minWrap.style.display = isMelee ? 'none' : '';
+    if (maxWrap) maxWrap.style.display = isMelee ? 'none' : '';
+    if (isMelee) return;
+    const attackRange = parseInt(rangeEl.value, 10) || 3;
+    if (minEl && !minEl.value) minEl.value = String(Math.max(1, attackRange - 1));
+    if (maxEl && !maxEl.value) maxEl.value = String(attackRange + 1);
 }
 
 function readLootFromForm(): MobLootEntry[] {
@@ -362,6 +401,17 @@ function selectPreset(name: string | null): void {
         rangeInput.value = String(chaseDefaults.attackRange);
         rangeInput.disabled = !isMonster || chaseDefaults.chaseBehavior === 'melee';
     }
+    const minRangeInput = document.getElementById('mobMinRangeInput') as HTMLInputElement | null;
+    if (minRangeInput) {
+        minRangeInput.value = String(chaseDefaults.minRange);
+        minRangeInput.disabled = !isMonster || chaseDefaults.chaseBehavior === 'melee';
+    }
+    const maxRangeInput = document.getElementById('mobMaxRangeInput') as HTMLInputElement | null;
+    if (maxRangeInput) {
+        maxRangeInput.value = String(chaseDefaults.maxRange);
+        maxRangeInput.disabled = !isMonster || chaseDefaults.chaseBehavior === 'melee';
+    }
+    syncAttackRangeFieldState();
 
     renderLootTable(preset.loot ?? []);
     updateLootValidationUi(preset);
@@ -507,5 +557,12 @@ function updatePreview(
     set('mobPreviewXp', stats.xpReward);
     set('mobPreviewRace', stats.race);
     set('mobPreviewChase', chase.chaseBehavior === 'melee' ? 'Corpo a corpo' : 'À distância');
-    set('mobPreviewRange', chase.attackRange);
+    if (chase.chaseBehavior === 'melee') {
+        set('mobPreviewRange', `${chase.attackRange} SQM`);
+    } else {
+        set(
+            'mobPreviewRange',
+            `${chase.minRange}–${chase.maxRange} SQM (ideal ${chase.attackRange})`
+        );
+    }
 }

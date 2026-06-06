@@ -8,12 +8,16 @@ import type {
 } from '../../../shared/protocol.js';
 import {
     MONSTER_STEP_MS,
+    armMonsterWakeDelay,
+    isMonsterWakePaused,
     tickMonsterChaseStep,
     type CardinalDirection,
 } from '../../../shared/creatureChase.js';
 import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
+import { MONSTER_RESPAWN_MS } from '../../../shared/creatureDeath.js';
 import type { VocationId } from '../../../shared/types/character.js';
 import { processAttack } from '../combat/combat.js';
+import { isPlayerInAttackRange, resolvePlayerAttackProfile } from '../../../shared/playerAttack.js';
 import type { MapCollisionStore } from '../MapCollisionStore.js';
 import type { CreaturePresetStore } from './CreaturePresetStore.js';
 import type { VocationStore } from './VocationStore.js';
@@ -43,6 +47,7 @@ interface ServerCreature {
     lastSeenPlayerTileX?: number;
     lastSeenPlayerTileY?: number;
     reactAfterMs?: number;
+    wakeUntilMs?: number;
     maxHealth: number;
     health: number;
     defense: number;
@@ -75,8 +80,6 @@ export interface CombatAttackOutcome {
     died?: CreatureDiedMessage;
     respawned?: CreatureRespawnedMessage;
 }
-
-const MONSTER_RESPAWN_MS = 45_000;
 
 export class RoomCreatureManager {
     private rooms = new Map<string, RoomCreatureState>();
@@ -138,6 +141,16 @@ export class RoomCreatureManager {
         return state.creatures.map((c) => this.toSnapshot(c));
     }
 
+    /** Pausa IA de todos os monstros da sala (jogador acabou de entrar no mapa). */
+    armRoomWakeDelay(room: string, nowMs: number): void {
+        const state = this.rooms.get(room);
+        if (!state) return;
+        for (const creature of state.creatures) {
+            if (creature.creatureType !== 'monster' || creature.isDead) continue;
+            armMonsterWakeDelay(creature, nowMs);
+        }
+    }
+
     processAttack(
         room: string,
         attacker: CombatAttackContext,
@@ -164,10 +177,14 @@ export class RoomCreatureManager {
         if (creature.z !== attacker.z) {
             return { ok: false, code: 'NOT_ADJACENT' };
         }
-        const dist =
-            Math.abs(creature.tileX - attacker.tileX) +
-            Math.abs(creature.tileY - attacker.tileY);
-        if (dist !== 1) {
+        const attackProfile = resolvePlayerAttackProfile(attacker.vocationId);
+        if (
+            !isPlayerInAttackRange(
+                { tileX: attacker.tileX, tileY: attacker.tileY, z: attacker.z },
+                { tileX: creature.tileX, tileY: creature.tileY, z: creature.z },
+                attackProfile
+            )
+        ) {
             return { ok: false, code: 'NOT_ADJACENT' };
         }
 
@@ -272,7 +289,9 @@ export class RoomCreatureManager {
                 creature.lastSeenPlayerTileX = undefined;
                 creature.lastSeenPlayerTileY = undefined;
                 creature.reactAfterMs = undefined;
+                creature.wakeUntilMs = undefined;
                 creature.respawnAtMs = undefined;
+                armMonsterWakeDelay(creature, nowMs);
                 respawns.push({
                     type: 'creature_respawned',
                     v: PROTOCOL_VERSION,
@@ -299,6 +318,7 @@ export class RoomCreatureManager {
 
             for (const creature of state.creatures) {
                 if (creature.creatureType !== 'monster' || creature.isDead) continue;
+                if (isMonsterWakePaused(creature, nowMs)) continue;
 
                 const target = this.pickChaseTarget(creature, players);
                 if (!target) continue;
@@ -330,6 +350,7 @@ export class RoomCreatureManager {
                     lastSeenPlayerTileX: creature.lastSeenPlayerTileX,
                     lastSeenPlayerTileY: creature.lastSeenPlayerTileY,
                     reactAfterMs: creature.reactAfterMs,
+                    wakeUntilMs: creature.wakeUntilMs,
                 };
 
                 const step = tickMonsterChaseStep(

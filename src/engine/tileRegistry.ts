@@ -55,6 +55,16 @@ function isCharacterTilePath(path: string): boolean {
     return pathNorm.includes('/characters/') || pathNorm.includes('/character/');
 }
 
+/** FX de combate/UI (`tiles/effects/**`) — carregados à parte, não são tiles de mapa. */
+function isEffectsTilePath(path: string): boolean {
+    const pathNorm = path.replace(/\\/g, '/').toLowerCase();
+    return pathNorm.includes('/effects/');
+}
+
+function isExcludedFromTileRegistry(path: string): boolean {
+    return isCharacterTilePath(path) || isEffectsTilePath(path);
+}
+
 /** Lê tile_properties.json em runtime (dev server) para pegar strip recém-salvo. */
 let runtimeTileProperties: Record<string, TileProperties> | null = null;
 
@@ -308,6 +318,7 @@ function shouldSkipTilePath(path: string, fileName: string): boolean {
         normalizeTileFileName(fileName)
     );
     return (custom as { assetType?: string; tileRole?: string } | undefined)?.assetType === 'character'
+        || (custom as { assetType?: string } | undefined)?.assetType === 'effect'
         || (custom as { tileRole?: string } | undefined)?.tileRole === 'border_sheet';
 }
 
@@ -400,7 +411,7 @@ export async function buildTileRegistryAsync(options?: { bustImageCache?: boolea
     const ids = createNextIdAllocator(7);
     const tileImagesRaw = getTileImageGlob();
     const paths = Object.keys(tileImagesRaw)
-        .filter((path) => !isCharacterTilePath(path))
+        .filter((path) => !isExcludedFromTileRegistry(path))
         .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 
     const imageByPath = new Map<string, HTMLImageElement>();
@@ -427,7 +438,7 @@ export function buildTileRegistry(): TileRegistry {
     const ids = createNextIdAllocator(7);
     const tileImagesRaw = getTileImageGlob();
     const paths = Object.keys(tileImagesRaw)
-        .filter((path) => !isCharacterTilePath(path))
+        .filter((path) => !isExcludedFromTileRegistry(path))
         .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 
     for (const path of paths) {

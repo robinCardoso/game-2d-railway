@@ -6,10 +6,12 @@ import type { VocationId } from '../../shared/types/character';
 import type { GameEntity } from '../character/entity';
 import type { CharacterRow } from '../shared/types';
 import type { CharacterSpeedState } from '../character/movementSpeed';
+import type { SpriteTilePlacement } from '../character/spriteDraw';
 import { applyExperienceGain } from './experience';
-import { isServerAuthoritativeCombat } from './serverAuthority';
+import { beginCreatureDeath } from './creatureDeathLifecycle';
+import { isPlayerInAttackRange, resolvePlayerAttackProfile } from '../../shared/playerAttack';
 
-const ATTACK_COOLDOWN_MS = 550;
+const DEFAULT_ATTACK_COOLDOWN_MS = 550;
 
 export interface PlayCombatPlayer {
     tileX: number;
@@ -26,61 +28,227 @@ export interface PlayCombatCallbacks {
         leveledUp: boolean;
     }) => void;
     faceToward: (target: GameEntity) => void;
+    onAttackSwing?: () => void;
 }
 
 export interface PlayCombatServerBridge {
     wsConnected: boolean;
+    /** Quando true, XP/dano local não são aplicados — só o servidor. */
+    multiplayerConfigured: boolean;
     sendAttack: (creatureId: string) => void;
 }
 
+export interface PlayCombatCamera {
+    x: number;
+    y: number;
+    zoom?: number;
+}
+
 let attackCooldownUntil = 0;
-let prevSpaceDown = false;
+let combatTargetId: string | null = null;
+let hoveredMonsterId: string | null = null;
 
 export function resetPlayCombatInput(): void {
     attackCooldownUntil = 0;
-    prevSpaceDown = false;
+    combatTargetId = null;
+    hoveredMonsterId = null;
 }
 
-function findAdjacentMonster(
+export function getPlayCombatHoverId(): string | null {
+    return hoveredMonsterId;
+}
+
+export function getPlayCombatTargetId(): string | null {
+    return combatTargetId;
+}
+
+export function clearPlayCombatTarget(): void {
+    combatTargetId = null;
+}
+
+export function clientToPlayWorld(
+    clientX: number,
+    clientY: number,
+    canvas: HTMLCanvasElement,
+    camera: PlayCombatCamera
+): { worldX: number; worldY: number } {
+    const rect = canvas.getBoundingClientRect();
+    const zoom = camera.zoom || 1;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const canvasX = (clientX - rect.left) * scaleX;
+    const canvasY = (clientY - rect.top) * scaleY;
+    return {
+        worldX: canvasX / zoom + camera.x,
+        worldY: canvasY / zoom + camera.y,
+    };
+}
+
+function isPointInPlacement(
+    worldX: number,
+    worldY: number,
+    camera: PlayCombatCamera,
+    placement: SpriteTilePlacement
+): boolean {
+    const sx = worldX - camera.x;
+    const sy = worldY - camera.y;
+    return (
+        sx >= placement.drawX &&
+        sx <= placement.drawX + placement.drawW &&
+        sy >= placement.drawY &&
+        sy <= placement.drawY + placement.drawH
+    );
+}
+
+function findMonsterAtWorldPoint(
     npcs: GameEntity[],
-    player: PlayCombatPlayer
+    worldX: number,
+    worldY: number,
+    playerZ: number,
+    camera: PlayCombatCamera,
+    tileSize: number
 ): GameEntity | null {
+    let best: GameEntity | null = null;
+    let bestSortY = -Infinity;
+
     for (const npc of npcs) {
         if (npc.type !== 'monster' || npc.isDead) continue;
-        if (npc.worldZ !== player.worldZ) continue;
-        const foot = npc.getFootTile(ENGINE_CONFIG.TILE_SIZE);
-        const dx = Math.abs(foot.tileX - player.tileX);
-        const dy = Math.abs(foot.tileY - player.tileY);
-        if (dx + dy === 1) return npc;
+        if (npc.worldZ !== playerZ) continue;
+        if (!npc.animController.isLoaded || !npc.animController.image) continue;
+
+        const placement = npc.getDrawPlacement(camera, tileSize);
+        if (!isPointInPlacement(worldX, worldY, camera, placement)) continue;
+
+        const sortY = npc.worldY + tileSize;
+        if (sortY >= bestSortY) {
+            bestSortY = sortY;
+            best = npc;
+        }
     }
-    return null;
+
+    return best;
 }
 
-export function tickPlayCombat(options: {
-    nowMs: number;
-    keys: Record<string, boolean>;
-    stepping: boolean;
+export function findMonsterAtClientPoint(
+    clientX: number,
+    clientY: number,
+    canvas: HTMLCanvasElement,
+    camera: PlayCombatCamera,
+    npcs: GameEntity[],
+    playerZ: number,
+    tileSize: number
+): GameEntity | null {
+    const { worldX, worldY } = clientToPlayWorld(clientX, clientY, canvas, camera);
+    return findMonsterAtWorldPoint(npcs, worldX, worldY, playerZ, camera, tileSize);
+}
+
+export function updatePlayCombatHover(options: {
+    clientX: number;
+    clientY: number;
+    canvas: HTMLCanvasElement;
+    camera: PlayCombatCamera;
     npcs: GameEntity[];
-    player: PlayCombatPlayer;
-    character: CharacterRow;
-    characterSpeed: CharacterSpeedState;
-    callbacks: PlayCombatCallbacks;
-    server?: PlayCombatServerBridge;
+    playerZ: number;
+    tileSize: number;
+    enabled: boolean;
 }): void {
-    const spaceDown = Boolean(options.keys[' '] || options.keys['space']);
-    const spaceEdge = spaceDown && !prevSpaceDown;
-    prevSpaceDown = spaceDown;
+    if (!options.enabled) {
+        hoveredMonsterId = null;
+        return;
+    }
 
-    if (!spaceEdge || options.nowMs < attackCooldownUntil || options.stepping) return;
+    const monster = findMonsterAtClientPoint(
+        options.clientX,
+        options.clientY,
+        options.canvas,
+        options.camera,
+        options.npcs,
+        options.playerZ,
+        options.tileSize
+    );
+    hoveredMonsterId = monster?.id ?? null;
+}
 
-    const target = findAdjacentMonster(options.npcs, options.player);
-    if (!target) return;
+/** Desktop: botão direito (toggle). Mobile/toque: tap no mob (toggle). */
+export function handlePlayCombatTargetClick(options: {
+    clientX: number;
+    clientY: number;
+    canvas: HTMLCanvasElement;
+    camera: PlayCombatCamera;
+    npcs: GameEntity[];
+    playerZ: number;
+    tileSize: number;
+}): boolean {
+    const monster = findMonsterAtClientPoint(
+        options.clientX,
+        options.clientY,
+        options.canvas,
+        options.camera,
+        options.npcs,
+        options.playerZ,
+        options.tileSize
+    );
+    if (!monster) return false;
 
-    attackCooldownUntil = options.nowMs + ATTACK_COOLDOWN_MS;
+    if (combatTargetId === monster.id) {
+        combatTargetId = null;
+    } else {
+        combatTargetId = monster.id;
+        attackCooldownUntil = 0;
+    }
+    return true;
+}
+
+function getPlayerAttackCooldownMs(
+    character: CharacterRow,
+    characterSpeed: CharacterSpeedState
+): number {
+    const vocationId = (character.vocation as VocationId) || 'knight';
+    const vocationConfig = getVocationById(vocationId);
+    const level = characterSpeed.level || character.level || 1;
+    const stats = calculateStatsForLevel(vocationConfig, level);
+    return Math.max(200, stats.attackSpeed || DEFAULT_ATTACK_COOLDOWN_MS);
+}
+
+function isAdjacentToPlayer(target: GameEntity, player: PlayCombatPlayer): boolean {
+    const foot = target.getFootTile(ENGINE_CONFIG.TILE_SIZE);
+    const profile = resolvePlayerAttackProfile();
+    return isPlayerInAttackRange(
+        { tileX: player.tileX, tileY: player.tileY, z: player.worldZ },
+        { tileX: foot.tileX, tileY: foot.tileY, z: target.worldZ },
+        profile
+    );
+}
+
+function resolveCombatTarget(npcs: GameEntity[]): GameEntity | null {
+    if (!combatTargetId) return null;
+    const target = npcs.find((n) => n.id === combatTargetId);
+    if (!target || target.type !== 'monster' || target.isDead) {
+        combatTargetId = null;
+        return null;
+    }
+    return target;
+}
+
+function executeAttack(
+    target: GameEntity,
+    options: {
+        nowMs: number;
+        character: CharacterRow;
+        characterSpeed: CharacterSpeedState;
+        callbacks: PlayCombatCallbacks;
+        server?: PlayCombatServerBridge;
+    }
+): void {
+    const cooldownMs = getPlayerAttackCooldownMs(options.character, options.characterSpeed);
+    attackCooldownUntil = options.nowMs + cooldownMs;
     options.callbacks.faceToward(target);
+    options.callbacks.onAttackSwing?.();
 
-    if (options.server && isServerAuthoritativeCombat(options.server.wsConnected)) {
-        options.server.sendAttack(target.id);
+    if (options.server?.multiplayerConfigured) {
+        if (options.server.wsConnected) {
+            options.server.sendAttack(target.id);
+        }
         return;
     }
 
@@ -95,9 +263,11 @@ export function tickPlayCombat(options: {
     options.callbacks.onDamage(target, damage);
 
     if (target.combatHealth <= 0) {
-        target.isDead = true;
-        target.setState('idle');
-        const xpReward = target.xpReward;
+        beginCreatureDeath(target, options.nowMs);
+        if (combatTargetId === target.id) {
+            combatTargetId = null;
+        }
+        const { xpReward } = target;
         const gain = applyExperienceGain(options.character.experience ?? 0, xpReward);
         options.character.experience = gain.experience;
         options.character.level = gain.level;
@@ -109,4 +279,22 @@ export function tickPlayCombat(options: {
             leveledUp: gain.leveledUp,
         });
     }
+}
+
+export function tickPlayCombat(options: {
+    nowMs: number;
+    stepping: boolean;
+    npcs: GameEntity[];
+    player: PlayCombatPlayer;
+    character: CharacterRow;
+    characterSpeed: CharacterSpeedState;
+    callbacks: PlayCombatCallbacks;
+    server?: PlayCombatServerBridge;
+}): void {
+    const target = resolveCombatTarget(options.npcs);
+    if (!target) return;
+    if (options.nowMs < attackCooldownUntil || options.stepping) return;
+    if (!isAdjacentToPlayer(target, options.player)) return;
+
+    executeAttack(target, options);
 }

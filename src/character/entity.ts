@@ -2,6 +2,12 @@ import { ENGINE_CONFIG } from '../engine/config';
 import { SpriteAnimationController, CharacterSpriteConfig, CharacterState, Direction } from './spriteAnimation';
 import { getSpriteTilePlacement } from './spriteDraw';
 import type { MobLootEntry, MobRace } from '../game-data/mobPresetTypes';
+import {
+    createFloatingDamageEntry,
+    drawFloatingDamages,
+    pruneFloatingDamages,
+    type FloatingDamageEntry,
+} from '../game/floatingCombatText';
 
 export class GameEntity {
     id: string;
@@ -19,6 +25,7 @@ export class GameEntity {
     maxRadius: number = 3;
     dialogueText: string | null = null;
     dialogueTimer: number = 0;
+    private floatingDamages: FloatingDamageEntry[] = [];
 
     combatMaxHealth = 0;
     combatHealth = 0;
@@ -29,11 +36,20 @@ export class GameEntity {
     race: MobRace = 'beast';
     lootTable: MobLootEntry[] = [];
     isDead = false;
+    /** Timestamp performance.now() quando morreu. */
+    deathAtMs?: number;
+    /** Corpo some da tela após animação / tempo mínimo. */
+    corpseVisibleUntilMs?: number;
+    /** Respawn local (offline) ou espelho do servidor (online). */
+    respawnAtMs?: number;
+    /** Corpo já removido visualmente; entidade aguarda respawn lógico. */
+    corpseHidden = false;
     isChasing = false;
     lastAggroMoveTime = 0;
     lastSeenPlayerTileX?: number;
     lastSeenPlayerTileY?: number;
     reactAfterMs?: number;
+    wakeUntilMs?: number;
     /** Tile reservado durante deslize (rede ou animação local). */
     stepDestTileX?: number;
     stepDestTileY?: number;
@@ -122,6 +138,14 @@ export class GameEntity {
         this.dialogueTimer = performance.now() + durationMs;
     }
 
+    /** Número de dano flutuante (sobe e some) — não usa balão de fala. */
+    spawnFloatingDamage(damage: number, nowMs: number = performance.now()): void {
+        this.floatingDamages = pruneFloatingDamages(this.floatingDamages, nowMs);
+        this.floatingDamages.push(
+            createFloatingDamageEntry(damage, nowMs, this.floatingDamages.length)
+        );
+    }
+
     initCombatStats(stats: {
         maxHealth: number;
         defense: number;
@@ -140,6 +164,10 @@ export class GameEntity {
         this.race = stats.race;
         this.lootTable = stats.loot;
         this.isDead = false;
+        this.deathAtMs = undefined;
+        this.corpseVisibleUntilMs = undefined;
+        this.respawnAtMs = undefined;
+        this.corpseHidden = false;
     }
 
     update(nowMs: number, movementDurationMs?: number) {
@@ -149,11 +177,26 @@ export class GameEntity {
         if (this.dialogueText && nowMs > this.dialogueTimer) {
             this.dialogueText = null;
         }
+
+        this.floatingDamages = pruneFloatingDamages(this.floatingDamages, nowMs);
+    }
+
+    /** Retângulo de desenho com âncora de corpo quando aplicável. */
+    getDrawSourceRect() {
+        const rect = this.animController.getSourceRect();
+        if (
+            this.isDead &&
+            this.animController.currentState === 'dead' &&
+            this.animController.config.corpseAnchorY !== undefined
+        ) {
+            return { ...rect, ay: this.animController.config.corpseAnchorY };
+        }
+        return rect;
     }
 
     draw(ctx: CanvasRenderingContext2D, camera: { x: number, y: number }, tileSize: number) {
         if (!this.animController.isLoaded || !this.animController.image) return;
-        const rect = this.animController.getSourceRect();
+        const rect = this.getDrawSourceRect();
         const drawScale = this.animController.config.drawScale ?? 1;
         const zoom = (camera as { zoom?: number }).zoom || 1.0;
         const placement = getSpriteTilePlacement(
@@ -176,7 +219,15 @@ export class GameEntity {
             placement.drawW, placement.drawH
         );
 
-        // Desenha balão de fala se houver texto ativo
+        drawFloatingDamages(
+            ctx,
+            this.floatingDamages,
+            placement.drawX + placement.drawW / 2,
+            placement.drawY,
+            performance.now()
+        );
+
+        // Balão de fala (NPC / XP) — não usar para dano de combate
         if (this.dialogueText) {
             ctx.font = 'bold 9px sans-serif';
             const textWidth = ctx.measureText(this.dialogueText).width;
@@ -216,7 +267,7 @@ export class GameEntity {
 
     /** Posição de desenho do sprite (útil para nome flutuante). */
     getDrawPlacement(camera: { x: number; y: number; zoom?: number }, tileSize: number) {
-        const rect = this.animController.getSourceRect();
+        const rect = this.getDrawSourceRect();
         const drawScale = this.animController.config.drawScale ?? 1;
         const zoom = camera.zoom ?? 1;
         return getSpriteTilePlacement(

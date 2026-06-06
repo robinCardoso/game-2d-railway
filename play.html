@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Jogando — 2D World</title>
     <link rel="stylesheet" href="/src/style.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet" />
     <style>
       .play-top-bar {
         display: flex;
@@ -16,7 +19,44 @@
         font-size: 13px;
       }
       .play-top-bar a { color: #818cf8; text-decoration: none; margin-left: 12px; }
-      #canvasContainer { flex: 1; position: relative; min-height: 0; }
+      #canvasContainer { flex: 1; position: relative; min-height: 0; container-type: inline-size; }
+      #gameCanvas { touch-action: manipulation; }
+      .level-up-banner {
+        position: absolute;
+        top: clamp(10px, 2.5vh, 24px);
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 25;
+        pointer-events: none;
+        text-align: center;
+        width: min(94%, 720px);
+        opacity: 0;
+        transition: opacity 0.45s ease, transform 0.45s ease;
+      }
+      .level-up-banner.is-visible {
+        opacity: 1;
+        animation: level-up-pop 0.55s ease-out;
+      }
+      .level-up-banner__text {
+        display: block;
+        font-family: 'Cinzel', 'Palatino Linotype', Palatino, Georgia, serif;
+        font-weight: 700;
+        font-size: clamp(1rem, 5.5cqi, 1.85rem);
+        line-height: 1.25;
+        color: #facc15;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        text-shadow:
+          0 0 18px rgba(250, 204, 21, 0.65),
+          0 0 4px rgba(255, 255, 255, 0.35),
+          0 2px 6px rgba(0, 0, 0, 0.95),
+          0 0 1px #000;
+      }
+      @keyframes level-up-pop {
+        0% { transform: translateX(-50%) translateY(-8px) scale(0.92); opacity: 0; }
+        70% { transform: translateX(-50%) translateY(0) scale(1.03); opacity: 1; }
+        100% { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
+      }
       .play-layout { display: flex; flex-direction: column; height: 100vh; }
       .play-main-layout { display: grid; grid-template-columns: 1fr 280px; flex-grow: 1; overflow: hidden; }
       .sidebar { background-color: #15171c; border-left: 1px solid #2d3139; display: flex; flex-direction: column; padding: 1rem; gap: 1rem; overflow-y: auto; }
@@ -100,6 +140,9 @@
       <div class="play-main-layout">
         <div id="canvasContainer">
           <canvas id="gameCanvas"></canvas>
+          <div id="levelUpBanner" class="level-up-banner" hidden aria-live="polite">
+            <span id="levelUpBannerText" class="level-up-banner__text"></span>
+          </div>
           <div id="playZoomControls" class="play-zoom-controls" title="Zoom da câmera">
             <button type="button" id="playZoomOut" aria-label="Afastar">−</button>
             <span id="playZoomLabel">100%</span>

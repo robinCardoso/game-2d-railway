@@ -25,13 +25,14 @@ import { RoomCreatureManager } from './game/RoomCreatureManager.js';
 import type { CreaturePresetStore } from './game/CreaturePresetStore.js';
 import type { VocationStore } from './game/VocationStore.js';
 import { applyExperienceGain } from '../../src/game/experience.js';
+import { getLevelFromExp, calculateStatsForLevel } from '../../src/engine/character/calculateStats.js';
 import type { VocationId } from '../../shared/types/character.js';
 
 /** Tolerância de jitter de rede no intervalo mínimo entre passos (0.85 = 15% mais rápido que o step). */
 const MOVE_RATE_LIMIT_TOLERANCE = 0.85;
 /** Intervalo mínimo entre `error` + `position_correction` por rejeição de movimento (anti-spam). */
 const MOVE_REJECTION_THROTTLE_MS = 400;
-const ATTACK_COOLDOWN_MS = 550;
+const DEFAULT_ATTACK_COOLDOWN_MS = 550;
 
 const DEFAULT_APPEARANCE: PlayerAppearance = {
     outfitId: 'knight',
@@ -83,6 +84,7 @@ export class GameRoom {
     private readonly positionPersistence: PositionPersistence;
     private readonly progressPersistence: ProgressPersistence;
     private readonly creatures: RoomCreatureManager;
+    private readonly vocations: VocationStore;
 
     constructor(
         private readonly collision: MapCollisionStore,
@@ -90,6 +92,7 @@ export class GameRoom {
         options: GameRoomOptions
     ) {
         this.requireWsTicket = options.requireWsTicket ?? false;
+        this.vocations = options.vocations;
         this.positionPersistence = new PositionPersistence(options.positionSaveIntervalMs ?? 20_000);
         this.progressPersistence = new ProgressPersistence();
         this.creatures = new RoomCreatureManager(
@@ -283,6 +286,9 @@ export class GameRoom {
             case 'attack':
                 this.handleAttack(socket, msg);
                 break;
+            case 'progress_sync':
+                this.handleProgressSync(socket, msg);
+                break;
             case 'ping':
                 this.send(socket, { type: 'pong', v: PROTOCOL_VERSION, t: msg.t });
                 break;
@@ -398,6 +404,11 @@ export class GameRoom {
             ? msg.playerId.slice(0, 64)
             : this.generatePlayerId();
 
+        const room = buildRoomKey(joinMapId, instanceId);
+        const roomWasEmpty = this.playersInRoom(room).length === 0;
+        const joinExp = Math.max(0, Math.floor(joinExperience));
+        const joinLevelFromExp = getLevelFromExp(joinExp);
+
         const player: ConnectedPlayer = {
             id,
             name: joinName,
@@ -413,8 +424,8 @@ export class GameRoom {
             lastMoveAcceptedAtMs: 0,
             lastObservedMoveIntervalMs: 0,
             lastMoveRejectionSentAtMs: 0,
-            level: joinLevel,
-            experience: joinExperience,
+            level: joinLevelFromExp,
+            experience: joinExp,
             lastAttackAtMs: 0,
             socket,
         };
@@ -423,9 +434,12 @@ export class GameRoom {
         this.socketToPlayerId.set(socket, id);
         this.instances.trackPlayer(instanceId, id);
 
-        const room = this.roomKey(player);
         const others = this.playersInRoom(room, id);
+        const joinNowMs = Date.now();
         const creatureSnapshots = this.creatures.ensureRoom(room, joinMapId, instanceId);
+        if (roomWasEmpty) {
+            this.creatures.armRoomWakeDelay(room, joinNowMs);
+        }
 
         this.send(socket, {
             type: 'welcome',
@@ -716,6 +730,41 @@ export class GameRoom {
         }
     }
 
+    private handleProgressSync(
+        socket: WebSocket,
+        msg: Extract<ClientMessage, { type: 'progress_sync' }>
+    ): void {
+        if (this.requireWsTicket) return;
+
+        const playerId = this.socketToPlayerId.get(socket);
+        if (!playerId) return;
+        const player = this.players.get(playerId);
+        if (!player) return;
+
+        const clientExp = Math.max(0, Math.floor(msg.experience));
+        if (clientExp <= player.experience) return;
+
+        const prevLevel = player.level;
+        player.experience = clientExp;
+        player.level = getLevelFromExp(clientExp);
+
+        this.send(player.socket, {
+            type: 'player_progress',
+            v: PROTOCOL_VERSION,
+            playerId: player.id,
+            level: player.level,
+            experience: player.experience,
+            leveledUp: player.level > prevLevel,
+        });
+    }
+
+    private resolveAttackCooldownMs(vocationId: VocationId, level: number): number {
+        const vocationConfig = this.vocations.get(vocationId);
+        if (!vocationConfig) return DEFAULT_ATTACK_COOLDOWN_MS;
+        const stats = calculateStatsForLevel(vocationConfig, level);
+        return Math.max(200, stats.attackSpeed || DEFAULT_ATTACK_COOLDOWN_MS);
+    }
+
     private handleAttack(
         socket: WebSocket,
         msg: Extract<ClientMessage, { type: 'attack' }>
@@ -752,7 +801,7 @@ export class GameRoom {
             },
             msg.creatureId,
             Date.now(),
-            ATTACK_COOLDOWN_MS
+            this.resolveAttackCooldownMs(vocationId, player.level)
         );
 
         if (!outcome.ok) return;

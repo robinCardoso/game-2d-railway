@@ -2,6 +2,8 @@
 
 export const MONSTER_AGGRO_RADIUS = 7;
 export const MONSTER_STEP_MS = 320;
+/** Pausa após spawn/respawn ou quando o jogador entra no mapa (estático estilo Tibia). */
+export const MONSTER_WAKE_DELAY_MS = 2000;
 /** Pausa após o jogador mudar de tile (think time). 0 = desligado — evita travar perseguição contínua. */
 export const MONSTER_REACTION_DELAY_MS = 0;
 
@@ -11,12 +13,40 @@ export interface ChaseMobConfig {
     chaseBehavior: MobChaseBehavior;
     /** Distância Manhattan ideal para combate. */
     attackRange: number;
+    /** Ranged: distância mínima confortável — abaixo disso foge. */
+    minRange: number;
+    /** Ranged: distância máxima confortável — acima disso aproxima. */
+    maxRange: number;
 }
 
 export const DEFAULT_MELEE_CHASE_CONFIG: ChaseMobConfig = {
     chaseBehavior: 'melee',
     attackRange: 1,
+    minRange: 1,
+    maxRange: 1,
 };
+
+/** Faixa de conforto efetiva para mobs ranged (defaults derivados de attackRange). */
+export function resolveRangedComfortBand(config: ChaseMobConfig): {
+    minRange: number;
+    maxRange: number;
+} {
+    if (config.chaseBehavior === 'melee') {
+        return { minRange: 1, maxRange: 1 };
+    }
+    const minRange = config.minRange ?? Math.max(1, config.attackRange - 1);
+    const maxRange = config.maxRange ?? config.attackRange + 1;
+    return {
+        minRange: Math.min(minRange, config.attackRange),
+        maxRange: Math.max(maxRange, config.attackRange),
+    };
+}
+
+export function isRangedInComfortZone(distToPlayer: number, config: ChaseMobConfig): boolean {
+    if (config.chaseBehavior !== 'ranged') return false;
+    const { minRange, maxRange } = resolveRangedComfortBand(config);
+    return distToPlayer >= minRange && distToPlayer <= maxRange;
+}
 
 export type CardinalDirection = 'north' | 'south' | 'east' | 'west';
 
@@ -343,6 +373,7 @@ export interface ChaseReactionState {
     lastSeenPlayerTileX?: number;
     lastSeenPlayerTileY?: number;
     reactAfterMs?: number;
+    wakeUntilMs?: number;
 }
 
 export interface ChaseMobState extends ChaseReactionState {
@@ -388,6 +419,14 @@ export function isMonsterReactionPaused(mob: ChaseReactionState, nowMs: number):
     return mob.reactAfterMs !== undefined && nowMs < mob.reactAfterMs;
 }
 
+export function armMonsterWakeDelay(mob: ChaseReactionState, nowMs: number): void {
+    mob.wakeUntilMs = nowMs + MONSTER_WAKE_DELAY_MS;
+}
+
+export function isMonsterWakePaused(mob: ChaseReactionState, nowMs: number): boolean {
+    return mob.wakeUntilMs !== undefined && nowMs < mob.wakeUntilMs;
+}
+
 /** @returns passo escolhido ou null se parado/no alcance/bloqueado. */
 export function tickMonsterChaseStep(
     mob: ChaseMobState,
@@ -402,13 +441,15 @@ export function tickMonsterChaseStep(
     const distToPlayer = manhattanDist(mob.tileX, mob.tileY, player.tileX, player.tileY);
     if (distToPlayer > MONSTER_AGGRO_RADIUS || player.z !== mob.z) return null;
 
+    if (isMonsterWakePaused(mob, nowMs)) return null;
+
     applyPlayerMoveReactionDelay(mob, player, nowMs);
 
     const { chaseBehavior, attackRange } = config;
 
     if (chaseBehavior === 'melee') {
         if (distToPlayer <= attackRange) return null;
-    } else if (distToPlayer === attackRange) {
+    } else if (isRangedInComfortZone(distToPlayer, config)) {
         return null;
     }
 
@@ -436,27 +477,30 @@ export function tickMonsterChaseStep(
             player.tileX,
             player.tileY
         );
-    } else if (distToPlayer < attackRange) {
-        step = pickFleeStep(mob.tileX, mob.tileY, player.tileX, player.tileY, canStepTo);
     } else {
-        const goal = pickRangedGoalTile(
-            mob.tileX,
-            mob.tileY,
-            player.tileX,
-            player.tileY,
-            attackRange,
-            canGoalTile,
-            reservedGoals
-        );
-        step = pickMonsterChaseStep(
-            mob.tileX,
-            mob.tileY,
-            goal.tx,
-            goal.ty,
-            canStepTo,
-            player.tileX,
-            player.tileY
-        );
+        const { minRange, maxRange } = resolveRangedComfortBand(config);
+        if (distToPlayer < minRange) {
+            step = pickFleeStep(mob.tileX, mob.tileY, player.tileX, player.tileY, canStepTo);
+        } else if (distToPlayer > maxRange) {
+            const goal = pickRangedGoalTile(
+                mob.tileX,
+                mob.tileY,
+                player.tileX,
+                player.tileY,
+                attackRange,
+                canGoalTile,
+                reservedGoals
+            );
+            step = pickMonsterChaseStep(
+                mob.tileX,
+                mob.tileY,
+                goal.tx,
+                goal.ty,
+                canStepTo,
+                player.tileX,
+                player.tileY
+            );
+        }
     }
 
     if (!step) return null;

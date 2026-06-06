@@ -42,3 +42,50 @@ export function getSpriteTilePlacement(
         drawH,
     };
 }
+
+let highlightScratchCanvas: HTMLCanvasElement | null = null;
+let highlightScratchCtx: CanvasRenderingContext2D | null = null;
+
+/**
+ * Pulso amarelo só nos pixels opacos do sprite (não tinge chão/chroma transparente).
+ */
+export function drawSpriteYellowPulseHighlight(
+    drawCtx: CanvasRenderingContext2D,
+    image: HTMLImageElement,
+    sx: number,
+    sy: number,
+    sw: number,
+    sh: number,
+    drawX: number,
+    drawY: number,
+    drawW: number,
+    drawH: number,
+    pulse: number
+): void {
+    const padW = Math.max(1, Math.ceil(drawW));
+    const padH = Math.max(1, Math.ceil(drawH));
+
+    if (!highlightScratchCanvas) {
+        highlightScratchCanvas = document.createElement('canvas');
+        highlightScratchCtx = highlightScratchCanvas.getContext('2d');
+    }
+    if (!highlightScratchCtx) return;
+
+    if (highlightScratchCanvas.width < padW || highlightScratchCanvas.height < padH) {
+        highlightScratchCanvas.width = Math.max(highlightScratchCanvas.width, padW);
+        highlightScratchCanvas.height = Math.max(highlightScratchCanvas.height, padH);
+    }
+
+    const scratch = highlightScratchCtx;
+    scratch.clearRect(0, 0, padW, padH);
+    scratch.globalCompositeOperation = 'source-over';
+    scratch.globalAlpha = 1;
+    scratch.imageSmoothingEnabled = false;
+    scratch.drawImage(image, sx, sy, sw, sh - 0.5, 0, 0, drawW, drawH);
+    scratch.globalCompositeOperation = 'source-atop';
+    scratch.fillStyle = `rgba(250, 204, 21, ${pulse})`;
+    scratch.fillRect(0, 0, padW, padH);
+
+    drawCtx.imageSmoothingEnabled = false;
+    drawCtx.drawImage(highlightScratchCanvas, 0, 0, padW, padH, drawX, drawY, drawW, drawH);
+}

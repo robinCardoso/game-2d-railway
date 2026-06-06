@@ -1,0 +1,8 @@
+{
+  "sheetUrl": "/tiles/effects/combat/target_ring.png",
+  "frameWidth": 64,
+  "frameHeight": 64,
+  "frameCount": 3,
+  "fps": 8,
+  "drawScale": 1
+}

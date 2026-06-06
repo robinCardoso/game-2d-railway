@@ -6,6 +6,11 @@ import { createCreatureConfigForSpawn } from '../character/creatureConfigs';
 import { resolveCreatureCombatStats } from '../game/creatureCombatStats';
 import { getCreaturePreset } from '../editor/creaturePresets';
 import { protocolDirectionToSprite } from '../world/playerAppearance';
+import {
+    beginCreatureDeath,
+    respawnCreatureAtSpawn,
+    tickCreatureCorpse,
+} from '../game/creatureDeathLifecycle';
 
 const { TILE_SIZE } = ENGINE_CONFIG;
 
@@ -21,6 +26,19 @@ function slideToward(current: number, target: number, maxDelta: number): number 
     if (current < target) return Math.min(target, current + maxDelta);
     if (current > target) return Math.max(target, current - maxDelta);
     return current;
+}
+
+function tileManhattanDelta(fromX: number, fromY: number, toX: number, toY: number): number {
+    return Math.abs(toX - fromX) + Math.abs(toY - fromY);
+}
+
+function snapEntityToTile(entity: GameEntity, tileX: number, tileY: number): void {
+    entity.tileX = tileX;
+    entity.tileY = tileY;
+    entity.worldX = tileX * TILE_SIZE;
+    entity.worldY = tileY * TILE_SIZE;
+    entity.stepDestTileX = undefined;
+    entity.stepDestTileY = undefined;
 }
 
 /**
@@ -74,7 +92,7 @@ export class ServerCreatureSync {
         if (!entity) return undefined;
         entity.combatMaxHealth = maxHealth;
         entity.combatHealth = health;
-        entity.speak(`-${damage}`, 900);
+        entity.spawnFloatingDamage(damage, performance.now());
         return entity;
     }
 
@@ -82,9 +100,9 @@ export class ServerCreatureSync {
         const entity = this.entities.get(creatureId);
         if (!entity) return undefined;
         entity.combatHealth = 0;
-        entity.isDead = true;
-        entity.setState('idle');
+        beginCreatureDeath(entity, performance.now());
         this.stepDurationMs.delete(creatureId);
+        this.chaseActiveUntil.delete(creatureId);
         return entity;
     }
 
@@ -98,7 +116,7 @@ export class ServerCreatureSync {
     }): GameEntity | undefined {
         const entity = this.entities.get(payload.creatureId);
         if (!entity) return undefined;
-        entity.isDead = false;
+        respawnCreatureAtSpawn(entity, performance.now(), TILE_SIZE);
         entity.combatHealth = payload.health;
         entity.combatMaxHealth = payload.maxHealth;
         entity.tileX = payload.tileX;
@@ -106,10 +124,6 @@ export class ServerCreatureSync {
         entity.worldZ = payload.z;
         entity.worldX = payload.tileX * TILE_SIZE;
         entity.worldY = payload.tileY * TILE_SIZE;
-        entity.stepDestTileX = undefined;
-        entity.stepDestTileY = undefined;
-        entity.setState('idle');
-        entity.isChasing = false;
         this.stepDurationMs.delete(payload.creatureId);
         this.chaseActiveUntil.delete(payload.creatureId);
         return entity;
@@ -126,19 +140,40 @@ export class ServerCreatureSync {
         const entity = this.entities.get(snap.creatureId);
         if (!entity || entity.isDead) return;
 
+        const prevTileX = entity.tileX;
+        const prevTileY = entity.tileY;
+        const tileDelta = tileManhattanDelta(prevTileX, prevTileY, snap.tileX, snap.tileY);
+
         entity.worldZ = snap.z;
         entity.setDirection(mapDirection(snap.direction));
+
+        if (tileDelta > 1) {
+            snapEntityToTile(entity, snap.tileX, snap.tileY);
+            this.stepDurationMs.delete(snap.creatureId);
+            this.chaseActiveUntil.delete(snap.creatureId);
+            entity.setState('idle');
+            return;
+        }
 
         const duration = Math.max(16, stepDurationMs);
         this.stepDurationMs.set(snap.creatureId, duration);
 
-        const destX = snap.tileX * TILE_SIZE;
-        const destY = snap.tileY * TILE_SIZE;
-        const atDest =
-            Math.abs(entity.worldX - destX) < 0.5 && Math.abs(entity.worldY - destY) < 0.5;
-
         entity.tileX = snap.tileX;
         entity.tileY = snap.tileY;
+
+        const destX = snap.tileX * TILE_SIZE;
+        const destY = snap.tileY * TILE_SIZE;
+
+        if (tileDelta === 0) {
+            entity.worldX = destX;
+            entity.worldY = destY;
+            entity.stepDestTileX = undefined;
+            entity.stepDestTileY = undefined;
+            return;
+        }
+
+        const atDest =
+            Math.abs(entity.worldX - destX) < 0.5 && Math.abs(entity.worldY - destY) < 0.5;
 
         if (atDest) {
             entity.worldX = destX;
@@ -161,7 +196,10 @@ export class ServerCreatureSync {
         this.lastFrameMs = nowMs;
 
         for (const [id, entity] of this.entities.entries()) {
-            if (entity.isDead) continue;
+            if (entity.isDead) {
+                tickCreatureCorpse(entity, nowMs);
+                continue;
+            }
 
             const duration = this.stepDurationMs.get(id) ?? MONSTER_STEP_MS;
             const speedPxPerMs = TILE_SIZE / duration;
@@ -227,7 +265,7 @@ export class ServerCreatureSync {
         const prevY = entity.tileY;
         entity.worldZ = snap.z;
         entity.setDirection(mapDirection(snap.direction));
-        this.applyCombatState(entity, snap);
+        this.applyCombatState(entity, snap, nowMs);
 
         const duration = snap.stepDurationMs ?? MONSTER_STEP_MS;
         this.stepDurationMs.set(snap.creatureId, duration);
@@ -235,11 +273,18 @@ export class ServerCreatureSync {
         entity.tileX = snap.tileX;
         entity.tileY = snap.tileY;
 
-        if (!animateMove || (prevX === snap.tileX && prevY === snap.tileY)) {
-            entity.worldX = snap.tileX * TILE_SIZE;
-            entity.worldY = snap.tileY * TILE_SIZE;
-            entity.stepDestTileX = undefined;
-            entity.stepDestTileY = undefined;
+        const tileDelta = tileManhattanDelta(prevX, prevY, snap.tileX, snap.tileY);
+
+        if (!animateMove || tileDelta === 0) {
+            snapEntityToTile(entity, snap.tileX, snap.tileY);
+            if (!entity.isDead) {
+                entity.setState('idle');
+            }
+            return;
+        }
+
+        if (tileDelta > 1) {
+            snapEntityToTile(entity, snap.tileX, snap.tileY);
             if (!entity.isDead) {
                 entity.setState('idle');
             }
@@ -272,12 +317,12 @@ export class ServerCreatureSync {
         entity.setDirection(mapDirection(snap.direction));
         const preset = getCreaturePreset(snap.name);
         entity.initCombatStats(resolveCreatureCombatStats(preset));
-        this.applyCombatState(entity, snap);
+        this.applyCombatState(entity, snap, performance.now());
         void entity.animController.loadImage();
         return entity;
     }
 
-    private applyCombatState(entity: GameEntity, snap: CreatureSnapshot): void {
+    private applyCombatState(entity: GameEntity, snap: CreatureSnapshot, nowMs: number): void {
         if (snap.maxHealth !== undefined) {
             entity.combatMaxHealth = snap.maxHealth;
         }
@@ -286,8 +331,10 @@ export class ServerCreatureSync {
         }
         if (snap.isDead !== undefined) {
             entity.isDead = snap.isDead;
-            if (snap.isDead) {
-                entity.setState('idle');
+            if (snap.isDead && entity.deathAtMs === undefined) {
+                beginCreatureDeath(entity, nowMs);
+            } else if (!snap.isDead && entity.isDead) {
+                respawnCreatureAtSpawn(entity, nowMs, TILE_SIZE);
             }
         }
     }

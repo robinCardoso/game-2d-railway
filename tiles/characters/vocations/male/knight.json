@@ -65,25 +65,64 @@
       "row": 0,
       "frames": 1,
       "speedFps": 5,
-      "loop": false
+      "loop": false,
+      "startFrame": 6
     },
     "attack_down": {
       "row": 0,
       "frames": 1,
       "speedFps": 5,
-      "loop": false
+      "loop": false,
+      "startFrame": 0
     },
     "attack_left": {
       "row": 0,
       "frames": 1,
       "speedFps": 5,
-      "loop": false
+      "loop": false,
+      "startFrame": 9
     },
     "attack_right": {
       "row": 0,
       "frames": 1,
       "speedFps": 5,
-      "loop": false
+      "loop": false,
+      "startFrame": 3
+    },
+    "sit_down": {
+      "row": 0,
+      "startFrame": 0,
+      "frames": 1,
+      "speedFps": 5,
+      "loop": true
+    },
+    "dead_right": {
+      "row": 0,
+      "startFrame": 3,
+      "frames": 1,
+      "speedFps": 5,
+      "loop": true
+    },
+    "dead_down": {
+      "row": 0,
+      "startFrame": 0,
+      "frames": 1,
+      "speedFps": 5,
+      "loop": true
+    },
+    "dead_up": {
+      "row": 0,
+      "startFrame": 6,
+      "frames": 1,
+      "speedFps": 5,
+      "loop": true
+    },
+    "dead_left": {
+      "row": 0,
+      "startFrame": 9,
+      "frames": 1,
+      "speedFps": 5,
+      "loop": true
     }
   },
   "offsetX": 0,
