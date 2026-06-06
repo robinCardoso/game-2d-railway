@@ -4,7 +4,7 @@ import {
     DEFAULT_MELEE_CHASE_CONFIG,
     directionTowardTile,
     resolveChaseIdleDirection,
-} from './creatureChase';
+} from './creatureChase.js';
 
 describe('directionTowardTile', () => {
     it('prefere eixo dominante', () => {

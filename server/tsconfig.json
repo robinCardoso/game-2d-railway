@@ -18,5 +18,9 @@
     "../src/game-data/itemCatalogTypes.ts",
     "../src/engine/character/calculateStats.ts",
     "../src/engine/combat/calculateDamage.ts"
+  ],
+  "exclude": [
+    "../shared/**/*.test.ts",
+    "../src/**/*.test.ts"
   ]
 }
