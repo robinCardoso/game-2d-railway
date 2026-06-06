@@ -8,7 +8,7 @@ import {
     protocolDirectionToSprite,
 } from '../world/playerAppearance';
 
-const TILE_SIZE = ENGINE_CONFIG.TILE_SIZE;
+const { TILE_SIZE } = ENGINE_CONFIG;
 
 /** Fallback quando ainda não há histórico de pacotes. */
 const REMOTE_STEP_DURATION_MS = 180;
