@@ -124,6 +124,14 @@ Rodar após mudanças em protocolo, `GameRoom`, `remotePlayerSprites` ou `depthS
 5. [ ] Velocidade remota **parecida** com a local (terreno rápido/lento, diagonal).
 6. [ ] Trocar de mapa — remoto some/entra na sala certa.
 7. [ ] Reconectar — `welcome` + lista de jogadores na sala.
+8. [ ] Aba em background — servidor continua; ao voltar foco, `resync_request` alinha mobs/remotos.
+
+### Aba em background (Page Visibility)
+
+- Browser pausa `requestAnimationFrame` em aba oculta — render e input local param (esperado).
+- **Servidor** não depende do foco: mobs, combate e cooldowns usam `setInterval` no Node.
+- Ao voltar (`visibilitychange` → visible): cliente envia `resync_request`; servidor responde com `state_sync`, `creature_sync` e `player_progress`.
+- Offline (`VITE_GAME_SERVER_WS=false`): simulação inteira no cliente — pausa com a aba é aceitável.
 
 ---
 

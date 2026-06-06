@@ -166,6 +166,22 @@ export class RemotePlayerSpriteManager {
         this.loading.clear();
     }
 
+    /** Snap visual remoto ao tile de rede após pausa do rAF. */
+    snapAllToAuthoritativeTiles(): void {
+        for (const state of this.states.values()) {
+            const x = state.tileX * TILE_SIZE;
+            const y = state.tileY * TILE_SIZE;
+            state.visualX = x;
+            state.visualY = y;
+            state.fromX = x;
+            state.fromY = y;
+            state.toX = x;
+            state.toY = y;
+            state.moving = false;
+            state.idleAfterMs = 0;
+        }
+    }
+
     private estimateStepDuration(state: RemoteVisualState, nowMs: number, isDiagonal: boolean): number {
         const packetInterval =
             state.lastMovePacketAt > 0 ? nowMs - state.lastMovePacketAt : REMOTE_STEP_DURATION_MS;

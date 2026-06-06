@@ -1,75 +1,223 @@
-progress_sync: melhorou, mas eu ainda faria uma trava mais dura
+quando a tela browser nao esta em foco, tudo para de funcionar? ataque, movimentações de tudo que esta na tela? se volta a atualizar quando eu foto na tela..
 
-Você adicionou ALLOW_CLIENT_PROGRESS_SYNC, com default false, e no GameRoom.handleProgressSync colocou:
+Sim. Isso é comportamento normal do browser, principalmente se seu jogo depende de requestAnimationFrame, setTimeout ou setInterval no cliente.
 
-if (env.isProduction && !env.allowClientProgressSync) return;
-if (this.requireWsTicket) return;
+Quando a aba/janela perde foco ou fica em background:
 
-Isso já melhora bastante o cenário anterior. O commit também adicionou aviso de boot se produção estiver sem REQUIRE_WS_TICKET, e aviso se JWT_SECRET padrão de dev estiver em produção.
+requestAnimationFrame geralmente pausa em abas ocultas/background.
+setTimeout e setInterval podem ser throttled, ou seja, rodam com atraso grande ou frequência reduzida. A Page Visibility API da MDN documenta esse comportamento para abas inativas.
+No Chrome, timers em background podem sofrer throttling pesado depois de alguns minutos, chegando a verificações bem espaçadas.
 
-Mas eu ainda acho que esse trecho deveria ser mais rígido.
+Então, se sua tela não está em foco, é esperado acontecer isso:
 
-Hoje, se alguém configurar por engano:
+renderização para ou fica muito lenta
+animações param
+movimento visual para
+ataque visual para
+input do teclado não funciona
+loop do cliente não roda direito
+quando volta o foco, tudo atualiza de uma vez ou volta a animar
+O que NÃO deveria parar
 
-NODE_ENV=production
-ALLOW_CLIENT_PROGRESS_SYNC=true
-REQUIRE_WS_TICKET=false
+No seu jogo, como você já está indo para uma arquitetura online, o servidor não deveria depender da aba do player estar em foco.
 
-o servidor pode aceitar progress_sync em produção.
+Ou seja:
 
-Eu deixaria assim:
+Servidor:
+  mobs continuam pensando
+  combate continua
+  cooldowns continuam
+  respawn continua
+  XP/vida continuam autoritativos
 
-if (env.isProduction) return;
-if (!env.allowClientProgressSync) return;
-if (this.requireWsTicket) return;
+Cliente:
+  só desenha o estado
+  envia input
+  toca animação
+  interpola movimento
 
-Ou seja: produção nunca aceita XP do cliente, mesmo que uma env seja ligada sem querer.
+Se, ao tirar foco da aba, o mundo inteiro para, então provavelmente alguma parte importante ainda está presa no loop do cliente.
 
-Minha recomendação:
+Se apenas a imagem na tela para, mas quando você volta o foco ela recebe o estado atualizado do servidor, isso é normal.
 
-private handleProgressSync(
-  socket: WebSocket,
-  msg: Extract<ClientMessage, { type: 'progress_sync' }>
-): void {
-  // Segurança: XP em produção só pode vir do servidor.
-  if (env.isProduction) return;
+O comportamento ideal para seu jogo
 
-  // Dev/offline precisa liberar explicitamente.
-  if (!env.allowClientProgressSync) return;
+Quando o player perde foco da aba:
 
-  if (this.requireWsTicket) return;
+Cliente para de renderizar normalmente
+Servidor continua rodando
+Mob continua perseguindo/atacando
+Player pode ficar parado
+Ao voltar foco:
+  cliente pede/recebe state_sync
+  corrige posição
+  atualiza vida, monstros, XP, cooldowns
 
-  // resto da lógica...
+O que não pode acontecer:
+
+mob só anda quando a aba está aberta
+ataque só calcula quando o cliente renderiza
+cooldown depende do requestAnimationFrame
+vida do mob depende do frame do browser
+
+Isso seria perigoso para multiplayer.
+
+Como você deve tratar isso no projeto
+1. Use o servidor como dono do tempo
+
+Qualquer coisa importante deve usar tempo do servidor:
+
+Date.now()
+performance.now()
+setInterval no Node
+tick do GameRoom
+
+Exemplo:
+
+const nowMs = Date.now();
+
+if (nowMs >= monster.nextAttackAtMs) {
+  attackPlayer();
+  monster.nextAttackAtMs = nowMs + monster.attackCooldownMs;
 }
 
-Essa seria minha única correção de segurança neste commit.
+Não dependa do cliente dizer:
 
-4. Registry dinâmico de mapas: muito boa evolução
+player atacou porque passou X frames
 
-Você trocou o carregamento fixo de mapas no MapCollisionStore:
+O cliente só deve mandar:
 
-mainland
-rookgaard
-orc_cave
+quero atacar
+quero andar
+quero usar skill
 
-por:
+O servidor decide se pode.
 
-for (const entry of getServerMapRegistry())
+2. No cliente, trate quando a aba volta ao foco
 
-E criou initServerMapRegistry() no boot do servidor.
+Você pode usar visibilitychange:
 
-Isso é muito importante para o Studio, porque antes todo mapa novo dependia de edição manual em código. Agora o servidor consegue escanear maps/*.json e registrar mapas novos automaticamente. O log também mostra os mapas registrados no boot.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    gameNetClient.requestStateSync?.();
+  }
+});
 
-O único ponto de atenção: mapas descobertos dinamicamente entram com:
+Ou, se ainda não existe requestStateSync, você pode pelo menos marcar:
 
-instanced: false
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    forceNextServerSnapshotReconciliation();
+  }
+});
 
-Isso é aceitável agora. Mas futuramente, se você criar mapa pelo Studio que seja dungeon/instância, vai precisar ler isso de algum metadata do próprio JSON ou de um manifest.
+A ideia é: quando voltar para a tela, não confiar no estado visual antigo. Pede ou aceita um sync forte do servidor.
 
-Exemplo futuro:
+3. Não acumule delta gigante no render
 
-{
-  "id": "goblin_cave",
-  "name": "Goblin Cave",
-  "instanced": true
+Um bug comum é isso:
+
+const deltaMs = now - lastFrameTime;
+updateGame(deltaMs);
+
+Se a aba ficou 20 segundos fora de foco, quando volta pode vir:
+
+deltaMs = 20000
+
+Aí o personagem/mob pode “voar”, animação bugar ou atravessar coisa.
+
+Faça clamp:
+
+const rawDeltaMs = now - lastFrameTime;
+const deltaMs = Math.min(rawDeltaMs, 100);
+
+Ou até menor:
+
+const deltaMs = Math.min(rawDeltaMs, 50);
+
+Para render/interpolação, isso evita explosão visual.
+
+4. Diferencie “simulação” de “renderização”
+
+No seu caso, o ideal é:
+
+Servidor:
+  simulação real
+
+Cliente:
+  renderização
+  interpolação
+  previsão visual leve
+
+Então no cliente pode pausar visual quando perder foco. Sem problema.
+
+Mas no servidor, nunca.
+
+Para o seu caso específico
+
+Pelo que você descreveu:
+
+“quando a tela browser não está em foco, tudo para de funcionar? ataque, movimentações de tudo que está na tela?”
+
+Minha resposta é:
+
+Na tela do cliente, sim, pode parecer que tudo parou.
+Mas no servidor não deveria parar.
+
+Se você volta o foco e tudo simplesmente continua do ponto onde parou, sem mudança nenhuma, então provavelmente a lógica ainda está dependente do cliente.
+
+Se você volta o foco e o estado “salta” para a situação atual, então está correto: o browser pausou a visualização, mas o servidor continuou.
+
+O que eu recomendo implementar agora
+
+Crie uma camada simples:
+
+// src/game/pageVisibility.ts
+export function setupPageVisibilityHandlers(options: {
+  onHidden?: () => void;
+  onVisible?: () => void;
+}) {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      options.onHidden?.();
+      return;
+    }
+
+    options.onVisible?.();
+  });
 }
+
+No playApp.ts:
+
+setupPageVisibilityHandlers({
+  onHidden: () => {
+    input.clear();
+    gridMovement.stepping = false;
+  },
+  onVisible: () => {
+    gameNetClient.requestStateSync();
+    resetGridMovementInputState(gridMovement);
+  },
+});
+
+E no loop de render:
+
+const rawDeltaMs = now - lastFrameMs;
+const deltaMs = Math.min(rawDeltaMs, 50);
+lastFrameMs = now;
+Minha orientação direta
+
+Não tente “forçar o browser” a continuar rodando tudo em background. Isso não é confiável.
+
+Para jogo online web, o correto é:
+
+cliente fora de foco:
+  pausa render/input
+
+servidor:
+  continua tudo
+
+cliente volta:
+  ressincroniza estado
+
+Essa é a arquitetura certa para seu jogo.

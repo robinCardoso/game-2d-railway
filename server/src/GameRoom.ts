@@ -40,6 +40,7 @@ const MOVE_RATE_LIMIT_TOLERANCE = 0.85;
 /** Intervalo mínimo entre `error` + `position_correction` por rejeição de movimento (anti-spam). */
 const MOVE_REJECTION_THROTTLE_MS = 400;
 const DEFAULT_ATTACK_COOLDOWN_MS = 550;
+const RESYNC_MIN_INTERVAL_MS = 2000;
 
 const DEFAULT_APPEARANCE: PlayerAppearance = {
     outfitId: 'knight',
@@ -93,6 +94,7 @@ export class GameRoom {
     private readonly progressPersistence: ProgressPersistence;
     private readonly creatures: RoomCreatureManager;
     private readonly vocations: VocationStore;
+    private readonly lastResyncRequestAtMs = new Map<string, number>();
 
     constructor(
         private readonly collision: MapCollisionStore,
@@ -297,6 +299,9 @@ export class GameRoom {
                 break;
             case 'progress_sync':
                 this.handleProgressSync(socket, msg);
+                break;
+            case 'resync_request':
+                this.handleResyncRequest(socket);
                 break;
             case 'ping':
                 this.send(socket, { type: 'pong', v: PROTOCOL_VERSION, t: msg.t });
@@ -776,6 +781,34 @@ export class GameRoom {
         });
     }
 
+    private handleResyncRequest(socket: WebSocket): void {
+        const playerId = this.socketToPlayerId.get(socket);
+        if (!playerId) return;
+        const player = this.players.get(playerId);
+        if (!player) return;
+
+        const nowMs = Date.now();
+        const last = this.lastResyncRequestAtMs.get(playerId) ?? 0;
+        if (nowMs - last < RESYNC_MIN_INTERVAL_MS) return;
+        this.lastResyncRequestAtMs.set(playerId, nowMs);
+
+        const room = this.roomKey(player);
+        this.send(socket, {
+            type: 'state_sync',
+            v: PROTOCOL_VERSION,
+            players: this.playersInRoom(room),
+        });
+        this.sendCreatureSync(socket, room, player.mapId, player.instanceId);
+        this.send(socket, {
+            type: 'player_progress',
+            v: PROTOCOL_VERSION,
+            playerId: player.id,
+            level: player.level,
+            experience: player.experience,
+            leveledUp: false,
+        });
+    }
+
     private resolveAttackCooldownMs(vocationId: VocationId, level: number): number {
         const vocationConfig = this.vocations.get(vocationId);
         if (!vocationConfig) return DEFAULT_ATTACK_COOLDOWN_MS;
@@ -872,6 +905,7 @@ export class GameRoom {
 
         this.players.delete(playerId);
         this.socketToPlayerId.delete(socket);
+        this.lastResyncRequestAtMs.delete(playerId);
 
         if (player) {
             this.instances.untrackPlayer(player.instanceId, playerId);

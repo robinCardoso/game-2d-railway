@@ -947,3 +947,28 @@ Sessão dedicada à resolução de problemas de usabilidade que causavam perda d
 - [ ] Produção: `progress_sync` ignorado (XP só via kill servidor)
 - [ ] Mapa novo em `public/maps/` ou volume → colisão WS após redeploy sem editar código
 - [ ] `npm test` inclui `shared/steppingDestReserve.test.ts`
+
+---
+
+## 41. Page Visibility no Play — resync ao voltar foco (2026-06-06)
+
+### 41.1 Problema
+- Aba em background: browser pausa `requestAnimationFrame` — render/input param (normal).
+- Servidor continua (`RoomCreatureManager` tick 50ms no Node).
+- Ao voltar foco, visual podia ficar desatualizado sem snapshot forte.
+
+### 41.2 Cliente
+- **`src/game/pageVisibility.ts`:** `setupPageVisibilityHandlers`
+- **`playApp.ts`:** `hidden` limpa teclas/stepping; `visible` snap visual + `requestRoomResync()`
+- **`serverCreatureSync`:** `resetFrameClock`, `snapAllToAuthoritativeTiles`
+- **`remotePlayerSprites`:** `snapAllToAuthoritativeTiles`
+
+### 41.3 Protocolo WS
+- **`resync_request`** (C→S) — rate limit 2s no `GameRoom`
+- Resposta: `state_sync` + `creature_sync` + `player_progress` (HUD)
+
+### Checklist manual
+- [ ] Railway: mob continua ativo com aba em background
+- [ ] Ao voltar foco: mobs/jogadores remotos alinhados ao servidor
+- [ ] WASD pressionado antes de alt-tab não move player sozinho ao voltar
+- [ ] `npm test` inclui `shared/protocolClientMessage.test.ts`

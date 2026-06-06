@@ -275,6 +275,22 @@ export class ServerCreatureSync {
         this.lastFrameMs = 0;
     }
 
+    resetFrameClock(): void {
+        this.lastFrameMs = 0;
+    }
+
+    /** Snap visual ao tile autoritativo após pausa longa do rAF (aba em background). */
+    snapAllToAuthoritativeTiles(): void {
+        for (const entity of this.entities.values()) {
+            if (entity.isDead) continue;
+            snapEntityToTile(entity, entity.tileX, entity.tileY);
+            this.chaseActiveUntil.delete(entity.id);
+            if (!entity.isDead) {
+                entity.setState('idle');
+            }
+        }
+    }
+
     private upsertFromSnapshot(
         snap: CreatureSnapshot,
         nowMs: number,

@@ -77,6 +77,7 @@ import {
     isServerAuthoritativeCreatures,
     isServerAuthoritativePosition,
 } from './serverAuthority';
+import { setupPageVisibilityHandlers } from './pageVisibility';
 
 const TILE_SIZE_SCREEN = ENGINE_CONFIG.TILE_SIZE;
 let TILE_TYPES = buildTileRegistry();
@@ -118,6 +119,7 @@ const CREATURE_SYNC_LOADING_TIMEOUT_MS = 3000;
 let playBootStartedAt = 0;
 let pendingCreatureSyncLoading = false;
 let creatureSyncLoadingTimer: ReturnType<typeof setTimeout> | null = null;
+let teardownPageVisibility: (() => void) | null = null;
 
 function resolveGameServerUrl(): string | null {
     const env = import.meta.env.VITE_GAME_SERVER_WS;
@@ -1050,6 +1052,28 @@ function draw(): void {
     ctx.restore();
 }
 
+function clearPlayMovementInput(): void {
+    for (const key of Object.keys(keys)) {
+        keys[key] = false;
+    }
+    gridMovement.stepping = false;
+    resetGridMovementInputState(gridMovement);
+}
+
+function handlePlayPageHidden(): void {
+    clearPlayMovementInput();
+}
+
+function handlePlayPageVisible(): void {
+    serverCreatures.resetFrameClock();
+    serverCreatures.snapAllToAuthoritativeTiles();
+    remoteSprites.snapAllToAuthoritativeTiles();
+    if (gameNet?.isConnected()) {
+        gameNet.requestRoomResync();
+    }
+    void reloadCreaturePresetsForPlay();
+}
+
 function loop(): void {
     update();
     draw();
@@ -1331,10 +1355,10 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
     setupPlayZoomControls();
     setupPlayCombatControls();
 
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-            void reloadCreaturePresetsForPlay();
-        }
+    teardownPageVisibility?.();
+    teardownPageVisibility = setupPageVisibilityHandlers({
+        onHidden: handlePlayPageHidden,
+        onVisible: handlePlayPageVisible,
     });
 
     setupNetwork(character, accountId, { initialTicket: prefetchedTicket });

@@ -182,6 +182,12 @@ export class GameNetClient {
         });
     }
 
+    /** Pede snapshot da sala após aba voltar ao foco (creature_sync + state_sync). */
+    requestRoomResync(): void {
+        if (!this.isConnected()) return;
+        this.send({ type: 'resync_request', v: PROTOCOL_VERSION });
+    }
+
     connect(): void {
         if (this.ws?.readyState === WebSocket.OPEN || this.ws?.readyState === WebSocket.CONNECTING) {
             return;

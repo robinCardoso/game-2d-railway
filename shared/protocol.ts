@@ -20,6 +20,7 @@ export type ClientMessage =
     | MapChangeMessage
     | AttackMessage
     | ProgressSyncMessage
+    | ResyncRequestMessage
     | PingMessage
     | LeaveMessage;
 
@@ -116,6 +117,11 @@ export interface ProgressSyncMessage {
     v: number;
     level: number;
     experience: number;
+}
+
+export interface ResyncRequestMessage {
+    type: 'resync_request';
+    v: number;
 }
 
 export interface MoveMessage {
@@ -448,6 +454,8 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
                 experience,
             };
         }
+        case 'resync_request':
+            return { type: 'resync_request', v: PROTOCOL_VERSION };
         case 'ping':
             return {
                 type: 'ping',
