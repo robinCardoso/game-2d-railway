@@ -1,4 +1,4 @@
-import type { Gender, VocationId } from '../../../shared/types/character';
+import type { Gender } from '../../../shared/types/character';
 import type { CharacterSpriteConfig } from '../../character/spriteAnimation';
 
 export interface OutfitPreset {
@@ -6,7 +6,8 @@ export interface OutfitPreset {
     readonly sprites: Record<Gender, Partial<CharacterSpriteConfig>>;
 }
 
-export const OUTFIT_PRESETS: Record<VocationId, OutfitPreset> = {
+/** Presets embutidos; vocações novas dependem de `public/outfit_presets.json`. */
+export const OUTFIT_PRESETS: Record<string, OutfitPreset> = {
     knight: {
         label: 'Cavaleiro (Knight)',
         sprites: {

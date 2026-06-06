@@ -91,7 +91,7 @@
   "offsetY": 0,
   "gapX": 0,
   "gapY": 0,
-  "anchorX": 0,
+  "anchorX": -10,
   "anchorY": 0,
   "chromaKey": true,
   "chromaKeyTolerance": 50,

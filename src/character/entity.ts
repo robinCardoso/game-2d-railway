@@ -1,6 +1,7 @@
 import { ENGINE_CONFIG } from '../engine/config';
 import { SpriteAnimationController, CharacterSpriteConfig, CharacterState, Direction } from './spriteAnimation';
 import { getSpriteTilePlacement } from './spriteDraw';
+import type { MobLootEntry, MobRace } from '../game-data/mobPresetTypes';
 
 export class GameEntity {
     id: string;
@@ -18,6 +19,16 @@ export class GameEntity {
     maxRadius: number = 3;
     dialogueText: string | null = null;
     dialogueTimer: number = 0;
+
+    combatMaxHealth = 0;
+    combatHealth = 0;
+    combatDefense = 0;
+    combatAttack = 0;
+    combatAttackSpeed = 1600;
+    xpReward = 0;
+    race: MobRace = 'beast';
+    lootTable: MobLootEntry[] = [];
+    isDead = false;
 
     constructor(
         id: string,
@@ -60,6 +71,26 @@ export class GameEntity {
     speak(text: string, durationMs = 4000) {
         this.dialogueText = text;
         this.dialogueTimer = performance.now() + durationMs;
+    }
+
+    initCombatStats(stats: {
+        maxHealth: number;
+        defense: number;
+        attack: number;
+        attackSpeed: number;
+        xpReward: number;
+        race: MobRace;
+        loot: MobLootEntry[];
+    }): void {
+        this.combatMaxHealth = stats.maxHealth;
+        this.combatHealth = stats.maxHealth;
+        this.combatDefense = stats.defense;
+        this.combatAttack = stats.attack;
+        this.combatAttackSpeed = stats.attackSpeed;
+        this.xpReward = stats.xpReward;
+        this.race = stats.race;
+        this.lootTable = stats.loot;
+        this.isDead = false;
     }
 
     update(nowMs: number, movementDurationMs?: number) {

@@ -220,7 +220,6 @@
     "nameOverride": "01-arvore",
     "assetType": "terrain",
     "variantGroup": "tree",
-    "paletteCategory": "nature",
     "frameWidth": 64,
     "frameHeight": 64,
     "offsetX": 0,
@@ -229,8 +228,8 @@
     "gapY": 0,
     "gridCols": 1,
     "gridRows": 1,
-    "sheetLayout": "horizontal",
-    "anchorX": -32,
-    "anchorY": 0
+    "anchorX": -20,
+    "anchorY": -5,
+    "sheetLayout": "horizontal"
   }
 }

@@ -27,6 +27,7 @@ export const NpcAI: NpcAIController = {
         } = options;
 
         npcs.forEach(npc => {
+            if (npc.isDead) return;
             // 1. VERIFICAÇÃO DE PROXIMIDADE DO JOGADOR (Interação)
             const dxToPlayer = player.tileX - npc.tileX;
             const dyToPlayer = player.tileY - npc.tileY;
@@ -107,6 +108,10 @@ export const NpcAI: NpcAIController = {
         
         // Suaviza a posição física dos NPCs em direção ao tile alvo (interpolação simples)
         npcs.forEach(npc => {
+            if (npc.isDead) {
+                npc.update(nowMs);
+                return;
+            }
             const targetWorldX = npc.tileX * TILE_SIZE_SCREEN;
             const targetWorldY = npc.tileY * TILE_SIZE_SCREEN;
             const speed = 2.5; // Pixels por frame para caminhar fluido

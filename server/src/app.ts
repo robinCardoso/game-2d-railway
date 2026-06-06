@@ -106,6 +106,7 @@ export function createApp(getOnline?: () => number): Express {
         serveDataFile('/auto_border_sets.json', paths.autoBorderSetsPath);
         serveDataFile('/creature_presets.json', paths.creaturePresetsPath);
         serveDataFile('/outfit_presets.json', paths.outfitPresetsPath);
+        serveDataFile('/item_catalog.json', paths.itemCatalogPath);
         serveDataFile('/tile_variant_groups.json', paths.tileVariantGroupsPath);
     }
 

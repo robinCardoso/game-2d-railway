@@ -5,6 +5,12 @@
     "configPath": "tiles/characters/monstros/trolls/magao_bruto.json",
     "description": "Magao bruto testando ele",
     "color": "#fb7185",
-    "visualSize": "boss"
+    "visualSize": "boss",
+    "maxHealth": 350,
+    "defense": 12,
+    "attack": 45,
+    "attackSpeed": 1200,
+    "xpReward": 250,
+    "race": "humanoid"
   }
 ]

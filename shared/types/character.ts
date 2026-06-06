@@ -1,6 +1,7 @@
 export type Gender = 'male' | 'female';
 
-export type VocationId = 'knight' | 'mage' | 'archer';
+/** Identificador da vocação (ex.: knight, mage, archer ou classes custom). */
+export type VocationId = string;
 
 export type CharacterAppearance = {
   gender: Gender;

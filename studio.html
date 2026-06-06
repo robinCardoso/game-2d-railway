@@ -75,6 +75,9 @@
                 <button type="button" class="menu-dropdown-item" data-open-panel="sprite_creator">Criar Sprites</button>
                 <button type="button" class="menu-dropdown-item" data-open-panel="character" data-sprite-profile="npc">Criar NPCs</button>
                 <button type="button" class="menu-dropdown-item" data-open-panel="character" data-sprite-profile="monster">Criar Mobs</button>
+                <button type="button" class="menu-dropdown-item" id="openVocationEditorBtn" style="border-top: 1px solid var(--border-color); margin-top: 4px; padding-top: 8px;">⚙️ Vocações (Stats)</button>
+                <button type="button" class="menu-dropdown-item" id="openMobStatsEditorBtn">👾 Mobs Stats</button>
+                <button type="button" class="menu-dropdown-item" id="openItemEditorBtn">📦 Itens (Catálogo)</button>
               </div>
             </div>
 
@@ -362,11 +365,14 @@
                     <label class="flyout-label">Vínculo com o Jogo (Player)</label>
                     <div class="info-row" style="margin-bottom: 6px;">
                       <span class="info-label">Vocação</span>
-                      <select id="charPlayerVocation" style="width: 90px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px; font-size: 11px;">
-                        <option value="knight" selected>Knight</option>
-                        <option value="mage">Mage</option>
-                        <option value="archer">Archer</option>
-                      </select>
+                      <div style="display: flex; align-items: center; gap: 4px;">
+                        <select id="charPlayerVocation" style="width: 90px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px; font-size: 11px;">
+                          <option value="knight" selected>Knight</option>
+                          <option value="mage">Mage</option>
+                          <option value="archer">Archer</option>
+                        </select>
+                        <button type="button" id="charVocationGearBtn" class="floor-btn" style="padding: 2px 6px; font-size: 10px;" title="Editar Vocações">⚙️</button>
+                      </div>
                     </div>
                     <div class="info-row" style="margin-bottom: 6px;">
                       <span class="info-label">Gênero</span>
@@ -558,9 +564,9 @@
                   <div id="mapSpriteCategoryTree" class="char-folder-tree" aria-label="Estrutura de pastas de sprites de mapa"></div>
                   </div>
 
-                  <!-- Propriedades Físicas (Apenas Terreno) -->
+                  <!-- Propriedades Físicas (Terreno e Itens) -->
                   <div id="mapSpriteTerrainPropertiesBlock">
-                    <label class="flyout-label">Propriedades do Terreno</label>
+                    <label class="flyout-label">Propriedades Físicas</label>
                     <label class="check-row" style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; color: var(--text-dim); font-size: 11px;">
                       <span>Caminhável (Sólido se desmarcado)</span>
                       <input type="checkbox" id="mapSpriteWalkableToggle" checked style="accent-color: var(--accent-color); cursor: pointer;" />
@@ -620,10 +626,19 @@
                     <span class="info-label">Margem Início X</span>
                     <input type="number" id="mapSpriteOffsetX" value="0" style="width: 60px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px;" />
                   </div>
-                  <div class="info-row" style="margin-bottom: 12px;">
+                  <div class="info-row" style="margin-bottom: 8px;">
                     <span class="info-label">Margem Início Y</span>
                     <input type="number" id="mapSpriteOffsetY" value="0" style="width: 60px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px;" />
                   </div>
+                  <div class="info-row" style="margin-bottom: 8px;">
+                    <span class="info-label">Ajuste Âncora X</span>
+                    <input type="number" id="mapSpriteAnchorX" value="0" style="width: 60px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px;" />
+                  </div>
+                  <div class="info-row" style="margin-bottom: 12px;">
+                    <span class="info-label">Ajuste Âncora Y</span>
+                    <input type="number" id="mapSpriteAnchorY" value="0" style="width: 60px; background: #1a1d24; color: #fff; border: 1px solid #3f4452; border-radius: 4px; padding: 2px 4px;" />
+                  </div>
+
 
                   <label class="flyout-label">Visualização do Sprite</label>
                   <div style="background: #0d0f13; border: 1px solid #232731; border-radius: 8px; display: flex; align-items: center; justify-content: center; height: 100px; margin-bottom: 12px; position: relative;">
@@ -1096,6 +1111,283 @@
         <footer class="calibrator-footer" style="padding: 12px 16px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 8px; background: #0f1115;">
           <button type="button" class="floor-btn" id="tilePropCancelBtn" style="padding: 6px 12px; font-size: 11px; border-radius: 4px; border: 1px solid #3f4452; background: transparent; color: var(--text-main); cursor: pointer;">Cancelar</button>
           <button type="button" class="floor-btn" id="tilePropConfirmBtn" style="padding: 6px 12px; font-size: 11px; border-radius: 4px; border: 1px solid var(--accent-color); background: var(--accent-color); color: #fff; cursor: pointer; font-weight: bold;">Salvar Propriedades</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- Modal Gerenciador de Vocações -->
+    <div id="vocationEditorModal" class="calibrator-modal" style="display: none; justify-content: center; align-items: center; z-index: 10000;">
+      <div class="calibrator-content" style="max-width: 680px; width: 100%; border-radius: 12px; background: radial-gradient(circle at center, #1b1e24 0%, #0e1115 100%); border: 1px solid var(--border-color); box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; flex-direction: column;">
+        <header class="calibrator-header" style="padding: 12px 16px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-weight: 700; font-size: 13px; color: var(--accent-color); text-transform: uppercase; letter-spacing: 0.05em;">⚙️ Gerenciar Vocações (vocations.ts)</span>
+          <button type="button" class="flyout-close" id="vocCloseBtn" style="font-size: 18px; border: none; background: transparent; color: var(--text-dim); cursor: pointer;">×</button>
+        </header>
+        <div class="calibrator-body-layout" style="display: flex; flex-direction: row; padding: 16px; gap: 16px; height: 440px; box-sizing: border-box; overflow: hidden;">
+          <!-- Coluna Esquerda: Lista de Vocações -->
+          <div style="flex: 1; border-right: 1px solid var(--border-color); padding-right: 16px; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box; justify-content: space-between;">
+            <div style="display: flex; flex-direction: column; gap: 6px; overflow-y: auto; flex-grow: 1;" id="vocListContainer">
+              <!-- Inseridas dinamicamente -->
+            </div>
+            <button type="button" class="floor-btn" id="vocAddBtn" style="width: 100%; padding: 8px; border-color: var(--accent-color); color: var(--accent-color); font-weight: bold; font-size: 11px;">+ Nova Vocação</button>
+          </div>
+          
+          <!-- Coluna Direita: Formulário de Edição -->
+          <div style="flex: 2; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; padding-right: 4px; box-sizing: border-box;" id="vocForm">
+            <div style="display: flex; gap: 8px;">
+              <div style="flex: 1;">
+                <label style="font-size: 9px; color: var(--text-dim); text-transform: uppercase; display: block; margin-bottom: 3px;">ID da Vocação</label>
+                <input type="text" id="vocIdInput" placeholder="knight" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 6px; font-size: 11px; outline: none; box-sizing: border-box;" />
+              </div>
+              <div style="flex: 1;">
+                <label style="font-size: 9px; color: var(--text-dim); text-transform: uppercase; display: block; margin-bottom: 3px;">Nome Exibido</label>
+                <input type="text" id="vocNameInput" placeholder="Knight" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 6px; font-size: 11px; outline: none; box-sizing: border-box;" />
+              </div>
+            </div>
+
+            <!-- Stats Base -->
+            <fieldset style="border: 1px solid #2d3139; border-radius: 6px; padding: 8px 10px; margin: 0;">
+              <legend style="font-size: 10px; color: var(--accent-color); font-weight: bold; text-transform: uppercase; padding: 0 4px;">Atributos Base (Lvl 1)</legend>
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Melee</label>
+                  <input type="number" id="vocBaseMelee" min="1" value="10" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Dist.</label>
+                  <input type="number" id="vocBaseDist" min="1" value="2" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Mág.</label>
+                  <input type="number" id="vocBaseMagic" min="1" value="1" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Defesa</label>
+                  <input type="number" id="vocBaseDef" min="1" value="10" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Vida</label>
+                  <input type="number" id="vocBaseHp" min="10" value="150" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Mana</label>
+                  <input type="number" id="vocBaseMana" min="0" value="30" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Atk Spd</label>
+                  <input type="number" id="vocBaseAtkSpd" min="100" value="1000" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Def Atk</label>
+                  <input type="number" id="vocBaseDefAtk" min="0" value="5" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+              </div>
+            </fieldset>
+
+            <!-- Growth Per Level -->
+            <fieldset style="border: 1px solid #2d3139; border-radius: 6px; padding: 8px 10px; margin: 0;">
+              <legend style="font-size: 10px; color: var(--accent-color); font-weight: bold; text-transform: uppercase; padding: 0 4px;">Crescimento por Nível</legend>
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Melee growth</label>
+                  <input type="number" id="vocGrowthMelee" step="0.1" value="2.0" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Dist. growth</label>
+                  <input type="number" id="vocGrowthDist" step="0.1" value="1.0" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Mág. growth</label>
+                  <input type="number" id="vocGrowthMagic" step="0.1" value="0.5" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Defesa growth</label>
+                  <input type="number" id="vocGrowthDef" step="0.1" value="1.5" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Vida growth</label>
+                  <input type="number" id="vocGrowthHp" min="1" value="20" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Mana growth</label>
+                  <input type="number" id="vocGrowthMana" min="0" value="10" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+              </div>
+            </fieldset>
+
+            <!-- Level 100 Simulator Preview (Premium Aesthetic) -->
+            <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 6px; padding: 8px; font-size: 10px; display: flex; flex-direction: column; gap: 4px;">
+              <span style="color: #10b981; font-weight: bold; text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em;">🎲 Simulação de Atributos (Nível 100)</span>
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; color: var(--text-dim);">
+                <div>Vida: <strong id="simHp" style="color: #fff;">-</strong></div>
+                <div>Mana: <strong id="simMana" style="color: #fff;">-</strong></div>
+                <div>Melee: <strong id="simMelee" style="color: #fff;">-</strong></div>
+                <div>Defesa: <strong id="simDef" style="color: #fff;">-</strong></div>
+                <div>Dist.: <strong id="simDist" style="color: #fff;">-</strong></div>
+                <div>Mág.: <strong id="simMagic" style="color: #fff;">-</strong></div>
+                <div>Atk Spd: <strong id="simAtkSpd" style="color: #fff;">-</strong></div>
+                <div>Def Atk: <strong id="simDefAtk" style="color: #fff;">-</strong></div>
+              </div>
+              <p style="margin: 0; font-size: 8px; opacity: 0.65; line-height: 1.35;">Usa a mesma fórmula do motor (<code>calculateStatsForLevel</code>). Atk Spd e Def Atk não escalam por nível.</p>
+            </div>
+          </div>
+        </div>
+        <footer class="calibrator-footer" style="padding: 12px 16px; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: #0f1115;">
+          <button type="button" class="floor-btn" id="vocDeleteBtn" style="padding: 6px 12px; font-size: 11px; border-radius: 4px; border: 1px solid #ef4444; background: rgba(239, 68, 68, 0.05); color: #ef4444; cursor: pointer; display: none;">🗑️ Excluir</button>
+          <div style="margin-left: auto; display: flex; gap: 8px;">
+            <button type="button" class="floor-btn" id="vocCancelBtn" style="padding: 6px 12px; font-size: 11px; border-radius: 4px; border: 1px solid #3f4452; background: transparent; color: var(--text-main); cursor: pointer;">Cancelar</button>
+            <button type="button" class="floor-btn" id="vocConfirmBtn" style="padding: 6px 12px; font-size: 11px; border-radius: 4px; border: 1px solid var(--accent-color); background: var(--accent-color); color: #fff; cursor: pointer; font-weight: bold;">Salvar no Servidor</button>
+          </div>
+        </footer>
+      </div>
+    </div>
+
+    <!-- Modal Gerenciador de Mobs Stats -->
+    <div id="mobStatsEditorModal" class="calibrator-modal" style="display: none; justify-content: center; align-items: center; z-index: 10000;">
+      <div class="calibrator-content" style="max-width: 760px; width: 100%; border-radius: 12px; background: radial-gradient(circle at center, #1b1e24 0%, #0e1115 100%); border: 1px solid var(--border-color); box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; flex-direction: column;">
+        <header class="calibrator-header" style="padding: 12px 16px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-weight: 700; font-size: 13px; color: var(--accent-color); text-transform: uppercase; letter-spacing: 0.05em;">👾 Mobs Stats (creature_presets.json)</span>
+          <button type="button" class="flyout-close" id="mobCloseBtn" style="font-size: 18px; border: none; background: transparent; color: var(--text-dim); cursor: pointer;">×</button>
+        </header>
+        <div class="calibrator-body-layout" style="display: flex; flex-direction: row; padding: 16px; gap: 16px; height: 520px; box-sizing: border-box; overflow: hidden;">
+          <div style="flex: 1; border-right: 1px solid var(--border-color); padding-right: 16px; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box;">
+            <span style="font-size: 9px; color: var(--text-dim); text-transform: uppercase;">Presets cadastrados</span>
+            <div style="display: flex; flex-direction: column; gap: 6px; overflow-y: auto; flex-grow: 1;" id="mobListContainer"></div>
+            <p style="margin: 0; font-size: 9px; opacity: 0.55; line-height: 1.35;">Novos mobs entram via <strong>Criar Mobs</strong>; aqui você ajusta combate e loot.</p>
+          </div>
+
+          <div style="flex: 2; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; padding-right: 4px; box-sizing: border-box;" id="mobStatsForm">
+            <div id="mobMetaInfo" style="font-size: 11px; color: var(--text-main); line-height: 1.4;">—</div>
+            <div id="mobNpcNotice" style="display: none; font-size: 10px; color: #fbbf24; background: rgba(251, 191, 36, 0.08); border: 1px solid rgba(251, 191, 36, 0.25); border-radius: 6px; padding: 8px;">
+              Este preset é NPC — stats de combate ficam desabilitados (só aplicam a type <strong>monster</strong> no Play).
+            </div>
+
+            <fieldset id="mobStatsFieldset" style="border: 1px solid #2d3139; border-radius: 6px; padding: 8px 10px; margin: 0;">
+              <legend style="font-size: 10px; color: var(--accent-color); font-weight: bold; text-transform: uppercase; padding: 0 4px;">Combate</legend>
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Vida (HP)</label>
+                  <input type="number" id="mobHealthInput" min="1" value="60" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Defesa</label>
+                  <input type="number" id="mobDefenseInput" min="0" value="6" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Ataque</label>
+                  <input type="number" id="mobAttackInput" min="1" value="20" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Attack Speed (ms)</label>
+                  <input type="number" id="mobAttackSpeedInput" min="200" value="1600" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Experiência (XP)</label>
+                  <input type="number" id="mobXpInput" min="1" value="50" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Raça (Race)</label>
+                  <select id="mobRaceSelect" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;"></select>
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset id="mobLootSection" style="border: 1px solid #2d3139; border-radius: 6px; padding: 8px 10px; margin: 0;">
+              <legend style="font-size: 10px; color: #fbbf24; font-weight: bold; text-transform: uppercase; padding: 0 4px;">
+                Loot <span style="font-size: 8px; color: var(--text-dim); font-weight: normal;">— em desenvolvimento</span>
+              </legend>
+              <p style="margin: 0 0 8px; font-size: 9px; color: var(--text-dim); line-height: 1.35;">
+                Só é possível ligar itens cadastrados em <strong>Itens (Catálogo)</strong>. Drop no Play ainda não está ativo.
+              </p>
+              <div id="mobLootValidation" style="font-size: 10px; line-height: 1.4; margin-bottom: 8px; color: var(--text-dim);"></div>
+              <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                <button type="button" class="floor-btn" id="mobOpenItemCatalogBtn" style="flex: 1; padding: 6px; font-size: 10px;">📦 Abrir catálogo de itens</button>
+              </div>
+              <div id="mobLootRows" style="display: flex; flex-direction: column; gap: 6px;"></div>
+              <button type="button" class="floor-btn" id="mobAddLootBtn" style="margin-top: 8px; width: 100%; padding: 6px; font-size: 10px; border-color: #fbbf24; color: #fbbf24;">+ Adicionar item ao loot</button>
+            </fieldset>
+
+            <div style="background: rgba(99, 102, 241, 0.05); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 6px; padding: 8px; font-size: 10px; display: flex; flex-direction: column; gap: 4px;">
+              <span style="color: var(--accent-color); font-weight: bold; text-transform: uppercase; font-size: 9px;">Resumo efetivo</span>
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; color: var(--text-dim);">
+                <div>HP: <strong id="mobPreviewHp" style="color:#fff;">-</strong></div>
+                <div>Def: <strong id="mobPreviewDef" style="color:#fff;">-</strong></div>
+                <div>Atk: <strong id="mobPreviewAtk" style="color:#fff;">-</strong></div>
+                <div>Atk Spd: <strong id="mobPreviewAtkSpd" style="color:#fff;">-</strong></div>
+                <div>XP: <strong id="mobPreviewXp" style="color:#fff;">-</strong></div>
+                <div>Raça: <strong id="mobPreviewRace" style="color:#fff;">-</strong></div>
+              </div>
+              <p style="margin: 0; font-size: 8px; opacity: 0.65;">Valores vazios no JSON usam defaults por <code>visualSize</code>.</p>
+            </div>
+          </div>
+        </div>
+        <footer class="calibrator-footer" style="padding: 12px 16px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; align-items: center; background: #0f1115; gap: 8px;">
+          <button type="button" class="floor-btn" id="mobCancelBtn" style="padding: 6px 12px; font-size: 11px; border-radius: 4px; border: 1px solid #3f4452; background: transparent; color: var(--text-main); cursor: pointer;">Cancelar</button>
+          <button type="button" class="floor-btn" id="mobConfirmBtn" style="padding: 6px 12px; font-size: 11px; border-radius: 4px; border: 1px solid var(--accent-color); background: var(--accent-color); color: #fff; cursor: pointer; font-weight: bold;">Salvar no Servidor</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- Modal Catálogo de Itens -->
+    <div id="itemEditorModal" class="calibrator-modal" style="display: none; justify-content: center; align-items: center; z-index: 10000;">
+      <div class="calibrator-content" style="max-width: 720px; width: 100%; border-radius: 12px; background: radial-gradient(circle at center, #1b1e24 0%, #0e1115 100%); border: 1px solid var(--border-color); box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; flex-direction: column;">
+        <header class="calibrator-header" style="padding: 12px 16px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-weight: 700; font-size: 13px; color: var(--accent-color); text-transform: uppercase; letter-spacing: 0.05em;">📦 Catálogo de Itens (item_catalog.json)</span>
+          <button type="button" class="flyout-close" id="itemCloseBtn" style="font-size: 18px; border: none; background: transparent; color: var(--text-dim); cursor: pointer;">×</button>
+        </header>
+        <div style="display: flex; flex-direction: row; padding: 16px; gap: 16px; height: 480px; box-sizing: border-box; overflow: hidden;">
+          <div style="flex: 1; border-right: 1px solid var(--border-color); padding-right: 16px; display: flex; flex-direction: column; gap: 8px;">
+            <span style="font-size: 9px; color: var(--text-dim); text-transform: uppercase;">Itens cadastrados</span>
+            <div id="itemListContainer" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;"></div>
+            <button type="button" class="floor-btn" id="itemAddBtn" style="width: 100%; padding: 8px; border-color: var(--accent-color); color: var(--accent-color); font-weight: bold; font-size: 11px;">+ Novo item</button>
+            <p style="margin: 0; font-size: 9px; opacity: 0.55; line-height: 1.35;">Itens só existem após salvar aqui. Marque <strong>Implementado</strong> quando tiver sprite/inventário/drop no jogo.</p>
+          </div>
+          <div style="flex: 2; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <div>
+                <label style="font-size: 9px; color: var(--text-dim); text-transform: uppercase; display: block; margin-bottom: 3px;">ID (slug)</label>
+                <input type="text" id="itemIdInput" placeholder="gold_coin" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 6px; font-size: 11px; box-sizing: border-box;" />
+              </div>
+              <div>
+                <label style="font-size: 9px; color: var(--text-dim); text-transform: uppercase; display: block; margin-bottom: 3px;">Nome exibido</label>
+                <input type="text" id="itemNameInput" placeholder="Moeda de Ouro" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 6px; font-size: 11px; box-sizing: border-box;" />
+              </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+              <div>
+                <label style="font-size: 9px; color: var(--text-dim); text-transform: uppercase; display: block; margin-bottom: 3px;">Categoria</label>
+                <select id="itemCategorySelect" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 6px; font-size: 11px; box-sizing: border-box;">
+                  <option value="loot">Loot / material</option>
+                  <option value="equipment">Equipamento</option>
+                </select>
+              </div>
+              <div id="itemSlotWrap">
+                <label style="font-size: 9px; color: var(--text-dim); text-transform: uppercase; display: block; margin-bottom: 3px;">Slot</label>
+                <select id="itemSlotSelect" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 6px; font-size: 11px; box-sizing: border-box;"></select>
+              </div>
+              <div id="itemSpeedWrap">
+                <label style="font-size: 9px; color: var(--text-dim); text-transform: uppercase; display: block; margin-bottom: 3px;">Bônus speed</label>
+                <input type="number" id="itemSpeedBonusInput" min="0" placeholder="0" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 6px; font-size: 11px; box-sizing: border-box;" />
+              </div>
+            </div>
+            <div>
+              <label style="font-size: 9px; color: var(--text-dim); text-transform: uppercase; display: block; margin-bottom: 3px;">Descrição</label>
+              <input type="text" id="itemDescriptionInput" placeholder="Opcional" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 6px; font-size: 11px; box-sizing: border-box;" />
+            </div>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-dim); cursor: pointer;">
+              <input type="checkbox" id="itemImplementedCheck" />
+              Implementado no jogo (inventário / drop / equipar)
+            </label>
+            <div style="background: rgba(251, 191, 36, 0.08); border: 1px solid rgba(251, 191, 36, 0.25); border-radius: 6px; padding: 8px; font-size: 10px; color: #fcd34d; line-height: 1.4;">
+              Rascunho = cadastro válido para loot de mobs, mas sem gameplay. Use Mobs Stats para ligar item → mob após criar o item aqui.
+            </div>
+          </div>
+        </div>
+        <footer class="calibrator-footer" style="padding: 12px 16px; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: #0f1115;">
+          <button type="button" class="floor-btn" id="itemDeleteBtn" style="padding: 6px 12px; font-size: 11px; border-radius: 4px; border: 1px solid #ef4444; background: rgba(239, 68, 68, 0.05); color: #ef4444; cursor: pointer; display: none;">🗑️ Excluir</button>
+          <div style="margin-left: auto; display: flex; gap: 8px;">
+            <button type="button" class="floor-btn" id="itemCancelBtn" style="padding: 6px 12px; font-size: 11px; border-radius: 4px; border: 1px solid #3f4452; background: transparent; color: var(--text-main); cursor: pointer;">Cancelar</button>
+            <button type="button" class="floor-btn" id="itemConfirmBtn" style="padding: 6px 12px; font-size: 11px; border-radius: 4px; border: 1px solid var(--accent-color); background: var(--accent-color); color: #fff; cursor: pointer; font-weight: bold;">Salvar no Servidor</button>
+          </div>
         </footer>
       </div>
     </div>

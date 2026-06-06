@@ -66,6 +66,20 @@ interface MapSpriteListEntry {
     };
 }
 
+function parseIntField(value: string, fallback = 0): number {
+    const parsed = parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function fileKeyFromDisplayName(name: string): string {
+    return name
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_|_$/g, '');
+}
+
 /** PNGs internos do motor auto-borda — não são sprites editáveis no Criar Sprites. */
 function isBorderSetInternalAsset(sprite: MapSpriteListEntry): boolean {
     const props = sprite.properties ?? {};
@@ -183,6 +197,8 @@ export function initMapSpriteEditor() {
     const frameHeightInput = document.getElementById('mapSpriteFrameHeight') as HTMLInputElement;
     const offsetXInput = document.getElementById('mapSpriteOffsetX') as HTMLInputElement;
     const offsetYInput = document.getElementById('mapSpriteOffsetY') as HTMLInputElement;
+    const anchorXInput = document.getElementById('mapSpriteAnchorX') as HTMLInputElement | null;
+    const anchorYInput = document.getElementById('mapSpriteAnchorY') as HTMLInputElement | null;
 
     // Carregamento de sprites existentes
     const serverSelect = document.getElementById('mapSpriteServerSelect') as HTMLSelectElement | null;
@@ -220,6 +236,7 @@ export function initMapSpriteEditor() {
     let currentCalibration: MapSpriteCalibration | null = null;
     let pendingBorderSetCalibration: BorderSetCalibrationPayload | null = null;
     let loadedSpriteProperties: MapSpriteListEntry['properties'] | undefined;
+    let loadedSpriteFileKey: string | undefined;
 
     const DEFAULT_SPRITE_NAME = '';
 
@@ -228,6 +245,8 @@ export function initMapSpriteEditor() {
         frameHeightInput.value = String(cal.frameHeight);
         offsetXInput.value = String(cal.offsetX);
         offsetYInput.value = String(cal.offsetY);
+        if (anchorXInput) anchorXInput.value = String(cal.anchorX ?? 0);
+        if (anchorYInput) anchorYInput.value = String(cal.anchorY ?? 0);
         currentCalibration = cal;
     }
 
@@ -255,12 +274,22 @@ export function initMapSpriteEditor() {
         const h = processedImage.naturalHeight || processedImage.height;
         const fw = parseInt(frameWidthInput.value, 10);
         const fh = parseInt(frameHeightInput.value, 10);
+        const ax = anchorXInput
+            ? parseIntField(anchorXInput.value, currentCalibration?.anchorX ?? 0)
+            : currentCalibration?.anchorX ?? 0;
+        const ay = anchorYInput
+            ? parseIntField(anchorYInput.value, currentCalibration?.anchorY ?? 0)
+            : currentCalibration?.anchorY ?? 0;
         if (!Number.isFinite(fw) || fw <= 0 || !Number.isFinite(fh) || fh <= 0) {
-            return inferMapSpriteCalibration(
-                w,
-                h,
-                calibrationHintsFromProperties(loadedSpriteProperties as Record<string, unknown> | undefined)
-            );
+            return {
+                ...inferMapSpriteCalibration(
+                    w,
+                    h,
+                    calibrationHintsFromProperties(loadedSpriteProperties as Record<string, unknown> | undefined)
+                ),
+                anchorX: ax,
+                anchorY: ay,
+            };
         }
         const ox = parseInt(offsetXInput.value, 10) || 0;
         const oy = parseInt(offsetYInput.value, 10) || 0;
@@ -278,8 +307,8 @@ export function initMapSpriteEditor() {
             gridCols,
             gridRows,
             sheetLayout: currentCalibration?.sheetLayout ?? 'horizontal',
-            anchorX: currentCalibration?.anchorX ?? 0,
-            anchorY: currentCalibration?.anchorY ?? 0,
+            anchorX: ax,
+            anchorY: ay,
         };
     }
 
@@ -315,9 +344,12 @@ export function initMapSpriteEditor() {
         frameHeightInput.value = String(ENGINE_CONFIG.TILE_SIZE);
         offsetXInput.value = '0';
         offsetYInput.value = '0';
+        if (anchorXInput) anchorXInput.value = '0';
+        if (anchorYInput) anchorYInput.value = '0';
         currentCalibration = null;
         pendingBorderSetCalibration = null;
         loadedSpriteProperties = undefined;
+        loadedSpriteFileKey = undefined;
         syncDeleteSpriteButtonVisible(false);
 
         syncTerrainPropertiesVisibility();
@@ -435,7 +467,7 @@ export function initMapSpriteEditor() {
         refreshVariantGroupDatalist();
     }
 
-    async function reloadServerMapSpritesList(): Promise<boolean> {
+    async function reloadServerMapSpritesList(preserveSelectionPath?: string): Promise<boolean> {
         try {
             const response = await apiFetch('/api/list-map-sprites');
             if (!response.ok) {
@@ -510,6 +542,10 @@ export function initMapSpriteEditor() {
                     borderGroup.appendChild(opt);
                 });
                 serverSelect.appendChild(borderGroup);
+            }
+
+            if (preserveSelectionPath) {
+                serverSelect.value = preserveSelectionPath;
             }
             return true;
         } catch (err: unknown) {
@@ -734,14 +770,18 @@ export function initMapSpriteEditor() {
                 : sprite.category ?? '';
 
         loadedSpriteProperties = sprite.properties;
+        loadedSpriteFileKey = sprite.filename;
 
-        if (sprite.assetType === 'terrain' && sprite.properties) {
+        if ((sprite.assetType === 'terrain' || sprite.assetType === 'items') && sprite.properties) {
             walkableToggle.checked = sprite.properties.walkable ?? true;
             speedRange.value = (sprite.properties.speedModifier ?? 1.0).toString();
             if (speedValSpan) speedValSpan.innerText = parseFloat(speedRange.value).toFixed(1);
             stairToggle.checked = sprite.properties.isStair ?? false;
             syncVariantGroupFieldsFromProperties(sprite.properties);
         }
+
+        if (anchorXInput) anchorXInput.value = String(sprite.properties?.anchorX ?? 0);
+        if (anchorYInput) anchorYInput.value = String(sprite.properties?.anchorY ?? 0);
 
         // Carrega a imagem física
         isImageLoaded = false;
@@ -824,9 +864,9 @@ export function initMapSpriteEditor() {
 
     function syncTerrainPropertiesVisibility(): void {
         const type = assetTypeSelect.value;
-        const isTerrain = type === 'terrain';
+        const isSingleSprite = type === 'terrain' || type === 'items';
         const isBorderSet = type === 'border_set';
-        if (propertiesBlock) propertiesBlock.style.display = isTerrain ? 'block' : 'none';
+        if (propertiesBlock) propertiesBlock.style.display = isSingleSprite ? 'block' : 'none';
         if (borderSetBlock) borderSetBlock.style.display = isBorderSet ? 'block' : 'none';
         if (categoryBlock) categoryBlock.style.display = isBorderSet ? 'none' : 'block';
         if (saveServerBtn) {
@@ -931,6 +971,7 @@ export function initMapSpriteEditor() {
             originalImage.src = reader.result as string;
             originalImage.onload = async () => {
                 loadedSpriteProperties = undefined;
+                loadedSpriteFileKey = undefined;
                 await applyChromaProcessing();
                 syncCalibrationFromImage();
                 toast.success('Imagem da spritesheet carregada com sucesso!');
@@ -1048,6 +1089,8 @@ export function initMapSpriteEditor() {
                     frameHeightInput.value = finalHeight.toString();
                     offsetXInput.value = '0';
                     offsetYInput.value = '0';
+                    if (anchorXInput) anchorXInput.value = String(result.anchorX ?? 0);
+                    if (anchorYInput) anchorYInput.value = String(result.anchorY ?? 0);
                     currentCalibration = {
                         frameWidth: finalWidth,
                         frameHeight: finalHeight,
@@ -1068,6 +1111,8 @@ export function initMapSpriteEditor() {
                     frameHeightInput.value = result.frameHeight.toString();
                     offsetXInput.value = result.offsetX.toString();
                     offsetYInput.value = result.offsetY.toString();
+                    if (anchorXInput) anchorXInput.value = String(result.anchorX ?? 0);
+                    if (anchorYInput) anchorYInput.value = String(result.anchorY ?? 0);
                     const cols = Math.max(
                         1,
                         Math.floor((imgW - result.offsetX) / (result.frameWidth + result.gapX))
@@ -1257,7 +1302,7 @@ export function initMapSpriteEditor() {
             };
 
             if (
-                assetTypeSelect.value === 'terrain' &&
+                (assetTypeSelect.value === 'terrain' || assetTypeSelect.value === 'items') &&
                 variantGroupInput &&
                 variantGroupExclude &&
                 !variantGroupExclude.checked
@@ -1294,6 +1339,8 @@ export function initMapSpriteEditor() {
                 assetType: assetTypeSelect.value,
                 category,
                 spriteBase64: processedImage.src,
+                fileKey: loadedSpriteFileKey ?? fileKeyFromDisplayName(name),
+                previousFileKey: loadedSpriteFileKey,
                 properties,
             };
 
@@ -1313,10 +1360,22 @@ export function initMapSpriteEditor() {
             const result = await response.json();
             toast.success(`Sprite "${result.name}" salvo com sucesso no servidor! O Vite recarregará o editor automaticamente.`);
 
+            if (result.fileKey) {
+                loadedSpriteFileKey = String(result.fileKey);
+            }
+
             saveServerBtn.innerText = originalText;
             (saveServerBtn as HTMLButtonElement).disabled = false;
 
-            await reloadServerMapSpritesList();
+            const selectedPath = serverSelect?.value || undefined;
+            await reloadServerMapSpritesList(selectedPath);
+            if (selectedPath) {
+                const refreshed = serverSpritesList.find((s) => s.relativePath === selectedPath);
+                if (refreshed) {
+                    loadedSpriteProperties = refreshed.properties;
+                    loadedSpriteFileKey = refreshed.filename;
+                }
+            }
             if (afterSaveSpriteHandler) {
                 await afterSaveSpriteHandler();
             }
@@ -1359,16 +1418,65 @@ export function initMapSpriteEditor() {
         const fh = parseInt(frameHeightInput.value, 10) || tileSize;
         const ox = parseInt(offsetXInput.value) || 0;
         const oy = parseInt(offsetYInput.value) || 0;
+        const ax = anchorXInput
+            ? parseIntField(anchorXInput.value, currentCalibration?.anchorX ?? 0)
+            : currentCalibration?.anchorX ?? 0;
+        const ay = anchorYInput
+            ? parseIntField(anchorYInput.value, currentCalibration?.anchorY ?? 0)
+            : currentCalibration?.anchorY ?? 0;
 
-        // Suavização desativada para manter nitidez
+        // 1. Desenha a célula de referência 32x32 centralizada
+        const baseTileSize = 32;
+        const scale = 1; // O canvas já tem 64x64px, então scale=1 centraliza a célula de 32x32px com 16px de margem
+        const tileW = baseTileSize * scale;
+        const tileH = baseTileSize * scale;
+        const tileX = (previewCanvas.width - tileW) / 2;
+        const tileY = (previewCanvas.height - tileH) / 2;
+
+        // Fundo azul translúcido do tile
+        previewCtx.fillStyle = 'rgba(56, 189, 248, 0.08)';
+        previewCtx.fillRect(tileX, tileY, tileW, tileH);
+
+        // Borda azul pontilhada do tile
+        previewCtx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
+        previewCtx.lineWidth = 1.5;
+        previewCtx.setLineDash([4, 4]);
+        previewCtx.strokeRect(tileX, tileY, tileW, tileH);
+        previewCtx.setLineDash([]);
+
+        // 2. Calcula posição do sprite com âncoras aplicadas
+        // Posição de repouso padrão: Centralizado no X, Alinhado ao bottom no Y do tile
+        const charBaseX = tileX + ((baseTileSize - fw) / 2) * scale;
+        const charBaseY = tileY + (baseTileSize - fh) * scale;
+
+        const drawX = charBaseX + ax * scale;
+        const drawY = charBaseY + ay * scale;
+        const drawW = fw * scale;
+        const drawH = fh * scale;
+
+        // Desenha o sprite com pixel-art perfeita
         previewCtx.imageSmoothingEnabled = false;
-
         previewCtx.drawImage(
             processedImage,
             ox, oy, fw, fh,
-            0, 0, previewCanvas.width, previewCanvas.height
+            drawX, drawY, drawW, drawH
         );
+
+        // 3. Desenha a cruz vermelha indicando o ponto de âncora/piso (Bottom-Center do tile de 32x32)
+        const targetX = tileX + tileW / 2;
+        const targetY = tileY + tileH;
+        previewCtx.strokeStyle = 'rgba(239, 68, 68, 0.9)'; // Vermelho vivo
+        previewCtx.lineWidth = 2;
+        previewCtx.beginPath();
+        // Linha horizontal
+        previewCtx.moveTo(targetX - 8, targetY);
+        previewCtx.lineTo(targetX + 8, targetY);
+        // Linha vertical
+        previewCtx.moveTo(targetX, targetY - 8);
+        previewCtx.lineTo(targetX, targetY + 8);
+        previewCtx.stroke();
     }
 
     requestAnimationFrame(drawPreviewLoop);
+
 }

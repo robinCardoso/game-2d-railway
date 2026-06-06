@@ -9,6 +9,7 @@ import {
     mockSoftDeleteCharacter,
     mockUpdateLastPlayed,
     mockUpdateCharacterLocation,
+    mockUpdateCharacterProgress,
 } from './mockAuth';
 import type { CharacterRow } from './types';
 import type { Gender, VocationId } from '../../shared/types/character';
@@ -179,6 +180,25 @@ export async function updateCharacterLocation(
         const res = await apiFetch(`/api/characters/${encodeURIComponent(characterId)}/location`, {
             method: 'PATCH',
             body: JSON.stringify(location),
+        });
+        if (!res.ok) throw new Error(await parseApiError(res));
+        return;
+    }
+    throw new Error('Armazenamento de personagens não configurado.');
+}
+
+export async function updateCharacterProgress(
+    characterId: string,
+    progress: { level: number; experience: number }
+): Promise<void> {
+    if (isMockAuthEnabled()) {
+        mockUpdateCharacterProgress(characterId, progress);
+        return;
+    }
+    if (isApiAuthEnabled()) {
+        const res = await apiFetch(`/api/characters/${encodeURIComponent(characterId)}/progress`, {
+            method: 'PATCH',
+            body: JSON.stringify(progress),
         });
         if (!res.ok) throw new Error(await parseApiError(res));
         return;

@@ -24,6 +24,23 @@
       .panel-title { font-size: 11px; font-weight: bold; color: #6366f1; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
       .info-row { display: flex; justify-content: space-between; font-size: 13px; padding-bottom: 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); margin-bottom: 8px; color: #e2e8f0; }
       .info-label { color: #94a3b8; }
+      .xp-bar {
+        height: 8px;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+        overflow: hidden;
+        margin: 4px 0 10px;
+      }
+      #statExpBarFill {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #6366f1, #22d3ee);
+        transition: width 0.25s ease;
+      }
+      .stat-level-flash {
+        color: #fbbf24;
+        text-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
+      }
       .play-zoom-controls {
         position: absolute;
         right: 12px;
@@ -95,6 +112,8 @@
             <div id="statsContainer">
               <div class="info-row"><span class="info-label">Classe/Vocação:</span> <span id="statVocation">—</span></div>
               <div class="info-row"><span class="info-label">Nível (Level):</span> <span id="statLevel">1</span></div>
+              <div class="info-row"><span class="info-label">Experiência:</span> <span id="statExp">0 / 100 XP</span></div>
+              <div class="xp-bar" aria-hidden="true"><div id="statExpBarFill"></div></div>
               <div class="info-row"><span class="info-label">Melee:</span> <span id="statMelee">0</span></div>
               <div class="info-row"><span class="info-label">Ataque Distância:</span> <span id="statDistance">0</span></div>
               <div class="info-row"><span class="info-label">Ataque Mágico:</span> <span id="statMagic">0</span></div>

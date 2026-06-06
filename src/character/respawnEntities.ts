@@ -1,5 +1,7 @@
 import { ENGINE_CONFIG } from '../engine/config';
 import type { CreatureSpawn } from '../engine/types';
+import { getCreaturePreset } from '../editor/creaturePresets';
+import { resolveCreatureCombatStats } from '../game/creatureCombatStats';
 import { createCreatureConfigForSpawn } from './creatureConfigs';
 import { GameEntity } from './entity';
 
@@ -42,6 +44,10 @@ export function respawnEntitiesFromSpawns(options: RespawnEntitiesOptions): void
             spawn.type,
             tileSize
         );
+        if (spawn.type === 'monster') {
+            const preset = getCreaturePreset(spawn.name);
+            entity.initCombatStats(resolveCreatureCombatStats(preset));
+        }
         npcs.push(entity);
     });
 }

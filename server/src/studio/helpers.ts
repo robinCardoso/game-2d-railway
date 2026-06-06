@@ -48,17 +48,73 @@ export function sanitizeMapSaveFilename(filename: unknown): string | null {
     return withExt;
 }
 
+/** Chave de tile_properties / basename do PNG (sem extensão). */
+export function normalizeMapSpriteFileKey(raw: string): string {
+    return raw.trim().toLowerCase().replace(/\.png$/i, '');
+}
+
+/** Chave derivada do nome exibido ao criar sprite nova. */
+export function fileKeyFromDisplayName(name: string): string {
+    return String(name)
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_|_$/g, '');
+}
+
+/** Variantes com hífen/underscore para compatibilidade com entradas antigas. */
+export function alternateMapSpriteFileKeys(fileKey: string): string[] {
+    const norm = normalizeMapSpriteFileKey(fileKey);
+    const variants = new Set<string>([norm]);
+    if (norm.includes('-')) variants.add(norm.replace(/-/g, '_'));
+    if (norm.includes('_')) variants.add(norm.replace(/_/g, '-'));
+    variants.add(norm.replace(/[^a-z0-9]/g, '_'));
+    return [...variants];
+}
+
+export function lookupTileProperties(
+    properties: Record<string, Record<string, unknown>>,
+    fileKey: string
+): Record<string, unknown> {
+    for (const key of alternateMapSpriteFileKeys(fileKey)) {
+        const entry = properties[key];
+        if (entry && typeof entry === 'object') return entry;
+    }
+    return {};
+}
+
+export function resolveMapSpriteFileKey(options: {
+    explicitFileKey?: unknown;
+    displayName?: unknown;
+}): string | null {
+    if (typeof options.explicitFileKey === 'string') {
+        const key = normalizeMapSpriteFileKey(options.explicitFileKey);
+        if (/^[a-z0-9_-]+$/.test(key)) return key;
+    }
+    if (typeof options.displayName === 'string' && options.displayName.trim()) {
+        const key = fileKeyFromDisplayName(options.displayName);
+        if (/^[a-z0-9_-]+$/.test(key)) return key;
+    }
+    return null;
+}
+
 export function mergeMapSpriteCalibrationEntry(
     entry: Record<string, unknown>,
     properties: Record<string, unknown> | undefined
 ): void {
     if (!properties) return;
     const intFields = [
-        'frameWidth', 'frameHeight', 'offsetX', 'offsetY', 'gapX', 'gapY', 'gridCols', 'gridRows',
+        'frameWidth', 'frameHeight', 'offsetX', 'offsetY', 'gapX', 'gapY', 'gridCols', 'gridRows', 'anchorX', 'anchorY',
     ] as const;
     for (const key of intFields) {
         const v = properties[key];
-        if (typeof v === 'number' && Number.isFinite(v)) entry[key] = Math.floor(v);
+        if (v !== undefined && v !== null) {
+            const numVal = typeof v === 'number' ? v : parseFloat(String(v));
+            if (Number.isFinite(numVal)) {
+                entry[key] = Math.floor(numVal);
+            }
+        }
     }
     const layout = properties.sheetLayout;
     if (layout === 'horizontal' || layout === 'vertical') entry.sheetLayout = layout;

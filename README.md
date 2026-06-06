@@ -95,7 +95,9 @@ cp .env.example .env   # ou copie manualmente no Windows
 | [docs/sprite-exporter-walkthrough.md](docs/sprite-exporter-walkthrough.md) | Calibrador e APIs de sprites |
 | [docs/instanced-maps-and-multiplayer.md](docs/instanced-maps-and-multiplayer.md) | Protocolo WebSocket |
 | [docs/studio-improvements-log.md](docs/studio-improvements-log.md) | Log de melhorias do Studio |
+| [docs/playstore-steam-roadmap.md](docs/playstore-steam-roadmap.md) | Planejamento para Steam e Google Play Store |
 | [server/README.md](server/README.md) | Servidor Node unificado |
+
 | [AGENTS.md](AGENTS.md) | Guia para agentes IA |
 
 ---

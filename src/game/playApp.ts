@@ -36,6 +36,7 @@ import { NpcAI } from '../character/npcAI';
 import { GameEntity } from '../character/entity';
 import { respawnEntitiesFromSpawns } from '../character/respawnEntities';
 import { loadCreaturePresets } from '../editor/creaturePresets';
+import { loadItemCatalog } from '../game-data/itemCatalog';
 import { createDefaultCharacterSpeed, type CharacterSpeedState } from '../character/movementSpeed';
 import { SpeedBuffManager } from '../character/speedBuffs';
 import { resolveFullStepDuration } from '../character/characterMovement';
@@ -59,10 +60,12 @@ import { RemotePlayerSpriteManager } from '../net/remotePlayerSprites';
 import { appearanceFromCharacter } from '../world/playerAppearance';
 import { createEnterTicket } from '../shared/enterTicket';
 import type { CharacterRow } from '../shared/types';
-import { updateCharacterLocation } from '../shared/characterStore';
+import { updateCharacterLocation, updateCharacterProgress } from '../shared/characterStore';
 import { fetchWsTicket, isServerWsTicketEnabled } from '../shared/wsTicketClient';
 import { updateCharacterStatsUi } from './ui/characterStatsUi';
 import { getPlayBorderConfig, loadPlayBorderConfig } from './playBorderConfig';
+import { normalizeCharacterProgress } from './experience';
+import { resetPlayCombatInput, tickPlayCombat } from './playCombat';
 
 const TILE_SIZE_SCREEN = ENGINE_CONFIG.TILE_SIZE;
 let TILE_TYPES = buildTileRegistry();
@@ -205,6 +208,7 @@ function respawnEntities(): void {
 
 /** Recarrega presets (visualSize/drawScale) e respawna NPCs — útil após editar mob no Studio. */
 async function reloadCreaturePresetsForPlay(): Promise<void> {
+    await loadItemCatalog();
     await loadCreaturePresets();
     if (worldSpawns.length > 0) respawnEntities();
 }
@@ -311,6 +315,60 @@ let locationAutosaveIntervalId: number | null = null;
 
 function handleBeforeUnload(): void {
     void saveCurrentCharacterLocation();
+    void flushProgressSave();
+}
+
+function faceTowardEntity(target: GameEntity): void {
+    const dx = target.tileX - player.tileX;
+    const dy = target.tileY - player.tileY;
+    if (Math.abs(dx) > Math.abs(dy)) {
+        activeCharacterController.setDirection(dx > 0 ? 'right' : 'left');
+    } else {
+        activeCharacterController.setDirection(dy > 0 ? 'down' : 'up');
+    }
+}
+
+let pendingProgressSave: { level: number; experience: number } | null = null;
+let progressSaveTimerId: number | null = null;
+
+function scheduleProgressSave(immediate = false): void {
+    if (isServerWsTicketEnabled() || !activeCharacter) return;
+    pendingProgressSave = {
+        level: activeCharacter.level ?? 1,
+        experience: activeCharacter.experience ?? 0,
+    };
+    if (immediate) {
+        void flushProgressSave();
+        return;
+    }
+    if (progressSaveTimerId !== null) {
+        window.clearTimeout(progressSaveTimerId);
+    }
+    progressSaveTimerId = window.setTimeout(() => {
+        progressSaveTimerId = null;
+        void flushProgressSave();
+    }, 2000);
+}
+
+async function flushProgressSave(): Promise<void> {
+    if (!activeCharacter || !pendingProgressSave) return;
+    const snapshot = { ...pendingProgressSave };
+    pendingProgressSave = null;
+    try {
+        await updateCharacterProgress(activeCharacter.id, snapshot);
+        activeCharacter.level = snapshot.level;
+        activeCharacter.experience = snapshot.experience;
+        if (activeCharacter.outfitConfig) {
+            const config = activeCharacter.outfitConfig as CharacterSpriteConfig & {
+                level?: number;
+                experience?: number;
+            };
+            config.level = snapshot.level;
+            config.experience = snapshot.experience;
+        }
+    } catch (err) {
+        console.error('Failed to save character progress:', err);
+    }
 }
 
 function setupLocationAutosave(): void {
@@ -340,6 +398,7 @@ export async function stopLocationAutosave(): Promise<void> {
         }
     }
     await flushCharacterLocationSave();
+    await flushProgressSave();
 }
 
 
@@ -408,7 +467,7 @@ function isEntityAtTile(tx: number, ty: number, z: number, excludeId?: string): 
         return true;
     }
     for (const npc of npcs) {
-        if (npc.id !== excludeId && npc.tileX === tx && npc.tileY === ty && npc.worldZ === z) {
+        if (npc.id !== excludeId && !npc.isDead && npc.tileX === tx && npc.tileY === ty && npc.worldZ === z) {
             return true;
         }
     }
@@ -483,6 +542,34 @@ function update(): void {
         remoteSprites.tick(nowMs);
     }
     gameNet?.syncPositionIfChanged();
+
+    if (activeCharacter) {
+        tickPlayCombat({
+            nowMs,
+            keys,
+            stepping: gridMovement.stepping,
+            npcs,
+            player,
+            character: activeCharacter,
+            characterSpeed,
+            callbacks: {
+                faceToward: faceTowardEntity,
+                onDamage: (target, damage) => {
+                    target.speak(`-${damage}`, 900);
+                },
+                onMonsterKilled: (target, xpReward) => {
+                    target.speak(`+${xpReward} XP`, 1800);
+                },
+                onProgressUpdated: ({ leveledUp }) => {
+                    updateCharacterStatsUi(activeCharacter!, { flashLevel: leveledUp });
+                    if (leveledUp) {
+                        refreshPlayerMovementSpeed(nowMs);
+                    }
+                    scheduleProgressSave(leveledUp);
+                },
+            },
+        });
+    }
 }
 
 function getPlayBorderDrawContext() {
@@ -713,8 +800,12 @@ function loop(): void {
 
 function resize(): void {
     const container = document.getElementById('canvasContainer')!;
-    canvas.width = container.clientWidth;
-    canvas.height = container.clientHeight;
+    const w = Math.floor(container.clientWidth);
+    const h = Math.floor(container.clientHeight);
+    canvas.width = w;
+    canvas.height = h;
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
     ctx.imageSmoothingEnabled = false;
 }
 
@@ -780,6 +871,13 @@ function setupNetwork(char: CharacterRow, accountId: string): void {
 
 export async function startPlay(character: CharacterRow, accountId: string): Promise<void> {
     activeCharacter = character;
+    resetPlayCombatInput();
+
+    const progress = normalizeCharacterProgress(character.experience, character.level);
+    character.experience = progress.experience;
+    character.level = progress.level;
+    characterSpeed.level = progress.level;
+
     if (playCharNameEl) playCharNameEl.textContent = character.name;
     updateCharacterStatsUi(character);
 

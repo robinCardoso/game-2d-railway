@@ -24,6 +24,12 @@ import {
     setMapSpriteAfterSaveHandler,
 } from './editor/mapSpriteEditor';
 import { initAutoBorderUi, onMapEditorTileSelectionChanged, getActiveBorderSet } from './editor/autoBorderUi';
+import { initVocationEditor } from './editor/vocationEditorModal';
+import { initMobStatsEditor } from './editor/mobStatsEditorModal';
+import { initItemEditor } from './editor/itemEditorModal';
+import { CREATURE_PRESETS_UPDATED } from './game-data/creaturePresetUi';
+import { ITEM_CATALOG_UPDATED } from './game-data/itemCatalogUi';
+import { loadItemCatalog } from './game-data/itemCatalog';
 import {
     collectBorderDrawTileIdsCached,
     buildBorderMaskTileIndex,
@@ -659,6 +665,7 @@ function setupMovementDevControls(): void {
 }
 
 async function refreshCreatureCatalog(): Promise<void> {
+    await loadItemCatalog();
     await loadCreaturePresets();
     spawnEditorController?.refresh();
     respawnEntities();
@@ -668,6 +675,14 @@ document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
         void refreshCreatureCatalog();
     }
+});
+
+window.addEventListener(CREATURE_PRESETS_UPDATED, () => {
+    void refreshCreatureCatalog();
+});
+
+window.addEventListener(ITEM_CATALOG_UPDATED, () => {
+    void loadItemCatalog();
 });
 
 function parseSpriteProfile(value: string | undefined): SpriteProfileId {
@@ -691,6 +706,9 @@ setupMovementDevControls();
 updateRoleUI();
 initCharacterEditor({ onCatalogChanged: refreshCreatureCatalog });
 initMapSpriteEditor();
+initVocationEditor();
+initMobStatsEditor();
+initItemEditor();
 initAutoBorderUi({ onRecalcFloor: () => recalcAutoBorderForEditingFloor() });
 
 // --- SISTEMA PREMIUM DE TELETRANSPORTE (IR PARA POSIÇÃO) ---
@@ -1405,7 +1423,20 @@ portalEditorController = initPortalEditor({
 
 // Gerenciador de mapas (modal) — wiring após transitionToMap (ver final do arquivo)
 
-async function reloadTileRegistry(): Promise<void> {
+async function reloadTileRegistry(options?: { bustImageCache?: boolean }): Promise<void> {
+    try {
+        const response = await apiFetch('/api/list-tile-properties');
+        if (response.ok) {
+            const result = await response.json();
+            if (result.properties) {
+                mergeCustomTileProperties(result.properties);
+                mergeRuntimeTileProperties(result.properties);
+            }
+        }
+    } catch (err) {
+        console.warn('[Engine] Falha ao recarregar tile_properties após save:', err);
+    }
+
     const hadPaintedTiles = collectSparseTiles(worldMap, activeMapSize).length > 0;
     const mapSnapshot = hadPaintedTiles
         ? serializeMapDocument(worldMap, {
@@ -1423,7 +1454,7 @@ async function reloadTileRegistry(): Promise<void> {
           })
         : null;
 
-    TILE_TYPES = await buildTileRegistryAsync();
+    TILE_TYPES = await buildTileRegistryAsync({ bustImageCache: options?.bustImageCache ?? false });
     const manifest = await loadVariantGroupManifest();
     attachVariantBrushes(TILE_TYPES, undefined, manifest);
 
@@ -1474,7 +1505,7 @@ async function loadCustomTileProperties() {
 
 const tileRegistryReady: Promise<void> = loadCustomTileProperties();
 
-setMapSpriteAfterSaveHandler(() => reloadTileRegistry());
+setMapSpriteAfterSaveHandler(() => reloadTileRegistry({ bustImageCache: true }));
 
 setBorderSetAfterSaveHandler(async () => {
     if (!getActiveBorderSet()) return;
@@ -1495,7 +1526,7 @@ function paint(e: MouseEvent, options: { deferBorderRecalc?: boolean } = {}) {
     const ty = Math.floor(((e.clientY - rect.top) / zoom + camera.y) / TILE_SIZE_SCREEN);
     
     if (tx >= 0 && tx < activeMapSize && ty >= 0 && ty < activeMapSize) {
-        const currentTool = mapEditorController.currentTool;
+        const { currentTool, selectedTileType } = mapEditorController;
 
         if (activeMapEditorTab === 'zones') {
             const key = `${editingFloor}_${ty}_${tx}`;
@@ -1536,8 +1567,6 @@ function paint(e: MouseEvent, options: { deferBorderRecalc?: boolean } = {}) {
             }
             return;
         }
-
-        const selectedTileType = mapEditorController.selectedTileType;
 
         if (currentTool === 'eyedropper') {
             const picked = worldMap[editingFloor][ty][tx];
@@ -1669,7 +1698,7 @@ canvas.addEventListener('mousedown', e => {
     const tx = Math.floor(((e.clientX - rect.left) / zoom + camera.x) / TILE_SIZE_SCREEN);
     const ty = Math.floor(((e.clientY - rect.top) / zoom + camera.y) / TILE_SIZE_SCREEN);
     
-    const currentTool = mapEditorController.currentTool;
+    const { currentTool } = mapEditorController;
 
     if (currentTool === 'rectangle' || currentTool === 'line') {
         startX = tx;
@@ -1836,7 +1865,7 @@ function applyShape(type: string, x1: number, y1: number, x2: number, y2: number
     const minY = Math.max(0, Math.min(y1, y2));
     const maxY = Math.min(activeMapSize - 1, Math.max(y1, y2));
     
-    const selectedTileType = mapEditorController.selectedTileType;
+    const { selectedTileType } = mapEditorController;
 
     if (type === 'rectangle') {
         for (let y = minY; y <= maxY; y++) {
@@ -2945,8 +2974,12 @@ function loop(now: number = performance.now()): void {
 
 function resize() {
     const container = document.getElementById('canvasContainer')!;
-    canvas.width = container.clientWidth;
-    canvas.height = container.clientHeight;
+    const w = Math.floor(container.clientWidth);
+    const h = Math.floor(container.clientHeight);
+    canvas.width = w;
+    canvas.height = h;
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
     ctx.imageSmoothingEnabled = false;
     markStudioActivity();
 }

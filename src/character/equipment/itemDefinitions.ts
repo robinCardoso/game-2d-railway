@@ -1,51 +1,48 @@
 /**
- * Definições estáticas de itens (dados de design).
- * Inventário / loot / servidor podem referenciar os mesmos ids no futuro.
+ * Ponte para equipamento / loot — dados vêm de `item_catalog.json`.
  */
+import {
+    applyItemCatalogDocument,
+    getItemCatalogEntry,
+    getItemCatalogEntries,
+    itemExistsInCatalog,
+    loadItemCatalog,
+} from '../../game-data/itemCatalog';
+import type { EquipmentSlot, ItemCatalogEntry } from '../../game-data/itemCatalogTypes';
 
-export type EquipmentSlot =
-    | 'head'
-    | 'body'
-    | 'legs'
-    | 'feet'
-    | 'ring'
-    | 'amulet';
+export type { EquipmentSlot };
 
 export interface ItemDefinition {
     id: string;
     name: string;
     slot: EquipmentSlot;
-    /** Bônus aditivo ao stat SPEED quando equipado. */
     speedBonus?: number;
+    description?: string;
+    implemented: boolean;
 }
 
-export const ITEM_DEFINITIONS: Record<string, ItemDefinition> = {
-    leather_boots: {
-        id: 'leather_boots',
-        name: 'Botas de Couro',
-        slot: 'feet',
-        speedBonus: 0,
-    },
-    boots_of_haste: {
-        id: 'boots_of_haste',
-        name: 'Botas da Pressa',
-        slot: 'feet',
-        speedBonus: 25,
-    },
-    leather_legs: {
-        id: 'leather_legs',
-        name: 'Calças de Couro',
-        slot: 'legs',
-        speedBonus: 0,
-    },
-    speed_ring: {
-        id: 'speed_ring',
-        name: 'Anel da Agilidade',
-        slot: 'ring',
-        speedBonus: 8,
-    },
-};
+function toDefinition(entry: ItemCatalogEntry): ItemDefinition | null {
+    if (entry.category !== 'equipment' || !entry.slot) return null;
+    return {
+        id: entry.id,
+        name: entry.name,
+        slot: entry.slot,
+        speedBonus: entry.speedBonus,
+        description: entry.description,
+        implemented: entry.implemented,
+    };
+}
 
 export function getItemDefinition(itemId: string): ItemDefinition | undefined {
-    return ITEM_DEFINITIONS[itemId];
+    const entry = getItemCatalogEntry(itemId);
+    if (!entry) return undefined;
+    return toDefinition(entry) ?? undefined;
 }
+
+export {
+    applyItemCatalogDocument,
+    getItemCatalogEntry,
+    getItemCatalogEntries,
+    itemExistsInCatalog,
+    loadItemCatalog,
+};

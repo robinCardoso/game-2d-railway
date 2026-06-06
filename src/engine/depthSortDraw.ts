@@ -16,7 +16,7 @@ export const DEFAULT_ITEM_EDGE_FADE_PX = 28;
 export const ITEM_EDGE_FADE_MIN_ALPHA = 0.65;
 
 /** Fonte com contorno preto (estilo Tibia) — compartilhada por player, mobs e remotos. */
-export const ENTITY_NAME_FONT = "bold 11px 'Outfit', 'Courier New', monospace";
+export const ENTITY_NAME_FONT = "bold 11px Tahoma, Arial, sans-serif";
 
 export const ENTITY_NAME_COLORS = {
     creature: '#4ade80',
@@ -36,7 +36,7 @@ export function drawOutlinedEntityName(
     drawCtx.textAlign = 'center';
     drawCtx.textBaseline = 'bottom';
     drawCtx.strokeStyle = '#000000';
-    drawCtx.lineWidth = 2.5;
+    drawCtx.lineWidth = 2.0;
     drawCtx.lineJoin = 'round';
     drawCtx.strokeText(text, x, y);
     drawCtx.fillStyle = fillColor;
@@ -311,6 +311,7 @@ export function collectNpcDepthDrawables(
 
     for (const npc of npcs) {
         if (npc.worldZ !== z) continue;
+        if (npc.isDead) continue;
         if (!npc.animController.isLoaded || !npc.animController.image) continue;
 
         const rect = npc.animController.getSourceRect();

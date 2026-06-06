@@ -182,3 +182,39 @@ export async function updateCharacterLocation(
     );
     return rows[0] ?? null;
 }
+
+export async function updateCharacterProgress(
+    characterId: string,
+    accountId: string,
+    progress: { level: number; experience: number }
+): Promise<CharacterDbRow | null> {
+    const pool = getPool();
+    const existing = await getCharacterForAccount(characterId, accountId);
+    if (!existing) return null;
+
+    const safeLevel = Math.max(1, Math.floor(progress.level));
+    const safeExperience = Math.max(0, Math.floor(progress.experience));
+    const outfitConfig = {
+        ...(existing.outfit_config ?? {}),
+        level: safeLevel,
+        experience: safeExperience,
+    };
+
+    const { rows } = await pool.query<CharacterDbRow>(
+        `update characters set
+           level = $3,
+           experience = $4,
+           outfit_config = $5,
+           updated_at = now()
+         where id = $1 and account_id = $2 and deleted_at is null
+         returning ${SELECT_FIELDS}`,
+        [
+            characterId,
+            accountId,
+            safeLevel,
+            String(safeExperience),
+            JSON.stringify(outfitConfig),
+        ]
+    );
+    return rows[0] ?? null;
+}

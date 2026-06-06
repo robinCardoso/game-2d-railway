@@ -24,7 +24,7 @@ export function createDefaultEquipment(): EquipmentState {
         head: null,
         body: null,
         legs: null,
-        feet: 'leather_boots',
+        feet: null,
         ring: null,
         amulet: null,
     };

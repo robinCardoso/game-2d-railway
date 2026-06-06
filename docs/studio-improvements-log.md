@@ -2,7 +2,7 @@
 
 Documento de referência para humanos e agentes IA. **Atualizar este arquivo** quando mudar calibrador, registry, carregamento de mapas ou APIs de sprite.
 
-Última revisão: **2026-06-05**
+Última revisão: **2026-06-06**
 
 ---
 
@@ -52,6 +52,11 @@ Documento de referência para humanos e agentes IA. **Atualizar este arquivo** q
 | **Layout paleta spawns** | `.tile-option` altura 56px truncava nome/descrição | Cards `.spawn-preset-card` em coluna única; thumb + texto legível |
 | **Nome sobre entidades** | Player no Play usava fonte 8px sem contorno | `drawOutlinedEntityName` — bold 11px + stroke preto; player azul, mob verde, remoto rosa |
 | **visualSize mob** | `applyVisualSize` sobrescrevia `frameWidth` (recorte errado na sheet 64px) | Só `drawScale` = alvo ÷ frame nativo; `imageSmoothingEnabled` false em entidades |
+| **Roadmap de Expansão** | Sem documentação de requisitos para lojas de apps | [docs/playstore-steam-roadmap.md](./playstore-steam-roadmap.md) detalhando Tauri, Capacitor, D-Pad, WS reconect e checklist |
+| **Âncora de mapa na UI** | Falta de inputs para `anchorX` e `anchorY` no painel Criar Sprites | Adicionados inputs na UI; sync com calibrador, load e save no servidor |
+| **Definição de textos/canvas** | Textos entupidos pelo outline grosso e canvas com blur de subpixel | Fonte ajustada para Tahoma/Arial, contorno 2.0; resize() arredonda pixels e fixa estilo |
+
+
 
 ---
 
@@ -627,4 +632,154 @@ Sessão dedicada à resolução de problemas de usabilidade que causavam perda d
 - [ ] `npm run dev:web` — frontend sozinho (APIs indisponíveis, esperado)
 - [ ] `/health` retorna `phase: railway-d`
 - [ ] Nenhuma dependência `@supabase/supabase-js` no projeto
+
+---
+
+## 27. Planejamento de Lançamento: Steam e Play Store (2026-06-06)
+
+### 27.1 Roadmap de Expansão de Plataformas
+- **Arquivo:** [docs/playstore-steam-roadmap.md](./playstore-steam-roadmap.md)
+- **Mudança:** Criação de documentação detalhada para migração e empacotamento do jogo em ambientes nativos.
+- **Tópicos Abordados:**
+  1. **Steam:** Utilização de Tauri v2 + Rust (`steamworks-rs`) para build leve; autenticação automática por ticket de sessão; configurações nativas de tela.
+  2. **Play Store:** Empacotamento via Capacitor; mapeamento de D-Pad/joystick virtual para emulação de teclas no `playApp.ts`; UI/UX responsiva e scaling do canvas; ciclo de vida do app (salvar estado ao pausar e reconexão silenciosa de WS).
+  3. **Checklist:** Tarefas divididas por fases (Core, Desktop/Steam, Mobile/Play Store) para planejamento futuro.
+
+---
+
+## 28. Controle de Âncoras para Sprites de Mapa na UI (2026-06-06)
+
+### 28.1 Implementação de Inputs no Studio
+- **Arquivos:** `studio.html`, `src/editor/mapSpriteEditor.ts`
+- **Mudança:** Adicionados campos de entrada para `Ajuste Âncora X` e `Ajuste Âncora Y` no painel "Criar Sprites" (editor de blocos/itens).
+- **Integração:** Os valores de âncora agora são exibidos e editáveis diretamente no formulário, sincronizam-se ao carregar um sprite do servidor, são limpos ao criar um novo sprite e são atualizados automaticamente quando retornados pelo Modal do Calibrador Visual.
+- **Feedback Visual:** O canvas de preview do sprite de mapa agora renderiza a célula 32×32 tracejada em azul e a mira vermelha (+) de âncora nos pés, de forma idêntica ao painel de Personagens, facilitando ver o efeito dos valores de âncora inseridos em tempo real.
+
+---
+
+## 29. Correção de Definição Visual e Contraste de Textos (2026-06-06)
+
+### 29.1 Textos e Canvas sem Blur
+- **Arquivos:** `src/engine/depthSortDraw.ts`, `src/game/playApp.ts`, `src/main.ts`
+- **Problema:** Nomes das entidades pareciam desfocados e "entupidos" devido à espessura excessiva do contorno e ao tipo de fonte. Além disso, o canvas sofria leve desfoque se o container DOM esticasse em larguras/alturas fracionárias (subpixel render).
+- **Solução:**
+  1. **Nomes nítidos:** Modificada a fonte em `depthSortDraw.ts` de `'Outfit'` para `Tahoma, Arial, sans-serif` (excelente legibilidade em baixa resolução) e reduzido o contorno `lineWidth` de `2.5` para `2.0` (liberando espaço para a cor interna das letras).
+  2. **Canvas Pixel-Perfect:** Ajustada a função `resize()` para arredondar dimensões via `Math.floor` e definir explicitamente `canvas.style.width/height` em pixels inteiros, impedindo o navegador de aplicar filtro bilinear por subpixel.
+
+---
+
+## 30. Correção de Persistência de Âncoras e Configuração de Itens (2026-06-06)
+
+### 30.1 Persistência de anchorX / anchorY no Backend
+- **Arquivo:** `server/src/studio/helpers.ts`
+- **Problema:** Ao salvar ou exportar em lote uma sprite de mapa, a API `saveMapSprite` dependia de `mergeMapSpriteCalibrationEntry` para persistir dados de calibração em `tile_properties.json`. No entanto, os campos `anchorX` e `anchorY` estavam ausentes da lista de campos mesclados (`intFields`), fazendo com que o servidor os ignorasse completamente e as alterações fossem perdidas a cada salvamento.
+- **Solução:** Adicionados `anchorX` e `anchorY` ao array `intFields` em `mergeMapSpriteCalibrationEntry` e implementada conversão segura para inteiro (`parseFloat` + `Math.floor`) para garantir que os valores numéricos sejam gravados corretamente, mesmo se enviados como string.
+
+### 30.2 Edição de Propriedades Físicas para Itens e Decorações
+- **Arquivos:** `studio.html`, `src/editor/mapSpriteEditor.ts`
+- **Problema:** A seção "Propriedades do Terreno" ficava invisível ao selecionar o asset tipo `items` (Item / Decoração). Além disso, o editor de sprites ignorava o carregamento das propriedades físicas (`walkable`, `speedModifier`, `isStair`, etc.) no formulário quando o sprite selecionado pertencia ao tipo `items`, impossibilitando a criação de decorações sólidas/bloqueantes ou a calibração de suas velocidades/âncoras.
+- **Solução:**
+  1. Renomeado o bloco do painel para "Propriedades Físicas" e modificado o comportamento em `syncTerrainPropertiesVisibility` para mantê-lo visível tanto para `terrain` quanto para `items`.
+  2. Atualizada a lógica de carregamento no evento `change` do seletor de sprites para preencher os controles do formulário se o tipo for `terrain` ou `items`.
+  3. Atualizada a verificação na validação de persistência para processar o grupo de variações e salvar as propriedades corretas quando o tipo for `items`.
+
+---
+
+## 31. Editor Visual e Dinâmico de Vocações (2026-06-06)
+
+### 31.1 Gerenciamento Dinâmico de vocations.ts
+- **Arquivos:** `server/src/config/paths.ts`, `server/src/studio/studioService.ts`, `server/src/routes/studio/index.ts`
+- **Mudança:** Criada uma infraestrutura no backend para ler e gravar as vocações configuradas em um arquivo `vocations.json` (usado como base de dados estável) e gerar de forma automatizada o código TypeScript para `src/game-data/default/vocations.ts`. Isso permite que o editor da web salve as vocações sem necessidade de parser de AST no código TS, mantendo os imports estáticos do motor de jogo intactos.
+- **APIs adicionadas:**
+  - `GET /api/get-vocations`: Retorna as vocações configuradas (inicializa com Knight, Mage e Archer se o arquivo JSON não existir).
+  - `POST /api/save-vocations`: Recebe as configurações editadas, grava em `vocations.json` e regrava o arquivo `vocations.ts` para recompilação instantânea via Vite.
+
+### 31.2 Interface Visual e Integração com Criação de Personagens
+- **Arquivos:** `studio.html`, `src/editor/vocationEditorModal.ts`, `src/editor/spriteSheetEditor.ts`, `src/characters/create.ts`, `src/main.ts`
+- **Mudança:**
+  - **Menu e Atalhos:** Adicionado botão de atalho "Vocações (Stats)" no menu superior "Criar" e um botão de engrenagem (⚙️) ao lado do seletor de vocações no painel do personagem.
+  - **Modal de Edição:** Implementado o modal `#vocationEditorModal` com layout em duas colunas (lista de vocações à esquerda e campos de atributos base/crescimento à direita).
+  - **Simulação de Lvl 100:** Adicionado um painel de visualização que recalcula os atributos simulados para o Nível 100 em tempo real à medida que o usuário ajusta os campos de atributo base ou crescimento por nível, fornecendo feedback de balanceamento instantâneo.
+  - **Dropdowns Dinâmicos:** Removidas as opções estáticas em HTML nos dropdowns do Studio e no assistente de criação de novos personagens (`create.ts`), que agora preenchem os elementos dinamicamente a partir das vocações configuradas, possibilitando a criação imediata de novas classes e jogabilidade personalizada.
+
+### 31.2 Correções de alta prioridade (2026-06-06)
+- **Arquivos:** `src/game-data/vocationUi.ts`, `src/editor/vocationEditorModal.ts`, `src/editor/spriteSheetEditor.ts`, `src/characters/create.ts`, `shared/types/character.ts`, `studio.html`, `server/src/studio/studioService.ts`
+- **Mudança:**
+  1. **`VocationId` → `string`:** novas vocações deixam de depender de `as any` no TS gerado.
+  2. **Simulação Lvl 100:** usa `calculateStatsForLevel` (mesma fórmula do combate); exibe Dist., Mág., Atk Spd e Def Atk.
+  3. **Rename de ID:** ao salvar com ID diferente, remove a chave antiga do JSON (evita duplicatas).
+  4. **Dropdowns após save:** evento `game:vocations-updated` atualiza selects do Studio e da criação de personagem sem F5.
+  5. **Modal permanece aberto** após salvar/excluir para edição contínua.
+
+---
+
+## 32. Fluxo de XP e combate básico no Play (2026-06-06)
+
+### 32.1 Progressão de experiência
+- **Arquivos:** `src/game/experience.ts`, `src/engine/character/calculateStats.ts` (fórmulas existentes)
+- **Mudança:** `applyExperienceGain()` aplica XP acumulado e recalcula nível via `getLevelFromExp` (`floor(sqrt(exp/100))+1`). Barra de XP no painel Play usa `getExpProgress()`.
+
+### 32.2 Combate melee no Play (Espaço)
+- **Arquivos:** `src/game/playCombat.ts`, `src/game/playApp.ts`, `src/character/entity.ts`, `src/character/respawnEntities.ts`, `src/game/creatureCombatStats.ts`
+- **Mudança:** Espaço ataca monstro adjacente (Manhattan = 1); dano melee via `calculateMeleeDamage`; criatura morta concede XP; mortos não bloqueiam tile, não movem e não desenham.
+
+### 32.3 Stats de criaturas
+- **Arquivos:** `src/editor/creaturePresets.ts`, `public/creature_presets.json`
+- **Campos opcionais:** `xpReward`, `maxHealth`, `defense` (defaults por `visualSize`: tiny→boss).
+
+### 32.4 Persistência
+- **API:** `PATCH /api/characters/:id/progress` `{ level, experience }`
+- **Arquivos:** `server/src/db/repositories/characters.repo.ts`, `src/shared/characterStore.ts`, `src/shared/mockAuth.ts`
+- **Play:** autosave com debounce 2 s; save imediato em level-up; flush no `beforeunload`.
+
+### 32.5 UI Play
+- **Arquivos:** `play.html`, `src/game/ui/characterStatsUi.ts`
+- **Mudança:** linha Experiência + barra de progresso; flash dourado no nível ao subir; `characterSpeed.level` sincronizado (bônus de velocidade por nível).
+
+### Checklist manual
+- [ ] Matar monstro adjacente com Espaço concede XP e atualiza barra
+- [ ] Level-up recalcula stats no painel e velocidade de movimento
+- [ ] Recarregar personagem mantém level/exp (mock ou API)
+- [ ] Criatura morta some do mapa e libera o tile
+
+---
+
+## 33. Editor Mobs Stats (2026-06-06)
+
+### 33.1 Menu e modal
+- **Arquivos:** `studio.html`, `src/editor/mobStatsEditorModal.ts`, `src/main.ts`
+- **Menu:** Criar → **👾 Mobs Stats**
+- **Modal:** lista presets de `creature_presets.json`; edita combate por mob.
+
+### 33.2 Campos de combate
+- **Arquivo:** `src/game-data/mobPresetTypes.ts`
+- **Campos:** `maxHealth`, `defense`, `attack`, `attackSpeed`, `xpReward`, `race`
+- **Defaults:** por `visualSize` quando campo omitido no JSON
+- **Raças:** humanoid, beast, undead, demon, dragon, elemental, plant, construct, aquatic, other
+
+### 33.3 Loot (persistido; gameplay pendente)
+- **Campo:** `loot: [{ itemId, chance }]` — chance 0–100%
+- **Regra:** `itemId` **deve existir** em `public/item_catalog.json` (validado no Studio e no servidor)
+- Drop no Play **não** implementado ainda
+
+### 33.4 Catálogo de itens (2026-06-06)
+- **Arquivo:** `public/item_catalog.json`
+- **Menu:** Criar → **📦 Itens (Catálogo)**
+- **APIs:** `GET/POST /api/get-item-catalog`, `/api/save-item-catalog`
+- **Campos:** id, name, category (`loot` | `equipment`), slot, speedBonus, description, `implemented`
+- **Mob Stats:** loot só lista itens do catálogo; referências inválidas bloqueiam save com mensagem clara
+- **`itemDefinitions.ts`:** passa a ler do catálogo (não mais hardcoded)
+
+### 33.5 APIs Studio (mobs)
+- `GET /api/get-creature-presets`
+- `POST /api/save-creature-presets` `{ presets: [...] }`
+- `upsert-creature-preset` preserva stats ao salvar sprite via merge
+
+### Checklist manual
+- [ ] Menu Criar → Mobs Stats abre modal
+- [ ] Menu Criar → Itens (Catálogo) cria item e salva em `item_catalog.json`
+- [ ] Loot de mob só aceita itens cadastrados; IDs fantasmas são rejeitados
+- [ ] Editar Magao Bruto e salvar persiste em `public/creature_presets.json`
+- [ ] Play usa HP/defesa/XP/ataque do preset após reload
+- [ ] Loot salvo no JSON (drop in-game ainda N/A)
 

@@ -63,10 +63,20 @@ export function mergeRuntimeTileProperties(props: Record<string, TileProperties>
 }
 
 function getCustomProperties(fileName: string, baseName: string): TileProperties | undefined {
-    const fromRuntime = runtimeTileProperties?.[fileName] ?? runtimeTileProperties?.[baseName];
-    const fromFile =
-        (customTileProperties as Record<string, TileProperties>)[fileName]
-        ?? (customTileProperties as Record<string, TileProperties>)[baseName];
+    const tryKeys = (store: Record<string, TileProperties> | null | undefined): TileProperties | undefined => {
+        if (!store) return undefined;
+        const keys = [fileName, baseName];
+        const norm = normalizeTileFileName(fileName);
+        if (!keys.includes(norm)) keys.push(norm);
+        if (norm.includes('-')) keys.push(norm.replace(/-/g, '_'));
+        if (norm.includes('_')) keys.push(norm.replace(/_/g, '-'));
+        for (const key of keys) {
+            if (store[key]) return store[key];
+        }
+        return undefined;
+    };
+    const fromRuntime = tryKeys(runtimeTileProperties ?? undefined);
+    const fromFile = tryKeys(customTileProperties as Record<string, TileProperties>);
     return fromRuntime ? { ...fromFile, ...fromRuntime } : fromFile;
 }
 
@@ -213,6 +223,26 @@ function registerVariantStrip(
     }
 }
 
+function buildSingleTileSourceRect(
+    custom: TileProperties | undefined,
+    img: HTMLImageElement
+): { x: number; y: number; w: number; h: number } | undefined {
+    if (!custom) return undefined;
+    const ox = custom.offsetX ?? 0;
+    const oy = custom.offsetY ?? 0;
+    const fw = custom.frameWidth ?? 0;
+    const fh = custom.frameHeight ?? 0;
+    const imgW = img.naturalWidth || img.width || 0;
+    const imgH = img.naturalHeight || img.height || 0;
+    const hasExplicitFrame = fw > 0 && fh > 0;
+    const hasOffset = ox !== 0 || oy !== 0;
+    if (!hasExplicitFrame && !hasOffset) return undefined;
+    const w = hasExplicitFrame ? fw : imgW;
+    const h = hasExplicitFrame ? fh : imgH;
+    if (w <= 0 || h <= 0) return undefined;
+    return { x: ox, y: oy, w, h };
+}
+
 function registerSingleTile(
     registry: TileRegistry,
     ids: NextIdAllocator,
@@ -233,6 +263,8 @@ function registerSingleTile(
         id = ids.take();
     }
 
+    const sourceRect = buildSingleTileSourceRect(custom, img);
+
     registry[id] = {
         id,
         name:
@@ -243,17 +275,22 @@ function registerSingleTile(
         category,
         paletteCategory,
         fileKey: fileName,
+        ...(sourceRect ? { sourceRect } : {}),
         ...props,
         ...custom,
     };
 }
 
-function loadImageElement(url: string): Promise<HTMLImageElement> {
+function loadImageElement(url: string, bustCache = false): Promise<HTMLImageElement> {
     return new Promise((resolve) => {
         const img = new Image();
         img.onload = () => resolve(img);
         img.onerror = () => resolve(img);
-        img.src = url;
+        const src =
+            bustCache && !url.startsWith('data:')
+                ? `${url}${url.includes('?') ? '&' : '?'}v=${Date.now()}`
+                : url;
+        img.src = src;
     });
 }
 
@@ -356,8 +393,9 @@ function getTileImageGlob(): Record<string, string> {
 /**
  * Carrega PNGs aguardando dimensões — necessário para detectar variant strips.
  */
-export async function buildTileRegistryAsync(): Promise<TileRegistry> {
+export async function buildTileRegistryAsync(options?: { bustImageCache?: boolean }): Promise<TileRegistry> {
     variantStripMismatches.length = 0;
+    const bustCache = options?.bustImageCache ?? false;
     const registry = createEmptyRegistry();
     const ids = createNextIdAllocator(7);
     const tileImagesRaw = getTileImageGlob();
@@ -368,7 +406,7 @@ export async function buildTileRegistryAsync(): Promise<TileRegistry> {
     const imageByPath = new Map<string, HTMLImageElement>();
     await Promise.all(
         paths.map(async (path) => {
-            imageByPath.set(path, await loadImageElement(tileImagesRaw[path]));
+            imageByPath.set(path, await loadImageElement(tileImagesRaw[path], bustCache));
         })
     );
 

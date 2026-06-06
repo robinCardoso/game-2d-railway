@@ -12,6 +12,7 @@ import {
     markCharacterPlayed,
     softDeleteCharacter,
     updateCharacterLocation,
+    updateCharacterProgress,
 } from '../db/repositories/characters.repo.js';
 
 const MAX_CHARACTERS = 4;
@@ -34,6 +35,11 @@ const locationSchema = z.object({
         z: z.number().int(),
     }),
     direction: z.enum(['north', 'south', 'east', 'west']),
+});
+
+const progressSchema = z.object({
+    level: z.number().int().min(1),
+    experience: z.number().int().min(0),
 });
 
 export function createCharactersRouter(): Router {
@@ -178,6 +184,25 @@ export function createCharactersRouter(): Router {
                 positionZ: position.z,
                 direction,
             });
+            if (!row) {
+                res.status(404).json({ error: 'Personagem não encontrado.' });
+                return;
+            }
+            res.json({ character: characterToApi(row) });
+        } catch (err) {
+            next(err);
+        }
+    });
+
+    router.patch('/:id/progress', async (req, res, next) => {
+        try {
+            const authReq = req as AuthenticatedRequest;
+            const parsed = progressSchema.safeParse(req.body);
+            if (!parsed.success) {
+                res.status(400).json({ error: 'Progresso inválido.' });
+                return;
+            }
+            const row = await updateCharacterProgress(req.params.id, authReq.auth!.sub, parsed.data);
             if (!row) {
                 res.status(404).json({ error: 'Personagem não encontrado.' });
                 return;

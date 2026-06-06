@@ -937,8 +937,12 @@ export function openCharacterCalibrator(
             localOffsetY = parseInt(calOffsetYInput.value, 10) || 0;
             localGapX = parseInt(calGapXInput.value, 10) || 0;
             localGapY = parseInt(calGapYInput.value, 10) || 0;
-            localAnchorX = parseInt(calAnchorXInput.value, 10) || 0;
-            localAnchorY = parseInt(calAnchorYInput.value, 10) || 0;
+            localAnchorX = Number.isFinite(parseInt(calAnchorXInput.value, 10))
+                ? parseInt(calAnchorXInput.value, 10)
+                : 0;
+            localAnchorY = Number.isFinite(parseInt(calAnchorYInput.value, 10))
+                ? parseInt(calAnchorYInput.value, 10)
+                : 0;
             previewDivisionFromUI();
             renderCalibrator();
         });

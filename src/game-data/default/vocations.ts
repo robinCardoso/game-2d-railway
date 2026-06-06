@@ -1,4 +1,4 @@
-import { VocationId, CharacterStats } from '../../../shared/types/character';
+import type { CharacterStats } from '../../../shared/types/character';
 
 export interface VocationConfig {
   readonly name: string;
@@ -13,7 +13,7 @@ export interface VocationConfig {
   };
 }
 
-export const VOCATIONS: Record<VocationId, VocationConfig> = {
+export const VOCATIONS: Record<string, VocationConfig> = {
   knight: {
     name: 'Knight',
     baseStats: {
@@ -79,4 +79,4 @@ export const VOCATIONS: Record<VocationId, VocationConfig> = {
       mana: 15,
     },
   },
-} as const;
+};

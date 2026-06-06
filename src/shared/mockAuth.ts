@@ -363,3 +363,21 @@ export function mockUpdateCharacterLocation(
     }
     writeChars(chars);
 }
+
+export function mockUpdateCharacterProgress(
+    id: string,
+    progress: { level: number; experience: number }
+): void {
+    const chars = readChars();
+    const c = chars.find((x) => x.id === id);
+    if (!c) return;
+
+    c.level = Math.max(1, Math.floor(progress.level));
+    c.experience = Math.max(0, Math.floor(progress.experience));
+    if (c.outfitConfig) {
+        const config = c.outfitConfig as any;
+        config.level = c.level;
+        config.experience = c.experience;
+    }
+    writeChars(chars);
+}

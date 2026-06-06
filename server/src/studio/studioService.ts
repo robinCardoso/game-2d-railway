@@ -1,22 +1,29 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { sanitizeCreaturePresetEntry } from '../../../src/game-data/mobPresetTypes.js';
+import { sanitizeItemCatalogDocument, findUnknownLootItemIds } from '../../../src/game-data/itemCatalogTypes.js';
 import { paths } from '../config/paths.js';
 import {
     MAX_MAP_SAVE_BYTES,
+    alternateMapSpriteFileKeys,
     borderSetManifestToListEntry,
     collectBorderSetUsage,
     collectCharacterUsage,
     collectMapSpriteUsage,
     deleteBorderSetFromDisk,
+    fileKeyFromDisplayName,
     findMapSpritePngPath,
     getBorderSetManifestEntry,
     getGameConfig,
     getJsonFiles,
     getPngFiles,
     getSubdirectories,
+    lookupTileProperties,
     mapsTilesDir,
     mergeMapSpriteCalibrationEntry,
+    normalizeMapSpriteFileKey,
     readAutoBorderManifest,
+    resolveMapSpriteFileKey,
     resolveTilesRelative,
     sanitizeMapSaveFilename,
     sanitizeMapSpriteFilename,
@@ -59,8 +66,14 @@ export class StudioService {
         if (pngPath && fs.existsSync(pngPath)) fs.unlinkSync(pngPath);
         if (fs.existsSync(paths.tilePropertiesPath)) {
             const allProperties = JSON.parse(fs.readFileSync(paths.tilePropertiesPath, 'utf-8'));
-            if (allProperties[filename]) {
-                delete allProperties[filename];
+            let removed = false;
+            for (const key of alternateMapSpriteFileKeys(filename)) {
+                if (allProperties[key]) {
+                    delete allProperties[key];
+                    removed = true;
+                }
+            }
+            if (removed) {
                 fs.writeFileSync(paths.tilePropertiesPath, JSON.stringify(allProperties, null, 2));
             }
         }
@@ -186,7 +199,7 @@ export class StudioService {
             const filename = path.basename(filePath, '.png');
             const relativeToMaps = path.relative(mapsDir, filePath).replace(/\\/g, '/');
             const parts = relativeToMaps.split('/');
-            const props = properties[filename] || {};
+            const props = lookupTileProperties(properties, filename);
             const assetType = (props.assetType as string) || (parts[0] === 'items' ? 'items' : 'terrain');
             const category = parts.length > 1 ? parts.slice(0, -1).join('/') : '';
             return {
@@ -333,17 +346,26 @@ export class StudioService {
         const category = body.category;
         const spriteBase64 = body.spriteBase64;
         const properties = (body.properties ?? {}) as Record<string, unknown>;
-        const filename = String(name).toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const fileKey =
+            resolveMapSpriteFileKey({ explicitFileKey: body.fileKey, displayName: name }) ??
+            fileKeyFromDisplayName(String(name));
+        if (!fileKey) {
+            return { status: 400, body: { error: 'Nome ou fileKey do sprite inválido.' } };
+        }
+        const previousFileKey =
+            typeof body.previousFileKey === 'string'
+                ? normalizeMapSpriteFileKey(body.previousFileKey)
+                : '';
         const subPath = sanitizeMapSpriteSubPath(category);
         const targetDir = path.join(mapsTilesDir(), subPath);
         fs.mkdirSync(targetDir, { recursive: true });
         if (spriteBase64 && String(spriteBase64).startsWith('data:image/png;base64,')) {
             const imageBuffer = Buffer.from(String(spriteBase64).replace(/^data:image\/png;base64,/, ''), 'base64');
-            fs.writeFileSync(path.join(targetDir, `${filename}.png`), imageBuffer);
+            fs.writeFileSync(path.join(targetDir, `${fileKey}.png`), imageBuffer);
         } else if (spriteBase64 && typeof spriteBase64 === 'string' && spriteBase64.includes('/tiles/')) {
             const urlParts = spriteBase64.split('/tiles/');
             const sourcePath = resolveTilesRelative('tiles/' + urlParts[urlParts.length - 1]);
-            const imagePath = path.join(targetDir, `${filename}.png`);
+            const imagePath = path.join(targetDir, `${fileKey}.png`);
             if (fs.existsSync(sourcePath) && sourcePath !== imagePath) {
                 fs.copyFileSync(sourcePath, imagePath);
                 fs.unlinkSync(sourcePath);
@@ -352,6 +374,13 @@ export class StudioService {
         let allProperties: Record<string, unknown> = {};
         if (fs.existsSync(paths.tilePropertiesPath)) {
             allProperties = JSON.parse(fs.readFileSync(paths.tilePropertiesPath, 'utf-8'));
+        }
+        if (previousFileKey && previousFileKey !== fileKey) {
+            for (const staleKey of alternateMapSpriteFileKeys(previousFileKey)) {
+                if (allProperties[staleKey]) {
+                    delete allProperties[staleKey];
+                }
+            }
         }
         const entry: Record<string, unknown> = {
             walkable: properties.walkable ?? true,
@@ -368,9 +397,9 @@ export class StudioService {
             entry.variantStripFrames = Math.floor(Number(properties.variantStripFrames));
         }
         mergeMapSpriteCalibrationEntry(entry, properties);
-        allProperties[filename] = entry;
+        allProperties[fileKey] = entry;
         fs.writeFileSync(paths.tilePropertiesPath, JSON.stringify(allProperties, null, 2));
-        return { status: 200, body: { success: true, name } };
+        return { status: 200, body: { success: true, name, fileKey } };
     }
 
     saveMapSpritesBatch(body: Record<string, unknown>): ApiResult {
@@ -504,23 +533,22 @@ export class StudioService {
         if (typeof entry.configPath !== 'string' || !String(entry.configPath).trim()) {
             throw new Error('Campo configPath é obrigatório.');
         }
-        const validSizes = new Set(['tiny', 'small', 'medium', 'large', 'boss']);
         let presets: unknown[] = [];
         if (fs.existsSync(paths.creaturePresetsPath)) {
             const raw = JSON.parse(fs.readFileSync(paths.creaturePresetsPath, 'utf-8'));
             if (Array.isArray(raw)) presets = raw;
         }
-        const sanitized = {
-            name: String(entry.name).trim(),
-            type: entry.type,
-            configPath: String(entry.configPath).trim().replace(/^\//, ''),
-            description: typeof entry.description === 'string' ? entry.description : '',
-            color: typeof entry.color === 'string' ? entry.color : undefined,
-            visualSize: validSizes.has(entry.visualSize as string) ? entry.visualSize : undefined,
-        };
         const idx = presets.findIndex(
-            (p) => p && typeof p === 'object' && (p as { name?: string }).name === sanitized.name
+            (p) => p && typeof p === 'object' && (p as { name?: string }).name === String(entry.name).trim()
         );
+        const merged =
+            idx >= 0 && presets[idx] && typeof presets[idx] === 'object'
+                ? { ...(presets[idx] as Record<string, unknown>), ...entry }
+                : entry;
+        const sanitized = sanitizeCreaturePresetEntry(merged);
+        if (!sanitized) {
+            throw new Error('Entrada de creature preset inválida.');
+        }
         if (idx >= 0) presets[idx] = sanitized;
         else presets.push(sanitized);
         fs.writeFileSync(paths.creaturePresetsPath, JSON.stringify(presets, null, 2) + '\n');
@@ -552,6 +580,181 @@ export class StudioService {
         else presets.push(sanitized);
         fs.writeFileSync(paths.outfitPresetsPath, JSON.stringify(presets, null, 2) + '\n');
         return { status: 200, body: { success: true, preset: sanitized } };
+    }
+
+    getVocations(): ApiResult {
+        if (!fs.existsSync(paths.vocationsJsonPath)) {
+            const defaultVocations = {
+              "knight": {
+                "name": "Knight",
+                "baseStats": {
+                  "melee": 10,
+                  "magicAttack": 1,
+                  "distanceAttack": 2,
+                  "defense": 10,
+                  "attackSpeed": 900,
+                  "defenseAttack": 8,
+                  "health": 180,
+                  "mana": 30
+                },
+                "growthPerLevel": {
+                  "melee": 3,
+                  "magicAttack": 0.3,
+                  "distanceAttack": 0.5,
+                  "defense": 2,
+                  "health": 25,
+                  "mana": 5
+                }
+              },
+              "mage": {
+                "name": "Mage",
+                "baseStats": {
+                  "melee": 2,
+                  "magicAttack": 12,
+                  "distanceAttack": 1,
+                  "defense": 3,
+                  "attackSpeed": 1100,
+                  "defenseAttack": 2,
+                  "health": 90,
+                  "mana": 180
+                },
+                "growthPerLevel": {
+                  "melee": 0.3,
+                  "magicAttack": 4,
+                  "distanceAttack": 0.2,
+                  "defense": 0.8,
+                  "health": 10,
+                  "mana": 30
+                }
+              },
+              "archer": {
+                "name": "Archer",
+                "baseStats": {
+                  "melee": 4,
+                  "magicAttack": 3,
+                  "distanceAttack": 10,
+                  "defense": 5,
+                  "attackSpeed": 1000,
+                  "defenseAttack": 4,
+                  "health": 110,
+                  "mana": 90
+                },
+                "growthPerLevel": {
+                  "melee": 1,
+                  "magicAttack": 1.5,
+                  "distanceAttack": 3,
+                  "defense": 1.2,
+                  "health": 15,
+                  "mana": 15
+                }
+              }
+            };
+            fs.mkdirSync(path.dirname(paths.vocationsJsonPath), { recursive: true });
+            fs.writeFileSync(paths.vocationsJsonPath, JSON.stringify(defaultVocations, null, 2), 'utf-8');
+        }
+        const data = JSON.parse(fs.readFileSync(paths.vocationsJsonPath, 'utf-8'));
+        return { status: 200, body: { success: true, vocations: data } };
+    }
+
+    saveVocations(body: Record<string, unknown>): ApiResult {
+        const vocations = body.vocations as Record<string, unknown>;
+        if (!vocations || typeof vocations !== 'object') {
+            return { status: 400, body: { error: 'Campo vocations ausente ou inválido.' } };
+        }
+        
+        fs.mkdirSync(path.dirname(paths.vocationsJsonPath), { recursive: true });
+        fs.writeFileSync(paths.vocationsJsonPath, JSON.stringify(vocations, null, 2), 'utf-8');
+
+        const codeContent = `import { CharacterStats } from '../../../shared/types/character';
+
+export interface VocationConfig {
+  readonly name: string;
+  readonly baseStats: CharacterStats;
+  readonly growthPerLevel: {
+    readonly melee: number;
+    readonly magicAttack: number;
+    readonly distanceAttack: number;
+    readonly defense: number;
+    readonly health: number;
+    readonly mana: number;
+  };
+}
+
+export const VOCATIONS: Record<string, VocationConfig> = ${JSON.stringify(vocations, null, 2)};
+`;
+        fs.writeFileSync(paths.vocationsConfigPath, codeContent, 'utf-8');
+        return { status: 200, body: { success: true, vocations } };
+    }
+
+    getCreaturePresets(): ApiResult {
+        let presets: unknown[] = [];
+        if (fs.existsSync(paths.creaturePresetsPath)) {
+            try {
+                const raw = JSON.parse(fs.readFileSync(paths.creaturePresetsPath, 'utf-8'));
+                if (Array.isArray(raw)) presets = raw;
+            } catch {
+                presets = [];
+            }
+        }
+        const sanitized = presets
+            .map((row) => sanitizeCreaturePresetEntry(row))
+            .filter((row): row is NonNullable<typeof row> => row !== null);
+        return { status: 200, body: { presets: sanitized } };
+    }
+
+    saveCreaturePresets(body: Record<string, unknown>): ApiResult {
+        const rawPresets = body.presets;
+        if (!Array.isArray(rawPresets)) {
+            return { status: 400, body: { error: 'Campo presets ausente ou inválido.' } };
+        }
+        const sanitized = rawPresets
+            .map((row) => sanitizeCreaturePresetEntry(row))
+            .filter((row): row is NonNullable<typeof row> => row !== null);
+
+        let catalogRaw: unknown = { items: [] };
+        if (fs.existsSync(paths.itemCatalogPath)) {
+            try {
+                catalogRaw = JSON.parse(fs.readFileSync(paths.itemCatalogPath, 'utf-8'));
+            } catch {
+                catalogRaw = { items: [] };
+            }
+        }
+        const itemCatalog = sanitizeItemCatalogDocument(catalogRaw);
+        for (const preset of sanitized) {
+            const unknown = findUnknownLootItemIds(preset.loot, itemCatalog);
+            if (unknown.length > 0) {
+                return {
+                    status: 400,
+                    body: {
+                        error: `Loot inválido em "${preset.name}": item(ns) não cadastrado(s): ${unknown.join(', ')}.`,
+                    },
+                };
+            }
+        }
+
+        fs.mkdirSync(path.dirname(paths.creaturePresetsPath), { recursive: true });
+        fs.writeFileSync(paths.creaturePresetsPath, JSON.stringify(sanitized, null, 2) + '\n');
+        return { status: 200, body: { success: true, presets: sanitized } };
+    }
+
+    getItemCatalog(): ApiResult {
+        let raw: unknown = { items: [] };
+        if (fs.existsSync(paths.itemCatalogPath)) {
+            try {
+                raw = JSON.parse(fs.readFileSync(paths.itemCatalogPath, 'utf-8'));
+            } catch {
+                raw = { items: [] };
+            }
+        }
+        const catalog = sanitizeItemCatalogDocument(raw);
+        return { status: 200, body: { catalog } };
+    }
+
+    saveItemCatalog(body: Record<string, unknown>): ApiResult {
+        const catalog = sanitizeItemCatalogDocument(body.catalog ?? body);
+        fs.mkdirSync(path.dirname(paths.itemCatalogPath), { recursive: true });
+        fs.writeFileSync(paths.itemCatalogPath, JSON.stringify(catalog, null, 2) + '\n');
+        return { status: 200, body: { success: true, catalog } };
     }
 }
 

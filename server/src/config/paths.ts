@@ -38,8 +38,11 @@ export interface AppPaths {
     autoBorderSetsPath: string;
     creaturePresetsPath: string;
     outfitPresetsPath: string;
+    itemCatalogPath: string;
     tileVariantGroupsPath: string;
     gameConfigPath: string;
+    vocationsConfigPath: string;
+    vocationsJsonPath: string;
 }
 
 function copyDirRecursive(src: string, dest: string): void {
@@ -86,6 +89,7 @@ function seedDataRoot(dataRoot: string): void {
         'auto_border_sets.json',
         'creature_presets.json',
         'outfit_presets.json',
+        'item_catalog.json',
         'tile_variant_groups.json',
     ];
     for (const file of publicFiles) {
@@ -116,8 +120,11 @@ function buildPaths(): AppPaths {
             autoBorderSetsPath: path.join(env.dataRoot, 'auto_border_sets.json'),
             creaturePresetsPath: path.join(env.dataRoot, 'creature_presets.json'),
             outfitPresetsPath: path.join(env.dataRoot, 'outfit_presets.json'),
+            itemCatalogPath: path.join(env.dataRoot, 'item_catalog.json'),
             tileVariantGroupsPath: path.join(env.dataRoot, 'tile_variant_groups.json'),
             gameConfigPath: path.join(projectRoot, 'game_config.json'),
+            vocationsConfigPath: path.join(projectRoot, 'src/game-data/default/vocations.ts'),
+            vocationsJsonPath: path.join(projectRoot, 'src/game-data/default/vocations.json'),
         };
     }
 
@@ -135,8 +142,11 @@ function buildPaths(): AppPaths {
         autoBorderSetsPath: path.join(repoPublicDir, 'auto_border_sets.json'),
         creaturePresetsPath: path.join(repoPublicDir, 'creature_presets.json'),
         outfitPresetsPath: path.join(repoPublicDir, 'outfit_presets.json'),
+        itemCatalogPath: path.join(repoPublicDir, 'item_catalog.json'),
         tileVariantGroupsPath: path.join(repoPublicDir, 'tile_variant_groups.json'),
         gameConfigPath: path.join(projectRoot, 'game_config.json'),
+        vocationsConfigPath: path.join(projectRoot, 'src/game-data/default/vocations.ts'),
+        vocationsJsonPath: path.join(projectRoot, 'src/game-data/default/vocations.json'),
     };
 }
 

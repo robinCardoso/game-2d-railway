@@ -93,5 +93,14 @@ export function createStudioRouter(): Router {
 
     router.post('/upsert-outfit-preset', wrap((req) => studioService.upsertOutfitPreset(req.body ?? {})));
 
+    router.get('/get-vocations', wrap(() => studioService.getVocations()));
+    router.post('/save-vocations', wrap((req) => studioService.saveVocations(req.body ?? {})));
+
+    router.get('/get-creature-presets', wrap(() => studioService.getCreaturePresets()));
+    router.post('/save-creature-presets', wrap((req) => studioService.saveCreaturePresets(req.body ?? {})));
+
+    router.get('/get-item-catalog', wrap(() => studioService.getItemCatalog()));
+    router.post('/save-item-catalog', wrap((req) => studioService.saveItemCatalog(req.body ?? {})));
+
     return router;
 }

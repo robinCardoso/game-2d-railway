@@ -3,6 +3,12 @@ import type { SpriteAnimationController } from '../character/spriteAnimation';
 import type { CharacterState, Direction } from '../character/spriteAnimation';
 import { resolveAnimationSourceRect } from '../character/sheetFrameLayout';
 import { openCharacterCalibrator } from './characterCalibratorModal';
+import { VOCATIONS } from '../game-data/default/vocations';
+import {
+    fillVocationSelect,
+    VOCATIONS_UPDATED_EVENT,
+    type VocationsMap,
+} from '../game-data/vocationUi';
 import { apiFetch } from '../shared/apiFetch';
 import { toast, popup } from '../utils/popup';
 import { upscalePixelArtDataUrl } from '../utils/imageProcessor';
@@ -984,6 +990,20 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
         }
     });
 
+    function populateVocationDropdown(source: VocationsMap = VOCATIONS): void {
+        const playerVocationEl = document.getElementById('charPlayerVocation') as HTMLSelectElement | null;
+        if (!playerVocationEl) return;
+        fillVocationSelect(playerVocationEl, source);
+    }
+
+    window.addEventListener(VOCATIONS_UPDATED_EVENT, (event) => {
+        const detail = (event as CustomEvent<{ vocations: VocationsMap }>).detail;
+        if (detail?.vocations) {
+            populateVocationDropdown(detail.vocations);
+        }
+    });
+
+    populateVocationDropdown();
     applyProfileUi();
     return emptyHandle;
 }

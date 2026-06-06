@@ -155,7 +155,12 @@ export function calibrationHintsFromProperties(
     if (!properties) return undefined;
     const num = (key: string): number | undefined => {
         const v = properties[key];
-        return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+        if (typeof v === 'number' && Number.isFinite(v)) return v;
+        if (typeof v === 'string' && v.trim() !== '') {
+            const parsed = Number(v);
+            if (Number.isFinite(parsed)) return parsed;
+        }
+        return undefined;
     };
     const layout = properties.sheetLayout;
     return {
