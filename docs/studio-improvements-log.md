@@ -59,6 +59,8 @@ Documento de referência para humanos e agentes IA. **Atualizar este arquivo** q
 | **Árvores no chão (regressão)** | `target_ring.png` em `tiles/effects/` entrou no registry + double-remap corrompeu células com `ref` | Exclusão `effects/`/`characters/`; `resolvedSparseTileRefs`; padronização em `docs/asset-taxonomy.md` |
 | **Padronização tiles/mapas** | IDs numéricos instáveis; layers sem resolve unificado; save sem validação | `shouldRegisterTilePath` sync+async; layers usam `resolveTilesByFloor`; `validateMapDocument`; `npm test` |
 | **Banner level up no login** | `progress_sync` pós-WS com ticket dev sem XP fazia `leveledUp: true` (1→3) | `playSessionLevel` + `shouldCelebrateSessionLevelUp`; sync servidor silencioso; ticket dev com level/exp |
+| **Pulo / Stutter de Mobs** | Snap do mob a cada 1s e catch-up lento fazendo o mob "pular frame" | Evitar snap de mobs ativos em `applySync` e corrigir cálculo de duração do catch-up |
+
 
 
 
@@ -1028,3 +1030,16 @@ Sessão dedicada à resolução de problemas de usabilidade que causavam perda d
 - [ ] Andar 1 SQM após kill — corpo não “pula” para tile errado.
 - [ ] Perseguir mob andando — movimento contínuo tile a tile (sem saltos entre SQMs).
 - [ ] `npm test` — `serverCreatureSync.death.test.ts` passa.
+
+---
+
+## 44. Stutter e pulo de mobs no movimento (2026-06-06)
+
+### 44.1 Problema
+- **Reset do deslize a cada 1s:** O servidor envia um snapshot periódico de estado (`creature_sync`) a cada 1000ms. A função `applySync` do cliente invocava `upsertFromSnapshot` para todas as criaturas, o que deletava o deslize visual ativo e forçava um snap imediato para a posição autoritativa do servidor. Isso criava um efeito de pulo/salto visual a cada 1 segundo.
+- **Catch-up lento:** Em `catchUpTowardServerIfNeeded`, se o cliente estivesse atrasado em relação ao servidor (`stepLag > 1`), o código multiplicava a duração do passo de 1 SQM por `stepLag` (ex: 300ms * 3 = 900ms). Isso fazia com que o mob andasse a passos extremamente lentos quando lagado, acumulando ainda mais atraso e gerando o snap corretivo de desync (pulo repentino).
+
+### 44.2 Solução
+- **Evitar Snap de Mobs Ativos:** Alterada a lógica do `upsertFromSnapshot` para que criaturas já existentes e cujo desync em relação à posição do snapshot esteja dentro do limite aceitável (`MAX_CATCHUP_LAG_TILES`) continuem executando seus deslizes de interpolação em andamento, sem sofrer snap arbitrário.
+- **Acelerar Catch-up de Passos:** Corrigida a duração do passo em `catchUpTowardServerIfNeeded`. Sendo um passo cardinal de 1 SQM, a duração deve ser a velocidade normal do mob (`server.stepDurationMs`), podendo inclusive ser acelerada (dividida por 1.5) para restabelecer a paridade rapidamente em caso de lag.
+

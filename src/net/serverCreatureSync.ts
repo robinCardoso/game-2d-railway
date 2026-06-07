@@ -643,7 +643,7 @@ export class ServerCreatureSync {
         const fromY = entity.worldY;
         const toX = next.tileX * TILE_SIZE;
         const toY = next.tileY * TILE_SIZE;
-        const duration = server.stepDurationMs * Math.max(1, stepLag);
+        const duration = stepLag > 1 ? server.stepDurationMs / 1.5 : server.stepDurationMs;
 
         entity.tileX = next.tileX;
         entity.tileY = next.tileY;
@@ -673,6 +673,7 @@ export class ServerCreatureSync {
         nowMs: number
     ): void {
         let entity = this.entities.get(snap.creatureId);
+        const isNew = !entity;
         if (!entity) {
             this.createEntity(snap);
             entity = this.entities.get(snap.creatureId);
@@ -692,17 +693,34 @@ export class ServerCreatureSync {
         });
 
         entity.worldZ = snap.z;
-        entity.setDirection(mapDirection(snap.direction));
         this.applyCombatState(entity, snap, nowMs);
 
-        this.slides.delete(snap.creatureId);
-        snapEntityToTile(entity, snap.tileX, snap.tileY);
-        this.networkCommitted.set(snap.creatureId, {
-            tileX: snap.tileX,
-            tileY: snap.tileY,
-        });
-        if (!entity.isDead) {
-            entity.setState('idle');
+        if (isNew) {
+            entity.setDirection(mapDirection(snap.direction));
+            this.slides.delete(snap.creatureId);
+            snapEntityToTile(entity, snap.tileX, snap.tileY);
+            this.networkCommitted.set(snap.creatureId, {
+                tileX: snap.tileX,
+                tileY: snap.tileY,
+            });
+            if (!entity.isDead) {
+                entity.setState('idle');
+            }
+        } else {
+            const visual = visualTileOf(entity);
+            const lag = tileManhattanDelta(visual.tileX, visual.tileY, snap.tileX, snap.tileY);
+            if (lag > MAX_CATCHUP_LAG_TILES) {
+                this.slides.delete(snap.creatureId);
+                snapEntityToTile(entity, snap.tileX, snap.tileY);
+                this.networkCommitted.set(snap.creatureId, {
+                    tileX: snap.tileX,
+                    tileY: snap.tileY,
+                });
+                entity.setDirection(mapDirection(snap.direction));
+                if (!entity.isDead) {
+                    entity.setState('idle');
+                }
+            }
         }
     }
 
