@@ -225,4 +225,58 @@ describe('ServerCreatureSync death snap', () => {
         expect(arrived.worldX).toBe(6 * TILE);
         expect(arrived.animController.currentDirection).toBe('up');
     });
+
+    it('applySync nao causa snap em criatura ja existente e com slide ativo', () => {
+        const sync = new ServerCreatureSync();
+        const id = 'mob-active-slide';
+        const t0 = 6000;
+
+        sync.applySync([makeSnap({ creatureId: id, tileX: 5, tileY: 5 })], 'test-map');
+
+        sync.applyMoved(
+            { creatureId: id, tileX: 6, tileY: 5, z: 0, direction: 'east' },
+            300,
+            t0
+        );
+
+        sync.tick(t0 + 100);
+
+        const midSlide = sync.getEntities()[0];
+        expect(midSlide.worldX).toBeGreaterThan(5 * TILE);
+        expect(midSlide.worldX).toBeLessThan(6 * TILE);
+
+        sync.applySync([makeSnap({ creatureId: id, tileX: 6, tileY: 5 })], 'test-map');
+
+        const postSync = sync.getEntities()[0];
+        expect(postSync.worldX).toBeLessThan(6 * TILE);
+        expect(postSync.worldX).toBeGreaterThan(5 * TILE);
+        
+        sync.tick(t0 + 300);
+        expect(postSync.worldX).toBe(6 * TILE);
+    });
+
+    it('catchUpTowardServerIfNeeded usa velocidade normal ou acelerada sem multiplicar por stepLag', () => {
+        const sync = new ServerCreatureSync();
+        const id = 'mob-catchup';
+        const t0 = 8000;
+
+        sync.applySync([makeSnap({ creatureId: id, tileX: 5, tileY: 5 })], 'test-map');
+
+        sync.applyMoved(
+            { creatureId: id, tileX: 6, tileY: 5, z: 0, direction: 'east' },
+            300,
+            t0
+        );
+
+        sync.applySync([makeSnap({ creatureId: id, tileX: 8, tileY: 5 })], 'test-map');
+
+        sync.tick(t0 + 300);
+
+        const entity = sync.getEntities()[0];
+        expect(entity.tileX).toBe(7);
+
+        const activeSlide = (sync as any).slides.get(id);
+        expect(activeSlide.durationMs).toBeLessThanOrEqual(300);
+    });
 });
+
