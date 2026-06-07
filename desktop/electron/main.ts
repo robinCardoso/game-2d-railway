@@ -40,11 +40,11 @@ function createWindow(): void {
     });
 
     if (process.env['NODE_ENV'] === 'development') {
-        void mainWindow.loadURL('http://localhost:5173/play.html');
+        void mainWindow.loadURL('http://localhost:5173/index.html');
         mainWindow.webContents.openDevTools({ mode: 'detach' });
     } else {
         void mainWindow.loadFile(
-            path.join(__dirname, '..', '..', 'dist', 'play.html')
+            path.join(app.getAppPath(), 'dist', 'index.html')
         );
     }
 

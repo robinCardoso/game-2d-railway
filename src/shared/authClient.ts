@@ -1,4 +1,5 @@
 import type { AuthSession, UserProfile } from './types';
+import { resolveApiUrl } from './apiUrl';
 
 const TOKEN_KEY = 'game2d_auth_token';
 
@@ -48,7 +49,7 @@ async function parseError(res: Response): Promise<string> {
 }
 
 export async function apiRegister(email: string, password: string): Promise<LoginResponse> {
-    const res = await fetch('/api/auth/register', {
+    const res = await fetch(resolveApiUrl('/api/auth/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -60,7 +61,7 @@ export async function apiRegister(email: string, password: string): Promise<Logi
 }
 
 export async function apiLogin(email: string, password: string): Promise<LoginResponse> {
-    const res = await fetch('/api/auth/login', {
+    const res = await fetch(resolveApiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -75,7 +76,7 @@ export async function apiLogout(): Promise<void> {
     const token = getAuthToken();
     if (token) {
         try {
-            await fetch('/api/auth/logout', {
+            await fetch(resolveApiUrl('/api/auth/logout'), {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}` },
             });
@@ -89,7 +90,7 @@ export async function apiLogout(): Promise<void> {
 export async function apiFetchMe(): Promise<AuthUserResponse | null> {
     const token = getAuthToken();
     if (!token) return null;
-    const res = await fetch('/api/auth/me', {
+    const res = await fetch(resolveApiUrl('/api/auth/me'), {
         headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) {

@@ -135,7 +135,14 @@ let resyncController: ResyncController | null = null;
 let clientDiagnostics: ClientDiagnosticsController | null = null;
 
 
+import { getClientRuntimeConfig } from './runtime/runtimeEnv';
+
 function resolveGameServerUrl(): string | null {
+    const runtime = getClientRuntimeConfig();
+    if (runtime.wsBaseUrl) {
+        return runtime.wsBaseUrl;
+    }
+
     const env = import.meta.env.VITE_GAME_SERVER_WS;
     if (env === 'false' || env === '0') return null;
     if (env && env.length > 0) return env;

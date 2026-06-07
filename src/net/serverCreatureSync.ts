@@ -139,7 +139,6 @@ export class ServerCreatureSync {
     private readonly chaseActiveUntil = new Map<string, number>();
     private readonly networkCommitted = new Map<string, NetworkCommittedTile>();
     private readonly loading = new Set<string>();
-    private lastFrameMs = 0;
 
     isActive(): boolean {
         return this.entities.size > 0;
@@ -159,7 +158,7 @@ export class ServerCreatureSync {
             if (snap.creatureType !== 'monster') continue;
 
             activeIds.add(snap.creatureId);
-            this.upsertFromSnapshot(snap, nowMs, false);
+            this.upsertFromSnapshot(snap, nowMs);
         }
 
         for (const id of this.entities.keys()) {
@@ -458,7 +457,6 @@ export class ServerCreatureSync {
     }
 
     tick(nowMs: number): void {
-        this.lastFrameMs = nowMs;
 
         for (const [id, entity] of this.entities.entries()) {
             if (entity.isDead) {
@@ -520,11 +518,9 @@ export class ServerCreatureSync {
         this.chaseActiveUntil.clear();
         this.networkCommitted.clear();
         this.loading.clear();
-        this.lastFrameMs = 0;
     }
 
     resetFrameClock(): void {
-        this.lastFrameMs = 0;
     }
 
     snapAllToAuthoritativeTiles(): void {
@@ -629,8 +625,7 @@ export class ServerCreatureSync {
 
     private upsertFromSnapshot(
         snap: CreatureSnapshot,
-        nowMs: number,
-        animateMove: boolean
+        nowMs: number
     ): void {
         let entity = this.entities.get(snap.creatureId);
         if (!entity) {

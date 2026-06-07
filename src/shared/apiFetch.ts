@@ -1,5 +1,6 @@
 import { getAuthToken, isApiAuthEnabled } from './authClient';
 import { isMockAuthEnabled } from './mockAuth';
+import { resolveApiUrl } from './apiUrl';
 
 async function resolveAuthToken(): Promise<string | null> {
     if (isApiAuthEnabled()) {
@@ -23,5 +24,6 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
     if (token) {
         headers.set('Authorization', `Bearer ${token}`);
     }
-    return fetch(path, { ...options, headers });
+    
+    return fetch(resolveApiUrl(path), { ...options, headers });
 }

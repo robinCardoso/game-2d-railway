@@ -15,13 +15,14 @@
     "preview": "vite preview",
     "test": "vitest run",
     "electron:compile": "tsc -p desktop/electron/tsconfig.json",
-    "electron:dev": "node scripts/free-dev-ports.mjs && npm run electron:compile && concurrently -k -n api,web,electron -c green,blue,cyan \"npm run dev --prefix server\" \"node scripts/wait-api-then-vite.mjs\" \"wait-on http://localhost:5173/play.html && cross-env NODE_ENV=development electron .\"",
+    "electron:check": "npm run build && npm run electron:compile",
+    "electron:dev": "node scripts/free-dev-ports.mjs && npm run electron:compile && concurrently -k -n api,web,electron -c green,blue,cyan \"npm run dev --prefix server\" \"node scripts/wait-api-then-vite.mjs\" \"wait-on http://localhost:5173/index.html && cross-env NODE_ENV=development electron .\"",
     "electron:build": "npm run build && npm run electron:compile && electron-builder",
     "mobile:build": "npm run build && npx cap sync android",
     "mobile:open:android": "npx cap open android"
   },
   "devDependencies": {
-    "@capacitor/cli": "^7.6.6",
+    "@capacitor/cli": "^8.4.0",
     "@types/node": "^25.9.1",
     "concurrently": "^9.2.0",
     "cross-env": "^7.0.3",
