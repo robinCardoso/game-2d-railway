@@ -1043,3 +1043,13 @@ Sessão dedicada à resolução de problemas de usabilidade que causavam perda d
 - **Evitar Snap de Mobs Ativos:** Alterada a lógica do `upsertFromSnapshot` para que criaturas já existentes e cujo desync em relação à posição do snapshot esteja dentro do limite aceitável (`MAX_CATCHUP_LAG_TILES`) continuem executando seus deslizes de interpolação em andamento, sem sofrer snap arbitrário.
 - **Acelerar Catch-up de Passos:** Corrigida a duração do passo em `catchUpTowardServerIfNeeded`. Sendo um passo cardinal de 1 SQM, a duração deve ser a velocidade normal do mob (`server.stepDurationMs`), podendo inclusive ser acelerada (dividida por 1.5) para restabelecer a paridade rapidamente em caso de lag.
 
+---
+
+## 45. Ajuste de Profundidade de Desenho dos Corpos de Mobs (2026-06-07)
+
+### 45.1 Problema
+- Quando um monstro (MOB) morria e o corpo ficava no chão, se o jogador caminhasse por cima do corpo, o corpo do monstro era desenhado por cima do jogador visualmente, invertendo a ordem lógica de camadas (onde entidades vivas deveriam ficar acima de corpos planos no chão).
+
+### 45.2 Solução
+- **Ajuste de sortY:** Modificado o arquivo `src/engine/depthSortDraw.ts` na função `collectNpcDepthDrawables` para que, se a criatura estiver morta (`isDead`), o `sortY` seja calculado com base no SQM mais ao norte que o corpo ocupa visualmente (`topTileY`), considerando a altura do sprite (`drawH`) e a âncora vertical (`ay`). Isso garante que o player ou outras entidades vivas sejam desenhados por cima do corpo morto mesmo se caminharem sobre o SQM superior de corpos maiores (ex: 64x64 que cobrem 2 SQMs verticais).
+

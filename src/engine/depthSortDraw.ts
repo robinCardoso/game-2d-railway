@@ -405,13 +405,21 @@ export function collectNpcDepthDrawables(
 
         const rect = npc.getDrawSourceRect();
         const drawScale = npc.animController.config.drawScale ?? 1;
-        const { sortY, sortX } = getEntityFootSortKey(
+        let { sortY, sortX } = getEntityFootSortKey(
             npc.worldX,
             npc.worldY,
             rect,
             tileSize,
             drawScale
         );
+
+        if (isCorpse) {
+            const ay = rect.ay ?? 0;
+            const drawH = rect.sh * drawScale;
+            const topY = npc.worldY + tileSize - drawH + ay * drawScale;
+            const topTileY = Math.floor(topY / tileSize);
+            sortY = topTileY * tileSize + tileSize - 0.01;
+        }
 
         drawables.push({
             sortY,
