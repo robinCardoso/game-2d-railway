@@ -493,12 +493,9 @@ export class ServerCreatureSync {
                         slide!.fromY = slide!.toY;
                         slide!.toX = next.toX;
                         slide!.toY = next.toY;
-                        slide!.startedAtMs = slide!.startedAtMs + slide!.durationMs;
                         
-                        // Prevent extreme drift if we fell behind somehow
-                        if (nowMs - slide!.startedAtMs > next.durationMs * 2) {
-                            slide!.startedAtMs = nowMs;
-                        }
+                        // Always start the new animation from exactly 0% to prevent jumping/teleporting.
+                        slide!.startedAtMs = nowMs;
                         
                         slide!.durationMs = next.durationMs;
                         
