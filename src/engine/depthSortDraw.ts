@@ -74,6 +74,52 @@ export function drawEntityHealthBar(
     drawCtx.strokeRect(x + 0.5, y + 0.5, width - 1, height - 1);
 }
 
+/** HP (4px) + MP (3px, azul) para jogadores. */
+export function drawEntityHealthAndManaBar(
+    drawCtx: CanvasRenderingContext2D,
+    centerX: number,
+    bottomY: number,
+    hpCurrent: number,
+    hpMax: number,
+    mpCurrent: number,
+    mpMax: number,
+    width = 36,
+    height = 4
+): void {
+    if (hpMax <= 0) return;
+
+    const x = Math.round(centerX - width / 2);
+    const y = Math.round(bottomY - height);
+
+    // 1. HP
+    const hpRatio = Math.max(0, Math.min(1, hpCurrent / hpMax));
+    drawCtx.fillStyle = '#450a0a';
+    drawCtx.fillRect(x, y, width, height);
+    if (hpRatio > 0) {
+        drawCtx.fillStyle = hpRatio > 0.35 ? '#22c55e' : '#ef4444';
+        drawCtx.fillRect(x, y, Math.max(1, Math.round(width * hpRatio)), height);
+    }
+    drawCtx.strokeStyle = '#000000';
+    drawCtx.lineWidth = 1;
+    drawCtx.strokeRect(x + 0.5, y + 0.5, width - 1, height - 1);
+
+    // 2. MP (se houver mana máxima)
+    if (mpMax > 0) {
+        const manaHeight = 3;
+        const manaY = y + height + 1; // 1px abaixo da barra de HP
+        const mpRatio = Math.max(0, Math.min(1, mpCurrent / mpMax));
+        drawCtx.fillStyle = '#082f49';
+        drawCtx.fillRect(x, manaY, width, manaHeight);
+        if (mpRatio > 0) {
+            drawCtx.fillStyle = '#3b82f6';
+            drawCtx.fillRect(x, manaY, Math.max(1, Math.round(width * mpRatio)), manaHeight);
+        }
+        drawCtx.strokeStyle = '#000000';
+        drawCtx.lineWidth = 1;
+        drawCtx.strokeRect(x + 0.5, manaY + 0.5, width - 1, manaHeight - 1);
+    }
+}
+
 function nameTagPosition(placement: SpriteTilePlacement, offsetY = 8): { x: number; y: number } {
     return {
         x: placement.drawX + placement.drawW / 2,
@@ -115,6 +161,10 @@ export interface RemotePlayerDepthEntry {
     /** Posição interpolada em pixels (preferida para desenho e depth sort). */
     worldX?: number;
     worldY?: number;
+    health?: number;
+    maxHealth?: number;
+    mana?: number;
+    maxMana?: number;
 }
 
 export function footSortKeyFromPlacement(
@@ -509,6 +559,12 @@ export function collectRemoteDepthDrawables(
 
                     const { x, y } = nameTagPosition(placement);
                     drawOutlinedEntityName(drawCtx, remote.name, x, y, ENTITY_NAME_COLORS.remotePlayer);
+                    
+                    const rMaxHp = remote.maxHealth ?? 100;
+                    const rHp = remote.health ?? rMaxHp;
+                    const rMaxMp = remote.maxMana ?? 50;
+                    const rMp = remote.mana ?? rMaxMp;
+                    drawEntityHealthAndManaBar(drawCtx, x, y + 6, rHp, rMaxHp, rMp, rMaxMp);
                 },
             });
             continue;
@@ -533,12 +589,27 @@ export function collectRemoteDepthDrawables(
                 drawCtx.lineWidth = 2;
                 drawCtx.strokeRect(rx + 10, ry + 10, tileSize - 20, tileSize - 20);
 
+                const nameY = ry - 4;
                 drawOutlinedEntityName(
                     drawCtx,
                     remote.name,
                     rx + tileSize / 2,
-                    ry - 4,
+                    nameY,
                     ENTITY_NAME_COLORS.remotePlayer
+                );
+
+                const rMaxHp = remote.maxHealth ?? 100;
+                const rHp = remote.health ?? rMaxHp;
+                const rMaxMp = remote.maxMana ?? 50;
+                const rMp = remote.mana ?? rMaxMp;
+                drawEntityHealthAndManaBar(
+                    drawCtx,
+                    rx + tileSize / 2,
+                    nameY + 6,
+                    rHp,
+                    rMaxHp,
+                    rMp,
+                    rMaxMp
                 );
             },
         });
@@ -561,6 +632,10 @@ export interface LocalPlayerDepthOptions {
     zoom?: number;
     drawScale?: number;
     fallbackTile?: RegistryTile;
+    health?: number;
+    maxHealth?: number;
+    mana?: number;
+    maxMana?: number;
 }
 
 export function collectLocalPlayerDepthDrawable(
@@ -580,6 +655,10 @@ export function collectLocalPlayerDepthDrawable(
         zoom = 1,
         drawScale = 1,
         fallbackTile,
+        health,
+        maxHealth,
+        mana,
+        maxMana,
     } = options;
 
     if (worldZ !== z) return null;
@@ -617,6 +696,18 @@ export function collectLocalPlayerDepthDrawable(
 
                 const { x, y } = nameTagPosition(placement);
                 drawOutlinedEntityName(drawCtx, name, x, y, ENTITY_NAME_COLORS.localPlayer);
+
+                if (maxHealth && maxHealth > 0) {
+                    drawEntityHealthAndManaBar(
+                        drawCtx,
+                        x,
+                        y + 6,
+                        health ?? maxHealth,
+                        maxHealth,
+                        mana ?? maxMana ?? 0,
+                        maxMana ?? 0
+                    );
+                }
             },
         };
     } else if (fallbackTile?.image?.complete) {

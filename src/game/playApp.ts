@@ -72,7 +72,9 @@ import { getPlayBorderConfig, loadPlayBorderConfig } from './playBorderConfig';
 import { resetPlayCombatInput, tickPlayCombat, getPlayCombatHoverId, getPlayCombatTargetId, updatePlayCombatHover, handlePlayCombatTargetClick, clearPlayCombatTarget, type PlayCombatServerBridge } from './playCombat';
 import { ensureCombatTargetRingLoaded } from './combatTargetRing';
 import { tickOfflineMonsterDeathAndRespawn } from './creatureDeathLifecycle';
-import { loadRuntimeVocations } from '../game-data/vocationRegistry';
+import { loadRuntimeVocations, getVocationById } from '../game-data/vocationRegistry';
+import { calculateStatsForLevel } from '../engine/character/calculateStats';
+import type { VocationId } from '../../shared/types/character';
 import {
     isServerAuthoritativeCreatures,
     isServerAuthoritativePosition,
@@ -108,6 +110,10 @@ const player = {
     worldZ: 0,
     tileX: 50,
     tileY: 50,
+    health: 100,
+    maxHealth: 100,
+    mana: 50,
+    maxMana: 50,
 };
 const camera = { x: 0, y: 0, zoom: 1.0 };
 
@@ -559,6 +565,14 @@ function applyPlayProgressUpdate(level: number, experience: number): void {
     activeCharacter.level = level;
     characterSpeed.level = level;
     playSessionLevel = level;
+
+    const vocationId = (activeCharacter.vocation as VocationId) || 'knight';
+    const vocationConfig = getVocationById(vocationId);
+    const stats = calculateStatsForLevel(vocationConfig, level);
+    player.maxHealth = stats.health;
+    player.maxMana = stats.mana;
+    player.health = stats.health;
+    player.mana = stats.mana;
 
     updateCharacterStatsUi(activeCharacter, { flashLevel: leveledUp });
     if (leveledUp) {
@@ -1046,6 +1060,10 @@ function draw(): void {
             isLoaded: activeCharacterController.isLoaded,
             name: activeCharacter?.name || activeCharacterController.config.name || 'Jogador',
             zoom,
+            health: player.health,
+            maxHealth: player.maxHealth,
+            mana: player.mana,
+            maxMana: player.maxMana,
         });
         if (localDrawable) depthDrawables.push(localDrawable);
 
@@ -1315,6 +1333,14 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
 
     if (playCharNameEl) playCharNameEl.textContent = character.name;
     updateCharacterStatsUi(character);
+
+    const vocationId = (character.vocation as VocationId) || 'knight';
+    const vocationConfig = getVocationById(vocationId);
+    const stats = calculateStatsForLevel(vocationConfig, progress.level);
+    player.maxHealth = stats.health;
+    player.maxMana = stats.mana;
+    player.health = stats.health;
+    player.mana = stats.mana;
 
     const outfit = { ...character.outfitConfig } as CharacterSpriteConfig;
     // Sincroniza a configuração do sprite em tempo real a partir do JSON oficial
