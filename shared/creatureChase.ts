@@ -1,7 +1,7 @@
 /** Lógica pura de chase de monstros — compartilhada cliente/servidor. */
 
 export const MONSTER_AGGRO_RADIUS = 7;
-export const MONSTER_STEP_MS = 320;
+export const MONSTER_STEP_MS = 300;
 /** Pausa após spawn/respawn ou quando o jogador entra no mapa (estático estilo Tibia). */
 export const MONSTER_WAKE_DELAY_MS = 2000;
 /** Pausa após o jogador mudar de tile (think time). 0 = desligado — evita travar perseguição contínua. */
@@ -562,6 +562,13 @@ export function tickMonsterChaseStep(
 
     mob.tileX += step.dx;
     mob.tileY += step.dy;
-    mob.lastAggroMoveTime = nowMs;
+    
+    // Accumulate to prevent drift and stuttering, resync if fell too far behind
+    if (mob.lastAggroMoveTime === 0 || nowMs - mob.lastAggroMoveTime > MONSTER_STEP_MS * 2) {
+        mob.lastAggroMoveTime = nowMs;
+    } else {
+        mob.lastAggroMoveTime += MONSTER_STEP_MS;
+    }
+    
     return step;
 }
