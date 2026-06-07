@@ -29,12 +29,12 @@ type CreatureSlide = {
     startedAtMs: number;
     durationMs: number;
     active: boolean;
-    queued?: {
+    queued?: Array<{
         toX: number;
         toY: number;
         durationMs: number;
         direction?: CreatureSnapshot['direction'];
-    };
+    }>;
 };
 
 type ServerCreatureTile = {
@@ -385,12 +385,13 @@ export class ServerCreatureSync {
         const slideDuration = duration * Math.max(1, stepLag);
 
         if (retargeted) {
-            slide!.queued = {
+            if (!slide!.queued) slide!.queued = [];
+            slide!.queued.push({
                 toX: targetWorldX,
                 toY: targetWorldY,
                 durationMs: slideDuration,
                 direction: snap.direction
-            };
+            });
         } else {
             this.slides.set(snap.creatureId, {
                 fromX,
@@ -486,21 +487,27 @@ export class ServerCreatureSync {
                     entity.worldX = slide!.toX;
                     entity.worldY = slide!.toY;
                     
-                    if (slide!.queued) {
+                    if (slide!.queued && slide!.queued.length > 0) {
+                        const next = slide!.queued.shift()!;
                         slide!.fromX = slide!.toX;
                         slide!.fromY = slide!.toY;
-                        slide!.toX = slide!.queued.toX;
-                        slide!.toY = slide!.queued.toY;
+                        slide!.toX = next.toX;
+                        slide!.toY = next.toY;
                         slide!.startedAtMs = slide!.startedAtMs + slide!.durationMs;
                         
                         // Prevent extreme drift if we fell behind somehow
-                        if (nowMs - slide!.startedAtMs > slide!.queued.durationMs * 2) {
+                        if (nowMs - slide!.startedAtMs > next.durationMs * 2) {
                             slide!.startedAtMs = nowMs;
                         }
                         
-                        slide!.durationMs = slide!.queued.durationMs;
-                        const direction = slide!.queued.direction;
-                        slide!.queued = undefined;
+                        slide!.durationMs = next.durationMs;
+                        
+                        // Catch up gracefully if backed up
+                        if (slide!.queued.length > 0) {
+                            slide!.durationMs /= 1.5;
+                        }
+                        
+                        const direction = next.direction;
                         
                         faceFromWorldDeltaOrServer(
                             entity,
@@ -510,6 +517,14 @@ export class ServerCreatureSync {
                             slide!.toY,
                             direction
                         );
+                        
+                        // Evaluate the new slide immediately so it doesn't wait a frame
+                        const newElapsed = nowMs - slide!.startedAtMs;
+                        if (newElapsed > 0) {
+                            const newT = Math.min(1, newElapsed / slide!.durationMs);
+                            entity.worldX = slide!.fromX + (slide!.toX - slide!.fromX) * newT;
+                            entity.worldY = slide!.fromY + (slide!.toY - slide!.fromY) * newT;
+                        }
                     } else {
                         slide!.active = false;
                         entity.stepDestTileX = undefined;
