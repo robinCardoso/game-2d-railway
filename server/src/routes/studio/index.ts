@@ -21,6 +21,13 @@ function wrap(
 
 export function createStudioRouter(): Router {
     const router = Router();
+
+    // Rotas de leitura públicas (necessárias para o boot do game client)
+    router.get('/list-maps', wrap(() => studioService.listMaps()));
+    router.get('/list-auto-border-sets', wrap(() => studioService.listAutoBorderSets()));
+    router.get('/list-tile-properties', wrap(() => studioService.listTileProperties()));
+
+    // Rotas privadas (requer autenticação de GM)
     router.use(requireStudioGuard);
 
     router.get(
@@ -46,10 +53,8 @@ export function createStudioRouter(): Router {
         )
     );
 
-    router.get('/list-maps', wrap(() => studioService.listMaps()));
     router.get('/list-characters', wrap(() => studioService.listCharacters()));
     router.get('/list-map-sprites', wrap(() => studioService.listMapSprites()));
-    router.get('/list-auto-border-sets', wrap(() => studioService.listAutoBorderSets()));
 
     router.get(
         '/border-set-usage',
@@ -64,8 +69,6 @@ export function createStudioRouter(): Router {
     );
 
     router.post('/save-border-set', wrap((req) => studioService.saveBorderSet(req.body ?? {})));
-
-    router.get('/list-tile-properties', wrap(() => studioService.listTileProperties()));
 
     router.post('/save-map-sprite', wrap((req) => studioService.saveMapSprite(req.body ?? {})));
 
