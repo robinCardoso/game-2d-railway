@@ -122,7 +122,6 @@ export function initMapManagerUI(deps: MapManagerDeps): {
         const descInput = getEl<HTMLInputElement>('#mapEntryDescriptionInput');
         const instancedCheck = getEl<HTMLInputElement>('#mapEntryInstancedCheck');
         const pvpCheck = getEl<HTMLInputElement>('#mapEntryPvpEnabledCheck');
-        const fileInput = getEl<HTMLInputElement>('#mapEntryFileDisplay');
 
         const defaults = opts.entry ?? opts.defaults;
         const isEdit = opts.mode === 'edit';
