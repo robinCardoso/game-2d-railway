@@ -1,5 +1,8 @@
 import { BrowserWindow, app, ipcMain } from 'electron';
-import { autoUpdater } from 'electron-updater';
+import type { AppUpdater } from 'electron-updater';
+
+// electron-updater é CommonJS — require evita erro de named export no app empacotado
+const { autoUpdater } = require('electron-updater') as { autoUpdater: AppUpdater };
 
 let updateDownloaded = false;
 

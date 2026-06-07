@@ -102,6 +102,16 @@ export function initDesktopUpdaterToast() {
         }
 
         if (status.status === 'error') {
+            // Sem release no GitHub ainda — situação normal antes da 1ª publicação
+            const benign =
+                /no published versions/i.test(status.message) ||
+                /couldn't be found/i.test(status.message) ||
+                /404/i.test(status.message);
+            if (benign) {
+                hideToast();
+                return;
+            }
+
             showToast(`
                 <div class="update-toast-title" style="color: #ef4444;">Erro ao Atualizar</div>
                 <div class="update-toast-desc">${status.message}</div>

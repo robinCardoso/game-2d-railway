@@ -2,7 +2,7 @@
 
 MMORPG 2D no browser estilo Tibia — editor de mapas (Studio GM), engine Canvas 2D, dungeons instanciadas, combate com mobs autoritativos no servidor e multiplayer em tempo real via WebSocket.
 
-**Versão:** `0.1.0` · **Stack:** Vite + TypeScript + Canvas 2D · Express + WebSocket + PostgreSQL · Deploy [Railway](https://railway.app)
+**Versão:** `0.1.1` · **Stack:** Vite + TypeScript + Canvas 2D · Express + WebSocket + PostgreSQL · Deploy [Railway](https://railway.app)
 
 ---
 
@@ -37,7 +37,7 @@ MMORPG 2D no browser estilo Tibia — editor de mapas (Studio GM), engine Canvas
 | **Combate** | Ataque a mobs e PvP (servidor autoritativo), chase AI, dano/XP, anel de alvo, texto flutuante |
 | **Studio GM** | Pintura de mapas, auto-borda de grama, spawns, portais, zonas, sprites, outfits, presets |
 | **Persistência** | Mapas/sprites no volume Railway; posição de personagem no PostgreSQL via WS |
-| **Multiplataforma** | Cliente Electron (Windows) com auto-update, shell Capacitor (Android), resync ao voltar de background |
+| **Multiplataforma** | Cliente Electron (Windows), shell Capacitor (Android), resync ao voltar de background |
 | **Segurança WS** | Ticket HMAC no join, reconexão proativa (~13 min), rate limit de movimento/resync |
 
 ---
@@ -93,7 +93,7 @@ O comando `npm run dev` sobe **dois processos**:
 | `npm run preview` | Preview do build Vite |
 | `npm test` | Vitest — protocolo WS, tile refs, políticas de sync |
 | `npm run electron:dev` | Dev + janela Electron apontando para `:5173/play.html` |
-| `npm run electron:build` | Build + instalador NSIS (Windows) + publish GitHub Releases |
+| `npm run electron:build` | Build + instalador NSIS local (Windows); ver [auto-update](#auto-update-github-releases-planejado) para publicar no GitHub |
 | `npm run electron:compile` | Compila só `desktop/electron/` |
 | `npm run electron:check` | Build web + compile Electron (validação pré-release) |
 | `npm run mobile:build` | Build web + `cap sync android` |
@@ -369,13 +369,86 @@ Abra **duas abas** em `http://localhost:5173/play.html` com personagens diferent
 
 Cliente desktop com `backgroundThrottling: false` — timers e rede não pausam ao minimizar.
 
+#### Uso hoje (fase de planejamento)
+
+Nesta fase o objetivo é **gerar e instalar o `.exe` localmente**. Auto-update via GitHub **não está em uso** — o código já existe, mas **não é necessário criar Releases no GitHub** até vocês decidirem distribuir updates automáticos.
+
 ```bash
-npm run electron:dev      # requer npm run dev implícito (API + Vite)
-npm run electron:check    # valida build + compile TypeScript do main
-npm run electron:build    # gera instalador NSIS e publica no GitHub Releases
+npm run electron:dev      # dev: API + Vite + janela Electron
+npm run electron:check    # valida build web + compile do main process
+npm run electron:build    # gera instalador NSIS (somente local)
 ```
 
-Arquivos principais:
+**Saída do build:** pasta `release/` ou `release-build-<timestamp>/` (se `release/win-unpacked` estiver bloqueado). Instalador:
+
+```
+Game 2D Railway-0.1.1-Setup.exe
+```
+
+**Antes de distribuir o instalador**, defina no `.env.production` (ou no build):
+
+| Variável | Por quê |
+|----------|---------|
+| `VITE_API_BASE_URL` | URL fixa do backend Railway |
+| `VITE_WS_BASE_URL` | WebSocket fixo (`wss://...`) |
+
+Sem isso, o app instalado não encontra o servidor. URL Railway que muda quebra instaladores antigos — use domínio próprio quando for público.
+
+**Problemas comuns no build**
+
+| Sintoma | Solução |
+|---------|---------|
+| `EBUSY` em `app.asar` | Feche o jogo/Explorer em `release/`; o script `prepare-electron-release.mjs` tenta limpar e, se falhar, usa `release-build-<timestamp>/` |
+| Entrada órfã em “Apps instalados” | `scripts/cleanup-orphan-desktop-install.ps1` (PowerShell **como Administrador**) |
+| SmartScreen no Windows | Normal sem code signing na primeira instalação |
+
+---
+
+#### Auto-update (GitHub Releases) — planejado
+
+> **Status:** código implementado, **desligado na prática** — não há Releases publicadas em `robinCardoso/game-2d-railway`. O app pode checar updates em background (~8 s após abrir), mas **sem release no GitHub não há o que baixar** (erro benigno; o toast não exibe nesse caso).
+
+Quando quiserem ativar distribuição automática:
+
+**Pré-requisitos**
+
+1. Repositório GitHub: `robinCardoso/game-2d-railway` (já configurado em `package.json` → `build.publish`)
+2. Personal Access Token com escopo `repo` (obrigatório se o repo for privado)
+3. Versão incrementada em `package.json` (ex.: `0.1.2`)
+
+**Opção A — publicar pelo `electron-builder` (recomendado)**
+
+```powershell
+# PowerShell — uma vez por release
+$env:GH_TOKEN = "ghp_xxxxxxxx"   # PAT do GitHub
+
+npm run electron:build
+npx electron-builder --publish always
+```
+
+O builder envia para **GitHub → Releases**:
+
+| Arquivo | Função |
+|---------|--------|
+| `Game 2D Railway-X.Y.Z-Setup.exe` | Instalador NSIS |
+| `latest.yml` | Metadados que o `electron-updater` lê |
+| `*.blockmap` | Download delta (opcional) |
+
+**Opção B — upload manual no GitHub**
+
+1. `npm run electron:build` (sem `--publish`)
+2. GitHub → **Releases** → **Draft a new release**
+3. Tag: `v0.1.2` (alinhada à versão do `package.json`)
+4. Anexar da pasta de build: `.exe`, `latest.yml` e `.blockmap`
+
+**Comportamento no cliente (quando ativo)**
+
+- `electron-updater` consulta a Release mais recente
+- Download **só com confirmação** do jogador (`autoDownload = false`)
+- Restart **só quando o usuário aceita** — nunca automático em combate
+- Toast em landing, login, roster e play (`src/ui/desktopUpdateToast.ts`)
+
+**Arquivos do subsistema**
 
 | Arquivo | Função |
 |---------|--------|
@@ -383,29 +456,26 @@ Arquivos principais:
 | `desktop/electron/updater.ts` | `electron-updater` — check, download, install |
 | `desktop/electron/preload.ts` | `electronAPI` exposto ao renderer |
 | `src/ui/desktopUpdateToast.ts` | Toast de progresso e restart |
-| `src/ui/desktopVersionGate.ts` | Bloqueio de clientes abaixo da versão mínima |
-| `src/ui/initDesktopClient.ts` | Shell Electron (toast + gate) nas páginas |
+| `src/ui/desktopVersionGate.ts` | Bloqueio por versão mínima (opcional) |
+| `src/ui/initDesktopClient.ts` | Shell Electron nas páginas |
+| `scripts/prepare-electron-release.mjs` | Limpa `release/` antes do build |
+| `scripts/run-electron-builder.mjs` | Executa `electron-builder` (saída alternativa se bloqueado) |
 
-#### Auto-update (GitHub Releases)
+---
 
-- Updates via `electron-updater` + `electron-builder` (`publish` → `robinCardoso/game-2d-railway`)
-- **Nunca** reinicia automaticamente em combate: download só com confirmação do jogador
-- Toast aparece em landing, login, roster e play (~8 s após abrir o app)
-- Na página de jogo, o botão de restart fica oculto até o usuário sair do mundo
+#### Version gate no servidor (opcional)
 
-#### Version gate (servidor)
+Endpoint para **bloquear clientes Electron muito antigos** ao entrar no mundo. Também em planejamento — padrões permitem tudo (`0.1.0`).
 
-`GET /api/desktop/version?clientVersion=0.1.0&platform=electron` retorna se o cliente pode entrar no mundo.
+`GET /api/desktop/version?clientVersion=0.1.1&platform=electron`
 
 | Campo | Descrição |
 |-------|-----------|
 | `allowed` | `false` bloqueia entrada no roster/play |
-| `minVersion` | Versão mínima exigida (`DESKTOP_MIN_VERSION`) |
-| `latestVersion` | Versão mais recente publicada (`DESKTOP_LATEST_VERSION`) |
+| `minVersion` | `DESKTOP_MIN_VERSION` no Railway |
+| `latestVersion` | `DESKTOP_LATEST_VERSION` (informativo) |
 
-> **Importante:** defina **domínio próprio** (`VITE_API_BASE_URL`, `VITE_WS_BASE_URL`) antes de distribuir. URL Railway que muda quebra instaladores antigos.
-
-> **Publicar release:** exporte `GH_TOKEN` (PAT com escopo `repo`) antes de `npm run electron:build`. Sem code signing, o Windows SmartScreen avisa na primeira instalação.
+Só faz sentido apertar `DESKTOP_MIN_VERSION` **depois** de publicar a release correspondente no GitHub e avisar os jogadores.
 
 ### Capacitor (Android)
 
@@ -498,7 +568,7 @@ Configuração em [`railway.json`](railway.json):
 - [ ] `NODE_ENV=production`, `HOST=0.0.0.0`
 - [ ] **Não** usar `STUDIO_MOCK_GM=true` nem `ALLOW_CLIENT_PROGRESS_SYNC=true`
 - [ ] Conta GM com `can_access_studio = true` para acessar Studio
-- [ ] `DESKTOP_MIN_VERSION` alinhada à release Electron publicada (se usar version gate)
+- [ ] `DESKTOP_MIN_VERSION` — só se usar version gate **e** auto-update ativo no GitHub
 
 Guia passo a passo: **[docs/hosting.md](docs/hosting.md)**
 

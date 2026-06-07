@@ -11,10 +11,7 @@
 
 import { app, BrowserWindow, ipcMain, powerSaveBlocker } from 'electron';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { setupAutoUpdater } from './updater.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import { setupAutoUpdater } from './updater';
 
 let mainWindow: BrowserWindow | null = null;
 let powerSaveBlockerId: number | null = null;
@@ -49,7 +46,13 @@ function createWindow(): void {
         );
     }
 
-    setupAutoUpdater(mainWindow);
+    if (app.isPackaged) {
+        try {
+            setupAutoUpdater(mainWindow);
+        } catch (err) {
+            console.error('[updater] Falha ao iniciar auto-update:', err);
+        }
+    }
 
     // Envia eventos de janela para o renderer (recebidos pelo preload via IPC)
     mainWindow.on('blur', () => {

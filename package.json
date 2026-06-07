@@ -1,7 +1,7 @@
 {
   "name": "tibia-web-engine",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "main": "desktop/electron/dist/main.js",
   "scripts": {
@@ -14,10 +14,10 @@
     "start:railway": "npm run build && npm run start",
     "preview": "vite preview",
     "test": "vitest run",
-    "electron:compile": "tsc -p desktop/electron/tsconfig.json",
+    "electron:compile": "tsc -p desktop/electron/tsconfig.json && node scripts/write-electron-dist-package.mjs",
     "electron:check": "npm run build && npm run electron:compile",
     "electron:dev": "node scripts/free-dev-ports.mjs && npm run electron:compile && concurrently -k -n api,web,electron -c green,blue,cyan \"npm run dev --prefix server\" \"node scripts/wait-api-then-vite.mjs\" \"wait-on http://localhost:5173/index.html && cross-env NODE_ENV=development electron .\"",
-    "electron:build": "npm run build && npm run electron:compile && electron-builder",
+    "electron:build": "node scripts/prepare-electron-release.mjs && npm run build && npm run electron:compile && node scripts/run-electron-builder.mjs",
     "mobile:build": "npm run build && npx cap sync android",
     "mobile:open:android": "npx cap open android"
   },
@@ -48,7 +48,8 @@
     "files": [
       "dist/**/*",
       "desktop/electron/dist/**/*",
-      "package.json"
+      "package.json",
+      "!desktop/electron/dist/**/*.ts"
     ],
     "win": {
       "target": [

@@ -39,3 +39,6 @@ coverage/
 
 # Electron build output
 release/
+release-build-*/
+release/win-unpacked-stale-*/
+.electron-output-dir
