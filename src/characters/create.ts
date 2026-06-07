@@ -66,7 +66,7 @@ function applyChromaKey(imageData: ImageData, tolerance: number): void {
  * Converte tiles/characters/vocations/male/knight.png → tiles/characters/vocations/male/knight.json
  */
 async function loadCharacterConfig(spriteSheetUrl: string): Promise<CharacterConfig | null> {
-    const jsonUrl = '/' + spriteSheetUrl.replace(/\.png$/i, '.json');
+    const jsonUrl = spriteSheetUrl.replace(/\.png$/i, '.json');
     try {
         const response = await fetch(jsonUrl);
         if (!response.ok) return null;
@@ -101,7 +101,7 @@ async function startAnimatedPreview(outfit: OutfitPreset): Promise<void> {
         img.onerror = () => resolve(false);
     });
 
-    img.src = `/${outfit.spriteSheetUrl}`;
+    img.src = outfit.spriteSheetUrl;
     const loaded = await imageLoaded;
     if (!loaded || thisAnimId !== previewAnimId) return;
 
@@ -330,7 +330,7 @@ document.getElementById('confirmCreate')?.addEventListener('click', async () => 
             selectedSpriteSheetUrl
         );
         track('character_created', { preset: selectedOutfitId, gender: selectedGender });
-        location.href = '/characters.html';
+        location.href = 'characters.html';
     } catch (err) {
         errEl.textContent = err instanceof Error ? err.message : 'Erro ao criar personagem.';
         errEl.hidden = false;

@@ -209,7 +209,7 @@ export class RoomCreatureManager {
                 maxHealth: creature.maxHealth,
                 defense: creature.defense,
             },
-            'melee',
+            attackProfile.attackType,
             vocationConfig
         );
 

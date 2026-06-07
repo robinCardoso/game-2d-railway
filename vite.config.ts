@@ -61,6 +61,7 @@ function tilesDevPlugin(): Plugin {
 }
 
 export default defineConfig({
+    base: './',
     plugins: [tilesDevPlugin()],
     build: {
         target: 'es2022',

@@ -74,7 +74,7 @@ export async function signOut(): Promise<void> {
     }
 }
 
-export async function requireAuth(redirectTo = '/login.html'): Promise<AuthSession> {
+export async function requireAuth(redirectTo = 'login.html'): Promise<AuthSession> {
     const session = await getSession();
     if (!session) {
         const next = encodeURIComponent(location.pathname + location.search);
@@ -89,13 +89,13 @@ export async function requireStudioAccess(): Promise<UserProfile> {
     const profile = await getProfile();
     if (!profile?.canAccessStudio) {
         alert('Acesso ao GM Studio negado. Use conta gm@gm.dev ou habilite can_access_studio.');
-        location.href = '/characters.html';
+        location.href = 'characters.html';
         throw new Error('Sem acesso ao studio');
     }
     return profile;
 }
 
-export async function redirectIfAuthenticated(target = '/characters.html'): Promise<void> {
+export async function redirectIfAuthenticated(target = 'characters.html'): Promise<void> {
     const session = await getSession();
     if (session) {
         location.href = target;

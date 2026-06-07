@@ -1,128 +1,137 @@
-Pontos que eu validaria com cuidado agora
-1. Ataque em player depende de ID começar com p_
+o ataque hoje só funciona se tiver do lado do mob ou player, mais é o servidor que valida isso? se alguem mandar atacar pela pagina alterando código, atacando de longe, e mudando seu skill, o servidor bloqueia?
 
-No playCombat.ts, o cliente decide se o alvo é player usando:
+Vou verificar no código do servidor quem valida distância, alvo e dano, porque a resposta correta depende de onde o cálculo acontece: cliente pode sugerir ataque, mas servidor precisa ser autoritativo.
 
-if (combatTargetId.startsWith('p_')) {
-  ...
+Pensou por 28s
+
+Sim: hoje o servidor valida o ataque, então alterar o código da página para “atacar de longe” ou “mudar skill” não deveria funcionar, desde que você esteja rodando produção com ticket WS e sem aceitar sync de progresso do cliente.
+
+Pelo código atual, a mensagem de ataque do cliente só envia:
+
+{
+  type: 'attack',
+  creatureId: string,
+  mapId: string,
+  instanceId?: string
 }
 
-O problema é: isso depende do padrão do playerId.
+Ou seja: o cliente não envia dano, skill, level, melee, magic, distance, defense, health ou attack speed. O dano é calculado no servidor com a vocação e level que o servidor tem para aquele jogador.
 
-Se todo playerId do servidor sempre começa com p_, ok. Mas se em produção vier UUID, account id, character id ou outro formato, o cliente vai tratar player como monstro e o PvP não dispara corretamente.
+Ataque em mob
 
-Eu recomendo trocar isso por um estado explícito:
+Para mob, está bem protegido.
 
-combatTarget = {
-  id: string,
-  type: 'monster' | 'player'
+O servidor passa pelo RoomCreatureManager.processAttack() e valida:
+
+cooldown do ataque;
+se a sala existe;
+se a criatura existe;
+se é monstro;
+se não está morta;
+se o atacante está no mesmo z;
+se o atacante está dentro do alcance permitido por isPlayerInAttackRange;
+depois calcula o dano no servidor com processAttack() usando stats da vocação.
+
+Então, se alguém abrir o DevTools e mandar:
+
+ws.send(JSON.stringify({
+  type: 'attack',
+  v: 1,
+  creatureId: 'monster_123',
+  mapId: 'main'
+}))
+
+estando longe, o servidor deve rejeitar internamente com NOT_ADJACENT / ataque inválido e não aplicar dano.
+
+Ataque em player PvP
+
+Para player também existe validação no servidor.
+
+O servidor valida:
+
+atacante está conectado;
+atacante está no mesmo mapa/instância informado;
+alvo existe;
+alvo está no mesmo mapa/instância;
+mapa permite PvP;
+atacante não está em Protection Zone;
+alvo não está em Protection Zone;
+cooldown do ataque;
+distância: mesmo z, dx <= 1 e dy <= 1;
+dano calculado no servidor com vocação/level do atacante e defesa do alvo.
+
+Então, para PvP melee atual, se alguém tentar atacar de longe, cai aqui:
+
+if (dz !== 0 || dx > 1 || dy > 1) {
+  return;
 }
 
-Hoje findTargetAtWorldPoint() já retorna { id, type }, mas você perde o type quando salva só combatTargetId.
+Logo, não aplica dano.
 
-Esse é o principal ajuste que eu faria.
+Mudar skill pelo cliente
 
-2. Protocolo de ataque ainda chama o campo de creatureId
+Pelo fluxo de ataque atual, não funciona, porque o cliente não envia skill no ataque.
 
-O AttackMessage continua assim:
+O cálculo de dano chama calculateStatsForLevel(vocationConfig, attacker.level) dentro do servidor. Isso significa que o servidor pega os stats da vocação e level do player, não valores inventados pelo browser.
 
-creatureId: string
+Então alterar algo no JS do cliente tipo:
 
-Mas agora ele pode representar:
+player.melee = 999999
+player.magicAttack = 999999
 
-ID de monstro
-ou ID de player
+não deveria mudar o dano real, porque o servidor não usa esse objeto local para calcular dano.
 
-Funciona tecnicamente, mas semanticamente ficou estranho. Melhor seria:
+O ponto que precisa atenção: progress_sync
 
-targetId: string
-targetType: 'creature' | 'player'
+Aqui tem um cuidado importante.
 
-Não precisa mudar agora se quiser manter compatibilidade, mas para o futuro isso evita confusão.
+Existe proteção para progress_sync: em produção, ele não deve aceitar XP vindo do cliente. A regra diz: produção nunca aceita XP do cliente; em dev só aceita com opt-in explícito e sem ticket WS.
 
-3. resolveApiUrl() precisa cuidar de barra dupla
+Mas no GameRoom.ts, o servidor chama:
 
-O resolveApiUrl() atual concatena:
+shouldAcceptClientProgressSync({
+  isProduction: env.isProduction,
+  allowClientProgressSync: env.allowClientProgressSync,
+  requireWsTicket: this.requireWsTicket,
+})
 
-`${apiBaseUrl}${path}`
+Só que no env.ts atual que eu consultei, eu não vi allowClientProgressSync definido no objeto env.
 
-Se alguém configurar:
+Na prática, isso tende a virar undefined, que funciona como false, então bloqueia. Mas eu corrigiria mesmo assim, para ficar explícito e evitar confusão:
 
-VITE_API_BASE_URL=https://api.seujogo.com/
+allowClientProgressSync:
+  process.env.ALLOW_CLIENT_PROGRESS_SYNC === 'true',
 
-e chamar:
+No env.ts.
 
-/api/auth/login
+Resumo direto
 
-a URL vira:
+Hoje está assim:
 
-https://api.seujogo.com//api/auth/login
+Atacar mob de longe: servidor bloqueia.
+Atacar player de longe: servidor bloqueia.
+Alterar dano no cliente: não afeta, dano é servidor.
+Alterar skill no cliente: não afeta ataque, servidor recalcula por vocação/level.
+Alterar XP pelo cliente: política bloqueia em produção.
+Movimento teleport/speed hack: servidor valida passo, walkable e rate limit.
 
-Geralmente funciona, mas é melhor blindar:
+Mas eu faria mais um commit de segurança pequeno:
 
-const base = apiBaseUrl.replace(/\/$/, '');
-return `${base}${path}`;
+fix: make combat/progress authority explicit
 
-Não é crítico, mas é melhoria simples.
+Com estes ajustes:
 
-4. Recarregamento do registry do servidor
+// server/src/config/env.ts
+allowClientProgressSync:
+  process.env.ALLOW_CLIENT_PROGRESS_SYNC === 'true',
 
-Você criou refreshServerMapEntry(mapId) no server/src/mapRegistry.ts, que relê pvpEnabled e instanced do JSON salvo.
+E também adicionaria testes específicos:
 
-O que eu não consegui confirmar pelo patch/minified é se o endpoint de salvar mapa chama isso imediatamente após salvar. O app.ts mostra que o Studio router está registrado, mas não ficou claro no trecho aberto onde o refresh é chamado.
+1. não causa dano em mob fora do range
+2. não causa dano em player fora do range
+3. não causa dano em player em PZ
+4. não causa dano se mapa pvpEnabled=false
+5. não aceita progress_sync em production
+6. não aceita progress_sync quando REQUIRE_WS_TICKET=true
 
-Se ainda não estiver chamando, precisa garantir algo assim após saveMap:
-
-refreshServerMapEntry(mapId);
-
-Senão, o GM salva pvpEnabled=false, o JSON fica certo, mas o servidor só aplica depois de restart.
-
-5. Teste real de morte PvP com dois clientes
-
-No servidor, a morte PvP agora faz:
-
-broadcast player_damaged
-broadcast player_died
-calcula perda de XP se não for arena
-recalcula maxHealth
-move para spawn
-cura HP
-broadcast player_respawned
-position_correction para vítima
-persistência imediata
-
-Isso está muito bom.
-
-Mas precisa testar visualmente com 2 clientes:
-
-Jogador A mata Jogador B.
-B vê dano, morte e volta no templo.
-A vê B sumir/respawnar no templo.
-Terceiro jogador C vê a mesma coisa.
-B reloga e continua no spawn com HP cheio.
-
-Esse teste é obrigatório antes de dizer “PvP pronto”.
-
-Minha conclusão
-
-Essas melhorias foram fortes e bem direcionadas. Você resolveu problemas reais que eu tinha apontado antes: HP no welcome, sync de dano, respawn para observadores, pvpEnabled no JSON e leitura pelo servidor.
-
-O projeto agora saiu de:
-
-multiplayer com mobs + movimento
-
-para:
-
-base real de MMORPG 2D com PvP, HP persistente, mapa configurável e feedback visual
-
-Mas eu ainda não fecharia como produção pública. Eu faria mais um commit pequeno de robustez:
-
-fix: store combat target type explicitly and harden runtime api url
-
-Com 3 mudanças:
-
-1. combatTargetId -> combatTarget { id, type }
-2. AttackMessage futuro: targetId/targetType ou pelo menos abstrair internamente
-3. resolveApiUrl() remover barra final do VITE_API_BASE_URL
-
-Depois disso, eu faria teste manual com 2 ou 3 clientes conectados ao Railway
+Minha resposta final: sim, a validação principal está no servidor e está correta para bloquear ataque distante e skill fake. A única melhoria que eu faria é deixar allowClientProgressSync explícito no env.ts e cobrir isso com testes.

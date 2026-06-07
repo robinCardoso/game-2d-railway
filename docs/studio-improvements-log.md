@@ -1108,6 +1108,14 @@ Sessão dedicada à resolução de problemas de usabilidade que causavam perda d
 ### 48.3 Flags de mapa no JSON
 - `public/maps/*.json` passam a incluir `pvpEnabled` e `instanced` explicitos (rookgaard false/false, mainland true/false, orc_cave true/true, meu_mapa true/false).
 
+### 48.5 Alcance de ataque por vocação (shared/playerAttack.ts)
+- Distância em **Chebyshev** (`max(|dx|, |dy|)`): melee adjacente inclui **diagonal**.
+- **Knight** (default): melee, 1 SQM.
+- **Mage / Sorcerer**: magic, até 7 SQM.
+- **Archer / Paladin**: distance, até 7 SQM.
+- Servidor (`GameRoom`, `RoomCreatureManager`) e cliente (`playCombat`) usam o mesmo perfil; dano via `processAttack(attackType)` da vocação.
+- Testes: `shared/playerAttack.test.ts`, `pvp.test.ts` (diagonal, mage 7/8 SQM).
+
 ### 48.4 Checklist manual PvP (Railway — executar após deploy)
 - [ ] Jogador A mata B em mainland; B vê dano, morte e respawn no templo.
 - [ ] A e observador C veem B teleportar com HP cheio (`player_respawned`).

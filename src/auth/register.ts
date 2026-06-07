@@ -21,7 +21,7 @@ form.addEventListener('submit', async (e) => {
     try {
         await signUp(email, password);
         track('register_complete', { email: email.split('@')[1] });
-        location.href = '/characters.html';
+        location.href = 'characters.html';
     } catch (err) {
         errEl.textContent = err instanceof Error ? err.message : 'Falha no registro.';
         errEl.hidden = false;

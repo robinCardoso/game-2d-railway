@@ -36,6 +36,7 @@ import type { VocationId } from '../../shared/types/character.js';
 import { ZoneType } from '../../src/engine/zones.js';
 import { env } from './config/env.js';
 import { shouldAcceptClientProgressSync } from '../../shared/progressSyncPolicy.js';
+import { isPlayerInAttackRange, resolvePlayerAttackProfile } from '../../shared/playerAttack.js';
 
 /** Tolerância de jitter de rede no intervalo mínimo entre passos (0.85 = 15% mais rápido que o step). */
 const MOVE_RATE_LIMIT_TOLERANCE = 0.85;
@@ -939,12 +940,20 @@ export class GameRoom {
                 return;
             }
 
-            // 5. Adjacency
-            const dx = Math.abs(player.tileX - targetPlayer.tileX);
-            const dy = Math.abs(player.tileY - targetPlayer.tileY);
-            const dz = Math.abs(player.z - targetPlayer.z);
-            if (dz !== 0 || dx > 1 || dy > 1) {
-                return; // Enforce adjacency for standard melee PvP for now
+            // 5. Melee range (mesma regra que PvE: isPlayerInAttackRange)
+            const attackProfile = resolvePlayerAttackProfile(vocationId);
+            if (
+                !isPlayerInAttackRange(
+                    { tileX: player.tileX, tileY: player.tileY, z: player.z },
+                    {
+                        tileX: targetPlayer.tileX,
+                        tileY: targetPlayer.tileY,
+                        z: targetPlayer.z,
+                    },
+                    attackProfile
+                )
+            ) {
+                return;
             }
 
             // 6. Resolve combat stats and process damage
@@ -969,7 +978,7 @@ export class GameRoom {
                     maxHealth: targetPlayer.maxHealth,
                     defense: targetStats.defense || 5,
                 },
-                'melee',
+                attackProfile.attackType,
                 vocationConfig
             );
 

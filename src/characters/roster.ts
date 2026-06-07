@@ -90,7 +90,7 @@ async function drawCharacterPreview(canvas: HTMLCanvasElement, spriteSheetUrl: s
     if (!ctx) return;
 
     // 1. Carrega a config JSON
-    const jsonUrl = '/' + spriteSheetUrl.replace(/\.png$/i, '.json');
+    const jsonUrl = spriteSheetUrl.replace(/\.png$/i, '.json');
     let config: CharacterConfig | null = null;
     try {
         const res = await fetch(jsonUrl);
@@ -108,7 +108,7 @@ async function drawCharacterPreview(canvas: HTMLCanvasElement, spriteSheetUrl: s
         img.onload = () => resolve(true);
         img.onerror = () => resolve(false);
     });
-    img.src = '/' + spriteSheetUrl;
+    img.src = spriteSheetUrl;
     if (!(await loaded)) return;
 
     const frameWidth = config?.frameWidth ?? 32;
@@ -198,7 +198,7 @@ enterBtn.addEventListener('click', async () => {
         await markCharacterPlayed(selectedId, session.userId);
         sessionStorage.setItem('activeCharacterId', selectedId);
         track('first_world_enter', { characterId: selectedId });
-        location.href = `/play.html?characterId=${encodeURIComponent(selectedId)}`;
+        location.href = `play.html?characterId=${encodeURIComponent(selectedId)}`;
     } catch (err) {
         errEl.textContent = err instanceof Error ? err.message : 'Erro ao entrar.';
         errEl.hidden = false;
@@ -230,7 +230,7 @@ deleteBtn.addEventListener('click', async () => {
 
 document.getElementById('logoutBtn')?.addEventListener('click', async () => {
     await signOut();
-    location.href = '/login.html';
+    location.href = 'login.html';
 });
 
 void loadRoster();

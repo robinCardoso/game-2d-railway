@@ -275,6 +275,252 @@ describe('PvP Combat System Tests', () => {
         expect(errorMsg.code).toBe('TARGET_IN_PZ');
     });
 
+    it('should not damage player when attacker is out of melee range', () => {
+        const attackerSocket = createMockSocket();
+        const targetSocket = createMockSocket();
+
+        const attackerId = 'p_attacker';
+        const targetId = 'p_target';
+
+        room.handleMessage(attackerSocket, {
+            type: 'join',
+            v: PROTOCOL_VERSION,
+            name: 'Attacker',
+            playerId: attackerId,
+            mapId: 'mainland',
+            tileX: 10,
+            tileY: 10,
+            z: 0,
+        });
+
+        room.handleMessage(targetSocket, {
+            type: 'join',
+            v: PROTOCOL_VERSION,
+            name: 'Target',
+            playerId: targetId,
+            mapId: 'mainland',
+            tileX: 12,
+            tileY: 10,
+            z: 0,
+        });
+
+        const processAttackSpy = vi.spyOn(combatModule, 'processAttack');
+
+        room.handleMessage(attackerSocket, {
+            type: 'attack',
+            v: PROTOCOL_VERSION,
+            mapId: 'mainland',
+            creatureId: targetId,
+        });
+
+        expect(processAttackSpy).not.toHaveBeenCalled();
+
+        const targetObj = (room as any).players.get(targetId);
+        expect(targetObj.health).toBe(targetObj.maxHealth);
+
+        const targetSent = targetSocket.send.mock.calls.map((call: any) => JSON.parse(call[0]));
+        expect(targetSent.find((m: any) => m.type === 'player_damaged')).toBeUndefined();
+    });
+
+    it('should damage player on diagonal adjacency (melee knight)', () => {
+        const attackerSocket = createMockSocket();
+        const targetSocket = createMockSocket();
+
+        const attackerId = 'p_attacker';
+        const targetId = 'p_target';
+
+        room.handleMessage(attackerSocket, {
+            type: 'join',
+            v: PROTOCOL_VERSION,
+            name: 'Attacker',
+            playerId: attackerId,
+            mapId: 'mainland',
+            tileX: 10,
+            tileY: 10,
+            z: 0,
+            appearance: {
+                vocationId: 'knight',
+                outfitId: 'knight',
+                spriteSheetUrl: '/tiles/characters/knight.png',
+                gender: 'male',
+            },
+        });
+
+        room.handleMessage(targetSocket, {
+            type: 'join',
+            v: PROTOCOL_VERSION,
+            name: 'Target',
+            playerId: targetId,
+            mapId: 'mainland',
+            tileX: 11,
+            tileY: 11,
+            z: 0,
+        });
+
+        room.handleMessage(attackerSocket, {
+            type: 'attack',
+            v: PROTOCOL_VERSION,
+            mapId: 'mainland',
+            creatureId: targetId,
+        });
+
+        const targetSent = targetSocket.send.mock.calls.map((call: any) => JSON.parse(call[0]));
+        expect(targetSent.find((m: any) => m.type === 'player_damaged')).toBeDefined();
+    });
+
+    it('should damage player at 7 SQM when attacker is mage', () => {
+        const attackerSocket = createMockSocket();
+        const targetSocket = createMockSocket();
+
+        const attackerId = 'p_mage';
+        const targetId = 'p_target';
+
+        room.handleMessage(attackerSocket, {
+            type: 'join',
+            v: PROTOCOL_VERSION,
+            name: 'Mage',
+            playerId: attackerId,
+            mapId: 'mainland',
+            tileX: 10,
+            tileY: 10,
+            z: 0,
+            appearance: {
+                vocationId: 'mage',
+                outfitId: 'mage',
+                spriteSheetUrl: '/tiles/characters/mage.png',
+                gender: 'male',
+            },
+        });
+
+        room.handleMessage(targetSocket, {
+            type: 'join',
+            v: PROTOCOL_VERSION,
+            name: 'Target',
+            playerId: targetId,
+            mapId: 'mainland',
+            tileX: 17,
+            tileY: 10,
+            z: 0,
+        });
+
+        const processAttackSpy = vi.spyOn(combatModule, 'processAttack');
+
+        room.handleMessage(attackerSocket, {
+            type: 'attack',
+            v: PROTOCOL_VERSION,
+            mapId: 'mainland',
+            creatureId: targetId,
+        });
+
+        expect(processAttackSpy).toHaveBeenCalled();
+        expect(processAttackSpy.mock.calls[0]?.[2]).toBe('magic');
+
+        const targetSent = targetSocket.send.mock.calls.map((call: any) => JSON.parse(call[0]));
+        expect(targetSent.find((m: any) => m.type === 'player_damaged')).toBeDefined();
+    });
+
+    it('should not damage player beyond 7 SQM when attacker is mage', () => {
+        const attackerSocket = createMockSocket();
+        const targetSocket = createMockSocket();
+
+        const attackerId = 'p_mage';
+        const targetId = 'p_target';
+
+        room.handleMessage(attackerSocket, {
+            type: 'join',
+            v: PROTOCOL_VERSION,
+            name: 'Mage',
+            playerId: attackerId,
+            mapId: 'mainland',
+            tileX: 10,
+            tileY: 10,
+            z: 0,
+            appearance: {
+                vocationId: 'mage',
+                outfitId: 'mage',
+                spriteSheetUrl: '/tiles/characters/mage.png',
+                gender: 'male',
+            },
+        });
+
+        room.handleMessage(targetSocket, {
+            type: 'join',
+            v: PROTOCOL_VERSION,
+            name: 'Target',
+            playerId: targetId,
+            mapId: 'mainland',
+            tileX: 18,
+            tileY: 10,
+            z: 0,
+        });
+
+        const processAttackSpy = vi.spyOn(combatModule, 'processAttack');
+
+        room.handleMessage(attackerSocket, {
+            type: 'attack',
+            v: PROTOCOL_VERSION,
+            mapId: 'mainland',
+            creatureId: targetId,
+        });
+
+        expect(processAttackSpy).not.toHaveBeenCalled();
+
+        const targetSent = targetSocket.send.mock.calls.map((call: any) => JSON.parse(call[0]));
+        expect(targetSent.find((m: any) => m.type === 'player_damaged')).toBeUndefined();
+    });
+
+    it('should not damage monster when attacker is out of melee range', () => {
+        const attackerSocket = createMockSocket();
+        const attackerId = 'p_attacker';
+        const mobId = 'mob_rat_1';
+
+        vi.spyOn(collision, 'getSpawns').mockReturnValue([
+            {
+                id: mobId,
+                name: 'Rat',
+                x: 10,
+                y: 15,
+                z: 0,
+                type: 'monster',
+            },
+        ]);
+
+        vi.spyOn(creaturePresets, 'getStats').mockReturnValue({
+            maxHealth: 30,
+            defense: 4,
+            attack: 10,
+            attackSpeed: 1800,
+            xpReward: 25,
+            race: 'beast',
+            loot: [],
+        });
+
+        room.handleMessage(attackerSocket, {
+            type: 'join',
+            v: PROTOCOL_VERSION,
+            name: 'Attacker',
+            playerId: attackerId,
+            mapId: 'mainland',
+            tileX: 10,
+            tileY: 10,
+            z: 0,
+        });
+
+        const processAttackSpy = vi.spyOn(combatModule, 'processAttack');
+
+        room.handleMessage(attackerSocket, {
+            type: 'attack',
+            v: PROTOCOL_VERSION,
+            mapId: 'mainland',
+            creatureId: mobId,
+        });
+
+        expect(processAttackSpy).not.toHaveBeenCalled();
+
+        const attackerSent = attackerSocket.send.mock.calls.map((call: any) => JSON.parse(call[0]));
+        expect(attackerSent.find((m: any) => m.type === 'creature_damaged')).toBeUndefined();
+    });
+
     it('should initialize player health from ticket if valid', () => {
         const socket = createMockSocket();
         const playerId = 'p_test_health';

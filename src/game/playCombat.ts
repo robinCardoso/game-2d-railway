@@ -344,9 +344,17 @@ export function tickPlayCombat(options: {
 
         if (options.nowMs < attackCooldownUntil || options.stepping) return;
 
-        const dx = Math.abs(options.player.tileX - target.tileX);
-        const dy = Math.abs(options.player.tileY - target.tileY);
-        if (dx > 1 || dy > 1) return;
+        const vocationId = (options.character.vocation as VocationId) || 'knight';
+        const attackProfile = resolvePlayerAttackProfile(vocationId);
+        if (
+            !isPlayerInAttackRange(
+                { tileX: options.player.tileX, tileY: options.player.tileY, z: options.player.worldZ },
+                { tileX: target.tileX, tileY: target.tileY, z: target.z },
+                attackProfile
+            )
+        ) {
+            return;
+        }
 
         const cooldownMs = getPlayerAttackCooldownMs(options.character, options.characterSpeed);
         attackCooldownUntil = options.nowMs + cooldownMs;

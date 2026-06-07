@@ -14,7 +14,7 @@ form.addEventListener('submit', async (e) => {
     try {
         await signIn(email, password);
         const next = new URLSearchParams(location.search).get('next');
-        location.href = next && next.startsWith('/') ? next : '/characters.html';
+        location.href = next && next.startsWith('/') ? next : 'characters.html';
     } catch (err) {
         errEl.textContent = err instanceof Error ? err.message : 'Falha ao entrar.';
         errEl.hidden = false;

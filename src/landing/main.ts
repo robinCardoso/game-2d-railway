@@ -7,7 +7,7 @@ track('landing_view');
 void (async () => {
     const session = await getSession();
     if (session) {
-        location.href = '/characters.html';
+        location.href = 'characters.html';
         return;
     }
 })();
