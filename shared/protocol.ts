@@ -102,6 +102,10 @@ export interface JoinMessage {
     /** Dev sem ticket — servidor usa para combate autoritativo. */
     level?: number;
     experience?: number;
+    /** Plataforma do cliente (web, electron, capacitor). Para logs e futuro client_update_required. */
+    platform?: 'web' | 'electron' | 'capacitor' | 'unknown';
+    /** Versão do build do cliente (ex.: '0.1.0'). */
+    clientBuildVersion?: string;
 }
 
 export interface AttackMessage {

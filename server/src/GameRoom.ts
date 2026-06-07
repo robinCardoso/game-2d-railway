@@ -42,6 +42,11 @@ const MOVE_REJECTION_THROTTLE_MS = 400;
 const DEFAULT_ATTACK_COOLDOWN_MS = 550;
 const RESYNC_MIN_INTERVAL_MS = 2000;
 
+/** Intervalo entre state_sync periódico (ms). 0 = desabilitado. */
+const STATE_SNAPSHOT_INTERVAL_MS = Number(process.env['PLAYER_STATE_SNAPSHOT_INTERVAL_MS'] ?? 1000);
+/** Intervalo entre creature_sync periódico (ms). 0 = desabilitado. */
+const CREATURE_SNAPSHOT_INTERVAL_MS_CFG = Number(process.env['CREATURE_SNAPSHOT_INTERVAL_MS'] ?? 1000);
+
 const DEFAULT_APPEARANCE: PlayerAppearance = {
     outfitId: 'knight',
     spriteSheetUrl: 'tiles/characters/vocations/male/knight.png',
@@ -95,6 +100,7 @@ export class GameRoom {
     private readonly creatures: RoomCreatureManager;
     private readonly vocations: VocationStore;
     private readonly lastResyncRequestAtMs = new Map<string, number>();
+    private snapshotTimer: ReturnType<typeof setInterval> | null = null;
 
     constructor(
         private readonly collision: MapCollisionStore,
@@ -113,6 +119,7 @@ export class GameRoom {
             (room) => this.playersInRoomAsRefs(room)
         );
         this.creatures.start();
+        this.startPeriodicSnapshots();
     }
 
     private playersInRoomAsRefs(room: string): Array<{
@@ -447,6 +454,10 @@ export class GameRoom {
         this.players.set(id, player);
         this.socketToPlayerId.set(socket, id);
         this.instances.trackPlayer(instanceId, id);
+
+        const platformLog = msg.platform ? `[${msg.platform}]` : '[web/unknown]';
+        const versionLog = msg.clientBuildVersion ? `v${msg.clientBuildVersion}` : 'v?';
+        console.log(`[GameRoom] ${joinName} (${id}) entrou em ${room} ${platformLog} ${versionLog}`);
 
         const others = this.playersInRoom(room, id);
         const joinNowMs = Date.now();
@@ -921,5 +932,98 @@ export class GameRoom {
 
     getStats(): { online: number } {
         return { online: this.players.size };
+    }
+
+    dispose(): void {
+        this.stopPeriodicSnapshots();
+    }
+
+    /**
+     * Inicia envio periódico de state_sync + creature_sync para todas as salas.
+     * Garante que clientes Electron minimizados recebam snapshots frequentes
+     * sem depender exclusivamente de resync_request.
+     *
+     * Não manda snapshot se a sala estiver vazia — evita processamento desnecessário.
+     */
+    private startPeriodicSnapshots(): void {
+        if (STATE_SNAPSHOT_INTERVAL_MS <= 0 && CREATURE_SNAPSHOT_INTERVAL_MS_CFG <= 0) return;
+
+        const interval = Math.min(
+            STATE_SNAPSHOT_INTERVAL_MS > 0 ? STATE_SNAPSHOT_INTERVAL_MS : Infinity,
+            CREATURE_SNAPSHOT_INTERVAL_MS_CFG > 0 ? CREATURE_SNAPSHOT_INTERVAL_MS_CFG : Infinity
+        );
+
+        if (!Number.isFinite(interval) || interval <= 0) return;
+
+        let lastStateSyncMs = 0;
+        let lastCreatureSyncMs = 0;
+
+        this.snapshotTimer = setInterval(() => {
+            if (this.players.size === 0) return;
+
+            const now = Date.now();
+
+            // Coleta salas com jogadores
+            const rooms = new Map<string, { mapId: string; instanceId?: string; players: string[] }>();
+            for (const p of this.players.values()) {
+                const key = this.roomKey(p);
+                if (!rooms.has(key)) {
+                    rooms.set(key, { mapId: p.mapId, instanceId: p.instanceId, players: [] });
+                }
+                rooms.get(key)!.players.push(p.id);
+            }
+
+            const sendState = STATE_SNAPSHOT_INTERVAL_MS > 0 &&
+                now - lastStateSyncMs >= STATE_SNAPSHOT_INTERVAL_MS;
+            const sendCreature = CREATURE_SNAPSHOT_INTERVAL_MS_CFG > 0 &&
+                now - lastCreatureSyncMs >= CREATURE_SNAPSHOT_INTERVAL_MS_CFG;
+
+            if (!sendState && !sendCreature) return;
+
+            for (const [room, info] of rooms) {
+                if (sendState) {
+                    const payload = JSON.stringify({
+                        type: 'state_sync',
+                        v: PROTOCOL_VERSION,
+                        players: this.playersInRoom(room),
+                    });
+                    for (const pid of info.players) {
+                        const p = this.players.get(pid);
+                        if (p && p.socket.readyState === p.socket.OPEN) {
+                            p.socket.send(payload);
+                        }
+                    }
+                }
+
+                if (sendCreature) {
+                    const snapshots = this.creatures.ensureRoom(room, info.mapId, info.instanceId);
+                    if (snapshots.length > 0) {
+                        const payload = JSON.stringify({
+                            type: 'creature_sync',
+                            v: PROTOCOL_VERSION,
+                            mapId: info.mapId,
+                            instanceId: info.instanceId,
+                            creatures: snapshots,
+                        });
+                        for (const pid of info.players) {
+                            const p = this.players.get(pid);
+                            if (p && p.socket.readyState === p.socket.OPEN) {
+                                p.socket.send(payload);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (sendState) lastStateSyncMs = now;
+            if (sendCreature) lastCreatureSyncMs = now;
+        }, interval);
+    }
+
+    private stopPeriodicSnapshots(): void {
+        if (this.snapshotTimer) {
+            clearInterval(this.snapshotTimer);
+            this.snapshotTimer = null;
+        }
     }
 }

@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "main": "desktop/electron/dist/main.js",
   "scripts": {
     "dev": "node scripts/free-dev-ports.mjs && concurrently -k -n api,web -c green,blue \"npm run dev --prefix server\" \"node scripts/wait-api-then-vite.mjs\"",
     "dev:web": "vite",
@@ -12,14 +13,28 @@
     "start": "npm run start --prefix server",
     "start:railway": "npm run build && npm run start",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "electron:compile": "tsc -p desktop/electron/tsconfig.json",
+    "electron:dev": "node scripts/free-dev-ports.mjs && npm run electron:compile && concurrently -k -n api,web,electron -c green,blue,cyan \"npm run dev --prefix server\" \"node scripts/wait-api-then-vite.mjs\" \"wait-on http://localhost:5173/play.html && cross-env NODE_ENV=development electron .\"",
+    "electron:build": "npm run build && npm run electron:compile && electron-builder",
+    "mobile:build": "npm run build && npx cap sync android",
+    "mobile:open:android": "npx cap open android"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.6.6",
     "@types/node": "^25.9.1",
     "concurrently": "^9.2.0",
+    "cross-env": "^7.0.3",
+    "electron": "^36.3.1",
+    "electron-builder": "^26.0.12",
     "typescript": "^5.2.2",
     "vite": "^5.0.0",
     "vitest": "^3.2.4",
     "wait-on": "^9.0.10"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.4.0",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/core": "^8.4.0"
   }
 }

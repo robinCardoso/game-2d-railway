@@ -134,6 +134,11 @@ Rodar após mudanças em protocolo, `GameRoom`, `remotePlayerSprites` ou `depthS
 - Ao perder foco (`hidden`): cliente envia último `syncPositionIfChanged`, limpa input e snap visual local antes do browser throttlar rAF.
 - Offline (`VITE_GAME_SERVER_WS=false`): simulação inteira no cliente — pausa com a aba é aceitável.
 
+### Multiplataforma (Electron / Capacitor)
+
+- **Electron:** Aplicativo roda no desktop. O motor e o WebSocket não devem pausar ao minimizar a janela (`backgroundThrottling: false`). O `electronLifecycle` escuta `focus` e `blur` (visual/UI), mas não pausa o tick e não aciona o throttling extremo do browser.
+- **Capacitor (Android/iOS):** Em background, o SO pode matar o app. O `capacitorLifecycle` usa o plugin `App` para ouvir `appStateChange`. O WebWorker/WebSocket pode ser pausado pelo SO. Ao voltar a foreground (`isActive: true`), força-se um `resync_request` se muito tempo tiver passado, ignorando o estado stale. O `serverStateStore` protege contra atrasos no draw se a thread visual demorar a acordar.
+
 ---
 
 ## 5. Roadmap — quando tiver **muitos** jogadores online

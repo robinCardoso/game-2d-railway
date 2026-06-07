@@ -8,6 +8,9 @@ import type {
 import { PROTOCOL_VERSION } from '../../shared/protocol';
 import { sameRoom } from '../../shared/roomKey';
 import { getMapEntry } from '../engine/mapRegistry';
+import { applyServerMessageToStore, recordPingSent, resetServerStateStore } from './serverStateStore';
+import { detectRuntimePlatform } from '../game/runtime/platform';
+import { getClientRuntimeConfig } from '../game/runtime/runtimeEnv';
 
 export type NetStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -223,6 +226,7 @@ export class GameNetClient {
             this.networkInstanceId = undefined;
             this.remotePlayers.clear();
             this.connectedAt = 0;
+            resetServerStateStore();
             this.setStatus('disconnected');
 
             if (this.isProactiveReconnect) {
@@ -413,11 +417,16 @@ export class GameNetClient {
             appearance: state.appearance,
             level: state.level,
             experience: state.experience,
+            platform: detectRuntimePlatform(),
+            clientBuildVersion: getClientRuntimeConfig().buildVersion,
         });
     }
 
     private send(msg: ClientMessage): void {
         if (this.ws?.readyState !== WebSocket.OPEN) return;
+        if (msg.type === 'ping') {
+            recordPingSent(msg.t);
+        }
         this.ws.send(JSON.stringify(msg));
     }
 
@@ -426,6 +435,10 @@ export class GameNetClient {
             console.warn('[GameNet] versão de protocolo incompatível:', msg.v);
             return;
         }
+
+        // Aplica estado autoritativo ANTES dos callbacks — garante consistência
+        // mesmo se o render loop estiver pausado (Electron minimizado, browser throttlado).
+        applyServerMessageToStore(msg);
 
         switch (msg.type) {
             case 'welcome':

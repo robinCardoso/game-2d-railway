@@ -1,0 +1,34 @@
+appId: com.robson.game2drailway
+productName: Game 2D Railway
+copyright: Copyright © 2024 Robson
+
+directories:
+  output: release
+
+files:
+  - dist/**
+  - desktop/electron/dist/**
+  - package.json
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: Game2D-Railway-Setup-${version}.${ext}
+  icon: public/favicon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Game 2D Railway
+
+mac:
+  category: public.app-category.games
+  artifactName: Game2D-Railway-${version}.${ext}
+
+linux:
+  target: AppImage
+  artifactName: Game2D-Railway-${version}.${ext}

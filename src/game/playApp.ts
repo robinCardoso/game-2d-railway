@@ -77,7 +77,14 @@ import {
     isServerAuthoritativeCreatures,
     isServerAuthoritativePosition,
 } from './serverAuthority';
-import { setupPageVisibilityHandlers } from './pageVisibility';
+import { detectRuntimePlatform } from './runtime/platform';
+import { coalesceLifecycleHandler, type AppLifecycleController } from './runtime/appLifecycle';
+import { setupWebLifecycle } from './runtime/webLifecycle';
+import { setupElectronLifecycle } from './runtime/electronLifecycle';
+import { setupCapacitorLifecycle } from './runtime/capacitorLifecycle';
+import { ResyncController } from '../net/resyncController';
+import type { ClientDiagnosticsController } from './debug/clientDiagnostics';
+import { createClientDiagnostics } from './debug/clientDiagnostics';
 
 const TILE_SIZE_SCREEN = ENGINE_CONFIG.TILE_SIZE;
 let TILE_TYPES = buildTileRegistry();
@@ -120,6 +127,10 @@ let playBootStartedAt = 0;
 let pendingCreatureSyncLoading = false;
 let creatureSyncLoadingTimer: ReturnType<typeof setTimeout> | null = null;
 let teardownPageVisibility: (() => void) | null = null;
+let appLifecycleController: AppLifecycleController | null = null;
+let resyncController: ResyncController | null = null;
+let clientDiagnostics: ClientDiagnosticsController | null = null;
+
 
 function resolveGameServerUrl(): string | null {
     const env = import.meta.env.VITE_GAME_SERVER_WS;
@@ -807,7 +818,7 @@ function update(): void {
                     target.spawnFloatingDamage(damage, nowMs);
                 },
                 onMonsterKilled: (target, xpReward) => {
-                    target.speak(`+${xpReward} XP`, 1800);
+                    target.spawnFloatingXp(xpReward, nowMs);
                 },
                 onProgressUpdated: ({ experience, level }) => {
                     applyPlayProgressUpdate(level, experience);
@@ -1069,13 +1080,7 @@ function handlePlayPageHidden(): void {
 }
 
 function handlePlayPageVisible(): void {
-    serverCreatures.resetFrameClock();
-    serverCreatures.snapAllToAuthoritativeTiles();
-    remoteSprites.snapAllToAuthoritativeTiles();
-    if (gameNet?.isConnected()) {
-        gameNet.requestRoomResync();
-    }
-    void reloadCreaturePresetsForPlay();
+    resyncController?.requestResync();
 }
 
 function loop(): void {
@@ -1232,7 +1237,7 @@ function setupNetwork(
                 msg.killerPlayerId &&
                 msg.killerPlayerId === gameNet?.getLocalPlayerId()
             ) {
-                entity.speak(`+${msg.xpReward} XP`, 1800);
+                entity.spawnFloatingXp(msg.xpReward, performance.now());
             }
         },
         onCreatureRespawned: (msg) => {
@@ -1360,10 +1365,43 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
     setupPlayCombatControls();
 
     teardownPageVisibility?.();
-    teardownPageVisibility = setupPageVisibilityHandlers({
-        onHidden: handlePlayPageHidden,
-        onVisible: handlePlayPageVisible,
+    teardownPageVisibility = null;
+    appLifecycleController?.dispose();
+    appLifecycleController = null;
+
+    // Configura resync controller
+    resyncController = new ResyncController({
+        isConnected: () => gameNet?.isConnected() ?? false,
+        requestRoomResync: () => gameNet?.requestRoomResync(),
+        snapCreaturesToAuthoritativeTiles: () => serverCreatures.snapAllToAuthoritativeTiles(),
+        resetCreatureFrameClock: () => serverCreatures.resetFrameClock(),
+        snapRemotePlayersToAuthoritativeTiles: () => remoteSprites.snapAllToAuthoritativeTiles(),
+        reloadCreaturePresets: () => { void reloadCreaturePresetsForPlay(); },
     });
+
+    clientDiagnostics?.dispose();
+    clientDiagnostics = createClientDiagnostics({
+        getGameNet: () => gameNet,
+        getResyncController: () => resyncController,
+    });
+    clientDiagnostics.mount();
+
+    const onPlayBackground = coalesceLifecycleHandler(handlePlayPageHidden);
+    const lifecycleHandlers = {
+        onBackground: onPlayBackground,
+        onForeground: handlePlayPageVisible,
+        onFocusLost: onPlayBackground,
+        onFocusGained: () => { /* sem ação extra ao ganhar foco */ },
+    };
+
+    const platform = detectRuntimePlatform();
+    if (platform === 'electron') {
+        appLifecycleController = setupElectronLifecycle(lifecycleHandlers);
+    } else if (platform === 'capacitor') {
+        appLifecycleController = setupCapacitorLifecycle(lifecycleHandlers);
+    } else {
+        appLifecycleController = setupWebLifecycle(lifecycleHandlers);
+    }
 
     setupNetwork(character, accountId, { initialTicket: prefetchedTicket });
     loop();

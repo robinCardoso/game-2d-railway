@@ -307,6 +307,49 @@ Conta GM: registre `gm@gm.dev`. Em dev local: `STUDIO_MOCK_GM=true` bypassa o gu
 
 ---
 
+## Electron e Capacitor (clientes instalados)
+
+### Electron (Windows)
+
+```bash
+npm run electron:dev    # Vite + API + janela Electron (localhost:5173)
+npm run electron:build  # dist/ + NSIS installer
+```
+
+**Variáveis no build** (Railway Variables ou `.env` local antes de `npm run build`):
+
+| Variável | Uso |
+|----------|-----|
+| `VITE_BUILD_VERSION` | Versão no join WS e painel F3 |
+| `VITE_API_BASE_URL` | HTTP da API quando não há same-origin |
+| `VITE_WS_BASE_URL` | WebSocket fixo (ex.: `wss://api.seujogo.com`) |
+| `VITE_GAME_SERVER_WS` | Alternativa legada; preferir `VITE_WS_BASE_URL` em app instalado |
+
+> Use **domínio próprio** antes de distribuir. URL gerada pelo Railway que muda quebra instaladores antigos.
+
+### Capacitor (Android)
+
+```bash
+npm run mobile:build
+npm run mobile:open:android
+```
+
+Requer `@capacitor/app` para lifecycle (`appStateChange` → resync ao voltar do background).
+
+### Snapshots periódicos WS (servidor)
+
+Opcional — complementa eventos imediatos; padrão 1 s:
+
+```env
+PLAYER_STATE_SNAPSHOT_INTERVAL_MS=1000
+CREATURE_SNAPSHOT_INTERVAL_MS=1000
+RESYNC_MIN_INTERVAL_MS=2000
+```
+
+Defina `0` para desligar snapshots de jogadores ou criaturas.
+
+---
+
 ## Custos e backup
 
 Railway cobra por CPU, RAM, egress, volume storage e PostgreSQL. Plano Hobby inclui crédito mensal.

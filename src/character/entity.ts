@@ -4,6 +4,7 @@ import { getSpriteTilePlacement } from './spriteDraw';
 import type { MobLootEntry, MobRace } from '../game-data/mobPresetTypes';
 import {
     createFloatingDamageEntry,
+    createFloatingXpEntry,
     drawFloatingDamages,
     pruneFloatingDamages,
     type FloatingDamageEntry,
@@ -146,6 +147,15 @@ export class GameEntity {
         );
     }
 
+    /** XP ganho — mesmo estilo do dano (fonte + contorno), verde, sem balão. */
+    spawnFloatingXp(xp: number, nowMs: number = performance.now()): void {
+        if (xp <= 0) return;
+        this.floatingDamages = pruneFloatingDamages(this.floatingDamages, nowMs);
+        this.floatingDamages.push(
+            createFloatingXpEntry(xp, nowMs, this.floatingDamages.length)
+        );
+    }
+
     initCombatStats(stats: {
         maxHealth: number;
         defense: number;
@@ -227,7 +237,7 @@ export class GameEntity {
             performance.now()
         );
 
-        // Balão de fala (NPC / XP) — não usar para dano de combate
+        // Balão de fala (NPC) — não usar para dano/XP de combate
         if (this.dialogueText) {
             ctx.font = 'bold 9px sans-serif';
             const textWidth = ctx.measureText(this.dialogueText).width;

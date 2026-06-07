@@ -2,12 +2,15 @@ export const FLOATING_DAMAGE_DURATION_MS = 1000;
 export const FLOATING_DAMAGE_RISE_PX = 32;
 export const FLOATING_DAMAGE_MAX_STACK = 5;
 
+export type FloatingTextKind = 'damage' | 'xp';
+
 export interface FloatingDamageEntry {
     label: string;
     startMs: number;
     durationMs: number;
     /** Deslocamento vertical inicial para hits simultâneos. */
     stackIndex: number;
+    kind: FloatingTextKind;
 }
 
 const DAMAGE_FONT_FAMILY =
@@ -18,6 +21,16 @@ export function formatDamageLabel(damage: number): string {
     const amount = Math.max(0, Math.floor(damage));
     if (amount <= 0) return 'Miss';
     return `-${amount}`;
+}
+
+export function formatXpLabel(xp: number): string {
+    const amount = Math.max(0, Math.floor(xp));
+    return `+${amount}`;
+}
+
+export function floatingTextFillColor(entry: FloatingDamageEntry): string {
+    if (entry.kind === 'xp') return '#4ade80';
+    return entry.label === 'Miss' ? '#cbd5e1' : '#fff7ed';
 }
 
 export function floatingDamageFont(label: string): string {
@@ -46,6 +59,21 @@ export function createFloatingDamageEntry(
         startMs: nowMs,
         durationMs: FLOATING_DAMAGE_DURATION_MS,
         stackIndex: Math.min(FLOATING_DAMAGE_MAX_STACK - 1, activeCount),
+        kind: 'damage',
+    };
+}
+
+export function createFloatingXpEntry(
+    xp: number,
+    nowMs: number,
+    activeCount: number
+): FloatingDamageEntry {
+    return {
+        label: formatXpLabel(xp),
+        startMs: nowMs,
+        durationMs: FLOATING_DAMAGE_DURATION_MS,
+        stackIndex: Math.min(FLOATING_DAMAGE_MAX_STACK - 1, activeCount),
+        kind: 'xp',
     };
 }
 
@@ -79,7 +107,7 @@ export function drawFloatingDamages(
         ctx.strokeStyle = '#000000';
         ctx.lineWidth = 3;
         ctx.strokeText(entry.label, x, y);
-        ctx.fillStyle = entry.label === 'Miss' ? '#cbd5e1' : '#fff7ed';
+        ctx.fillStyle = floatingTextFillColor(entry);
         ctx.fillText(entry.label, x, y);
         ctx.restore();
     }
