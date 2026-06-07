@@ -29,6 +29,12 @@ type CreatureSlide = {
     startedAtMs: number;
     durationMs: number;
     active: boolean;
+    queued?: {
+        toX: number;
+        toY: number;
+        durationMs: number;
+        direction?: CreatureSnapshot['direction'];
+    };
 };
 
 type ServerCreatureTile = {
@@ -379,12 +385,12 @@ export class ServerCreatureSync {
         const slideDuration = duration * Math.max(1, stepLag);
 
         if (retargeted) {
-            slide!.fromX = fromX;
-            slide!.fromY = fromY;
-            slide!.toX = targetWorldX;
-            slide!.toY = targetWorldY;
-            slide!.startedAtMs = nowMs;
-            slide!.durationMs = slideDuration;
+            slide!.queued = {
+                toX: targetWorldX,
+                toY: targetWorldY,
+                durationMs: slideDuration,
+                direction: snap.direction
+            };
         } else {
             this.slides.set(snap.creatureId, {
                 fromX,
@@ -479,10 +485,37 @@ export class ServerCreatureSync {
                 if (!sliding) {
                     entity.worldX = slide!.toX;
                     entity.worldY = slide!.toY;
-                    slide!.active = false;
-                    entity.stepDestTileX = undefined;
-                    entity.stepDestTileY = undefined;
-                    this.catchUpTowardServerIfNeeded(entity, id, nowMs);
+                    
+                    if (slide!.queued) {
+                        slide!.fromX = slide!.toX;
+                        slide!.fromY = slide!.toY;
+                        slide!.toX = slide!.queued.toX;
+                        slide!.toY = slide!.queued.toY;
+                        slide!.startedAtMs = slide!.startedAtMs + slide!.durationMs;
+                        
+                        // Prevent extreme drift if we fell behind somehow
+                        if (nowMs - slide!.startedAtMs > slide!.queued.durationMs * 2) {
+                            slide!.startedAtMs = nowMs;
+                        }
+                        
+                        slide!.durationMs = slide!.queued.durationMs;
+                        const direction = slide!.queued.direction;
+                        slide!.queued = undefined;
+                        
+                        faceFromWorldDeltaOrServer(
+                            entity,
+                            slide!.fromX,
+                            slide!.fromY,
+                            slide!.toX,
+                            slide!.toY,
+                            direction
+                        );
+                    } else {
+                        slide!.active = false;
+                        entity.stepDestTileX = undefined;
+                        entity.stepDestTileY = undefined;
+                        this.catchUpTowardServerIfNeeded(entity, id, nowMs);
+                    }
                 }
             }
 
