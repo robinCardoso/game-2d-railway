@@ -45,6 +45,26 @@ function hideToast() {
     }
 }
 
+/** HTML do toast quando o download terminou — sem botão de restart no play. */
+export function buildDownloadedToastHtml(version: string, isPlayPage: boolean): string {
+    const descText = isPlayPage
+        ? `Atualização pronta — saia do jogo para instalar (v${version}).`
+        : `Nova versão v${version} instalada com sucesso. Reinicie o aplicativo para aplicar.`;
+
+    const actionsHtml = isPlayPage
+        ? `<button class="update-btn-secondary" id="update-close-btn">Fechar</button>`
+        : `<button class="update-btn-primary" id="update-install-btn">Reiniciar Agora</button>
+           <button class="update-btn-secondary" id="update-close-btn">Depois</button>`;
+
+    return `
+        <div class="update-toast-title">Atualização Pronta</div>
+        <div class="update-toast-desc">${descText}</div>
+        <div class="update-toast-actions">
+            ${actionsHtml}
+        </div>
+    `;
+}
+
 export function initDesktopUpdaterToast() {
     const updater = window.electronAPI?.updater;
     if (!updater) return;
@@ -80,18 +100,7 @@ export function initDesktopUpdaterToast() {
 
         if (status.status === 'downloaded') {
             const isPlayPage = /play\.html/i.test(location.href);
-            const descText = isPlayPage 
-                ? `Nova versão v${status.version} pronta. A instalação ocorrerá quando você sair do jogo ou ao reiniciar.`
-                : `Nova versão v${status.version} instalada com sucesso. Reinicie o aplicativo para aplicar.`;
-
-            showToast(`
-                <div class="update-toast-title">Atualização Pronta</div>
-                <div class="update-toast-desc">${descText}</div>
-                <div class="update-toast-actions">
-                    <button class="update-btn-primary" id="update-install-btn">Reiniciar Agora</button>
-                    <button class="update-btn-secondary" id="update-close-btn">Depois</button>
-                </div>
-            `);
+            showToast(buildDownloadedToastHtml(status.version, isPlayPage));
 
             document.getElementById('update-install-btn')?.addEventListener('click', () => {
                 void updater.install();

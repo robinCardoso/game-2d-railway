@@ -10,10 +10,10 @@ const winUnpacked = path.join(releaseDir, 'win-unpacked');
 const winUnpackedTmp = path.join(releaseDir, 'win-unpacked.tmp');
 
 function killDesktopProcesses() {
-    const commands = [
-        'taskkill /F /T /IM "Game 2D Railway.exe"',
-        'taskkill /F /T /IM electron.exe',
-    ];
+    const commands = ['taskkill /F /T /IM "Game 2D Railway.exe"'];
+    if (process.env.FORCE_KILL_ELECTRON_DEV === 'true') {
+        commands.push('taskkill /F /T /IM electron.exe');
+    }
     for (const cmd of commands) {
         try {
             execSync(cmd, { stdio: 'ignore' });

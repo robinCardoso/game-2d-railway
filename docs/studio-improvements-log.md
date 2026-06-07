@@ -989,7 +989,7 @@ Sessão dedicada à resolução de problemas de usabilidade que causavam perda d
 - **Ciclos de Vida:** `appLifecycle.ts` unifica eventos de visibility e focus, com implementações específicas para Web (`webLifecycle.ts`), Electron (`electronLifecycle.ts`) e Android/Capacitor (`capacitorLifecycle.ts`).
 
 ### 42.2 Electron (Windows)
-- **Arquivos:** `desktop/electron/main.ts`, `desktop/electron/preload.ts`, `package.json`, `electron-builder.yml`
+- **Arquivos:** `desktop/electron/main.ts`, `desktop/electron/preload.ts`, `package.json` (`build`)
 - **Mudança:** Cliente desktop que não pausa quando minimizado. Configurado com `backgroundThrottling: false` e `disable-renderer-backgrounding` para contornar problemas de rede e tick da engine durante combate em background.
 
 ### 42.3 Capacitor (Android)

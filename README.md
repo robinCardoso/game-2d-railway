@@ -223,7 +223,6 @@ game-2d-railway/
 ├── database/migrations/  # Schema PostgreSQL
 ├── docs/                 # Documentação técnica
 ├── capacitor.config.ts
-├── electron-builder.yml
 ├── railway.json
 └── AGENTS.md             # Guia para agentes IA (Cursor)
 ```
@@ -398,7 +397,7 @@ Sem isso, o app instalado não encontra o servidor. URL Railway que muda quebra 
 
 | Sintoma | Solução |
 |---------|---------|
-| `EBUSY` em `app.asar` | Feche o jogo/Explorer em `release/`; o script `prepare-electron-release.mjs` tenta limpar e, se falhar, usa `release-build-<timestamp>/` |
+| `EBUSY` em `app.asar` | Feche o jogo/Explorer em `release/`; o script `prepare-electron-release.mjs` tenta limpar e, se falhar, usa `release-build-<timestamp>/`. Opcional: `FORCE_KILL_ELECTRON_DEV=true` mata também `electron.exe` em dev |
 | Entrada órfã em “Apps instalados” | `scripts/cleanup-orphan-desktop-install.ps1` (PowerShell **como Administrador**) |
 | SmartScreen no Windows | Normal sem code signing na primeira instalação |
 
@@ -465,7 +464,7 @@ O builder envia para **GitHub → Releases**:
 
 #### Version gate no servidor (opcional)
 
-Endpoint para **bloquear clientes Electron muito antigos** ao entrar no mundo. Também em planejamento — padrões permitem tudo (`0.1.0`).
+Endpoint para **bloquear clientes Electron muito antigos** ao entrar no mundo. Também em planejamento — padrões permitem tudo (`0.1.0`). Em **build de produção**, se a API não responder, o cliente **não entra no mundo** (falha fechada); em dev (`electron:dev`) falha aberta.
 
 `GET /api/desktop/version?clientVersion=0.1.1&platform=electron`
 
