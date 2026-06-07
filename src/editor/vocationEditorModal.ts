@@ -1,4 +1,5 @@
 import { calculateStatsForLevel, type VocationConfig } from '../engine/character/calculateStats';
+import type { PlayerAttackType } from '../../shared/playerAttack';
 import {
     dispatchVocationsUpdated,
     fillVocationSelect,
@@ -60,11 +61,11 @@ export function initVocationEditor(): void {
     };
 
     /** Fecha dropdowns do menu superior sem depender de menuBar. */
-    function closeAllDropdownsSafe(): void {
+    const closeAllDropdownsSafe = (): void => {
         document.querySelectorAll('#mainMenubar .menu-item.is-open').forEach((item) => {
             item.classList.remove('is-open');
         });
-    }
+    };
 
     openBtn?.addEventListener('click', (e) => {
         e.preventDefault();
@@ -80,8 +81,9 @@ export function initVocationEditor(): void {
     cancelBtn?.addEventListener('click', closeModal);
     addBtn?.addEventListener('click', () => selectVocation(null));
 
-    vocForm?.querySelectorAll('input').forEach((el) => {
+    vocForm?.querySelectorAll('input, select').forEach((el) => {
         el.addEventListener('input', updateSimulation);
+        el.addEventListener('change', updateSimulation);
     });
 
     if (deleteBtn) {
@@ -136,8 +138,17 @@ function readDraftFromForm(): VocationConfig {
         return Number.isFinite(parsed) ? parsed : fallback;
     };
 
+    const attackType = (document.getElementById('vocAttackType') as HTMLSelectElement).value as PlayerAttackType;
+    const attackRange = num('vocAttackRange', 1);
+    const requiresLineOfSight = (document.getElementById('vocAttackLos') as HTMLInputElement).checked;
+
     return {
         name,
+        attackProfile: {
+            attackType: attackType === 'distance' || attackType === 'magic' ? attackType : 'melee',
+            range: Math.max(1, Math.min(15, attackRange)),
+            requiresLineOfSight,
+        },
         baseStats: {
             melee: num('vocBaseMelee', 10),
             magicAttack: num('vocBaseMagic', 1),
@@ -257,6 +268,18 @@ function selectVocation(id: string | null): void {
 
 function loadVocationIntoForm(config: VocationConfig): void {
     (document.getElementById('vocNameInput') as HTMLInputElement).value = config.name || '';
+    const attackTypeEl = document.getElementById('vocAttackType') as HTMLSelectElement | null;
+    const attackRangeEl = document.getElementById('vocAttackRange') as HTMLInputElement | null;
+    const attackLosEl = document.getElementById('vocAttackLos') as HTMLInputElement | null;
+    if (attackTypeEl) {
+        attackTypeEl.value = config.attackProfile?.attackType ?? 'melee';
+    }
+    if (attackRangeEl) {
+        attackRangeEl.value = String(config.attackProfile?.range ?? 1);
+    }
+    if (attackLosEl) {
+        attackLosEl.checked = config.attackProfile?.requiresLineOfSight === true;
+    }
     (document.getElementById('vocBaseMelee') as HTMLInputElement).value = String(config.baseStats.melee ?? 10);
     (document.getElementById('vocBaseDist') as HTMLInputElement).value = String(config.baseStats.distanceAttack ?? 2);
     (document.getElementById('vocBaseMagic') as HTMLInputElement).value = String(config.baseStats.magicAttack ?? 1);
@@ -276,6 +299,9 @@ function loadVocationIntoForm(config: VocationConfig): void {
 
 function resetFormToDefaults(): void {
     (document.getElementById('vocNameInput') as HTMLInputElement).value = '';
+    (document.getElementById('vocAttackType') as HTMLSelectElement).value = 'melee';
+    (document.getElementById('vocAttackRange') as HTMLInputElement).value = '1';
+    (document.getElementById('vocAttackLos') as HTMLInputElement).checked = false;
     (document.getElementById('vocBaseMelee') as HTMLInputElement).value = '10';
     (document.getElementById('vocBaseDist') as HTMLInputElement).value = '2';
     (document.getElementById('vocBaseMagic') as HTMLInputElement).value = '1';

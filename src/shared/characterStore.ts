@@ -1,5 +1,6 @@
 import { apiFetch } from './apiFetch';
 import { isApiAuthEnabled } from './authClient';
+import { resolveApiUrl } from './apiUrl';
 import {
     isMockAuthEnabled,
     mockCreateCharacter,
@@ -80,7 +81,8 @@ export async function createCharacter(
         }
 
         let outfitConfig: CharacterSpriteConfig | null = null;
-        const jsonUrl = '/' + spriteSheetUrl.replace(/\.png$/i, '.json');
+        const cleanPath = spriteSheetUrl.replace(/^\//, '');
+        const jsonUrl = resolveApiUrl('/' + cleanPath.replace(/\.png$/i, '.json'));
         try {
             const res = await fetch(jsonUrl);
             if (res.ok) {

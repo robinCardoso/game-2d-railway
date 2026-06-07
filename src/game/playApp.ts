@@ -1,4 +1,5 @@
 import '../style.css';
+import { resolveApiUrl } from '../shared/apiUrl';
 import {
     ENGINE_CONFIG,
     buildTileRegistry,
@@ -554,11 +555,16 @@ function setupPlayCombatControls(): void {
     }
 }
 
-function faceTowardEntity(target: GameEntity): void {
-    const foot = target.getFootTile(TILE_SIZE_SCREEN);
-    const dx = foot.tileX - player.tileX;
-    const dy = foot.tileY - player.tileY;
+/** Tile lógico do alvo — evita jitter do deslize visual (getFootTile) ao mirar no combate. */
+function faceTowardEntity(target: { tileX: number; tileY: number }): void {
+    const dx = target.tileX - player.tileX;
+    const dy = target.tileY - player.tileY;
+    if (dx === 0 && dy === 0) return;
     if (Math.abs(dx) > Math.abs(dy)) {
+        activeCharacterController.setDirection(dx > 0 ? 'right' : 'left');
+    } else if (Math.abs(dy) > Math.abs(dx)) {
+        activeCharacterController.setDirection(dy > 0 ? 'down' : 'up');
+    } else if (dx !== 0) {
         activeCharacterController.setDirection(dx > 0 ? 'right' : 'left');
     } else {
         activeCharacterController.setDirection(dy > 0 ? 'down' : 'up');
@@ -1040,6 +1046,10 @@ function draw(): void {
         }
 
         // Pass 2: Y-sort — itens, NPCs, remotos e jogador local por profundidade (pé)
+        const remoteEntries = (currentMapId && gameNet)
+            ? remoteSprites.buildRemoteDepthEntries(gameNet.getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId()))
+            : [];
+
         const depthDrawables = [
             ...collectItemDepthDrawables({
                 z,
@@ -1055,6 +1065,7 @@ function draw(): void {
             }),
             ...collectCombatTargetRingDrawable(
                 getPlayEntities(),
+                remoteEntries,
                 getPlayCombatTargetId(),
                 z,
                 camState,
@@ -1068,12 +1079,9 @@ function draw(): void {
             }),
         ];
 
-        if (currentMapId && gameNet) {
-            const remoteEntries = remoteSprites.buildRemoteDepthEntries(
-                gameNet.getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId())
-            );
+        if (remoteEntries.length > 0) {
             depthDrawables.push(
-                ...collectRemoteDepthDrawables(remoteEntries, z, camState, TILE_SIZE_SCREEN)
+                ...collectRemoteDepthDrawables(remoteEntries, z, camState, TILE_SIZE_SCREEN, nowMs)
             );
         }
 
@@ -1357,11 +1365,7 @@ function setupNetwork(
                 updateCharacterStatsUi(activeCharacter!, { flashLevel: false });
                 localPlayerFloats.spawnDamage(msg.damage, now);
             } else {
-                const remote = gameNet?.getRemotePlayers(currentMapId ?? '')?.find(p => p.playerId === msg.playerId);
-                if (remote) {
-                    remote.health = msg.health;
-                    remote.maxHealth = msg.maxHealth;
-                }
+                remoteSprites.spawnFloatingDamage(msg.playerId, msg.damage, now);
             }
         },
         onPlayerDied: (msg) => {
@@ -1435,7 +1439,8 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
 
     const outfit = { ...character.outfitConfig } as CharacterSpriteConfig;
     // Sincroniza a configuração do sprite em tempo real a partir do JSON oficial
-    const jsonUrl = '/' + outfit.spriteSheetUrl.replace(/\.png$/i, '.json');
+    const cleanPath = outfit.spriteSheetUrl.replace(/^\//, '');
+    const jsonUrl = resolveApiUrl('/' + cleanPath.replace(/\.png$/i, '.json'));
     try {
         const res = await fetch(jsonUrl);
         if (res.ok) {

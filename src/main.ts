@@ -2692,11 +2692,16 @@ function draw() {
             const remoteEntries = gameNet
                 .getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId())
                 .map((remote) => ({
+                    id: remote.playerId,
                     tileX: remote.tileX,
                     tileY: remote.tileY,
                     z: remote.z,
                     name: remote.name,
                     direction: remote.direction,
+                    health: remote.health,
+                    maxHealth: remote.maxHealth,
+                    mana: remote.mana,
+                    maxMana: remote.maxMana,
                 }));
             depthDrawables.push(
                 ...collectRemoteDepthDrawables(

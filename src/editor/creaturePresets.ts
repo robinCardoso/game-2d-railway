@@ -7,7 +7,8 @@ import {
     type MobLootEntry,
     type MobRace,
 } from '../game-data/mobPresetTypes';
-import { invalidateCreatureThumbnailCache } from './creaturePresetThumbnail';
+import { invalidateCreatureThumbnailCache } from './creaturePresetThumbnail';
+import { resolveApiUrl } from '../shared/apiUrl';
 
 export type { CreatureVisualSize, MobLootEntry, MobRace };
 export type CreaturePreset = CreaturePresetEntry;
@@ -68,7 +69,7 @@ export async function loadCreaturePresets(): Promise<void> {
     configBySpawnName.clear();
 
     try {
-        const res = await fetch(PRESETS_URL, { cache: 'no-store' });
+        const res = await fetch(resolveApiUrl(PRESETS_URL), { cache: 'no-store' });
         if (!res.ok) {
             console.warn('[CreaturePresets] creature_presets.json ausente — nenhuma criatura na paleta.');
             return;
@@ -90,7 +91,8 @@ export async function loadCreaturePresets(): Promise<void> {
             presets.push(preset);
 
             try {
-                const cfgRes = await fetch(`/${preset.configPath}`, { cache: 'no-store' });
+                const cleanCfgPath = preset.configPath.replace(/^\//, '');
+                const cfgRes = await fetch(resolveApiUrl('/' + cleanCfgPath), { cache: 'no-store' });
                 if (!cfgRes.ok) {
                     console.warn(
                         `[CreaturePresets] Sprite não encontrado para "${preset.name}": ${preset.configPath}`

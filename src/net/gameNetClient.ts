@@ -125,6 +125,8 @@ export interface GameNetClientOptions {
         z: number;
         health: number;
         maxHealth: number;
+        mana?: number;
+        maxMana?: number;
     }) => void;
     onServerError?: (payload: { code: string; message: string }) => void;
     /** Após `welcome` — sincronizar XP local com o servidor (dev/mock). */
@@ -688,6 +690,8 @@ export class GameNetClient {
                     existing.instanceId = msg.instanceId;
                     existing.health = msg.health;
                     existing.maxHealth = msg.maxHealth;
+                    if (msg.mana !== undefined) existing.mana = msg.mana;
+                    if (msg.maxMana !== undefined) existing.maxMana = msg.maxMana;
                 } else {
                     this.remotePlayers.set(msg.playerId, {
                         playerId: msg.playerId,
@@ -699,6 +703,8 @@ export class GameNetClient {
                         z: msg.z,
                         health: msg.health,
                         maxHealth: msg.maxHealth,
+                        mana: msg.mana,
+                        maxMana: msg.maxMana,
                     });
                 }
                 this.options.onPlayerRespawned?.({
@@ -710,6 +716,8 @@ export class GameNetClient {
                     z: msg.z,
                     health: msg.health,
                     maxHealth: msg.maxHealth,
+                    mana: msg.mana,
+                    maxMana: msg.maxMana,
                 });
                 break;
             }

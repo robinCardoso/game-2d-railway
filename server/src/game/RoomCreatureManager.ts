@@ -178,7 +178,8 @@ export class RoomCreatureManager {
             return { ok: false, code: 'CREATURE_DEAD' };
         }
 
-        const attackProfile = resolvePlayerAttackProfile(attacker.vocationId);
+        const vocationConfig = this.vocations.get(attacker.vocationId);
+        const attackProfile = resolvePlayerAttackProfile(attacker.vocationId, vocationConfig);
         if (
             creature.z !== attacker.z ||
             !isPlayerInAttackRange(
@@ -190,7 +191,6 @@ export class RoomCreatureManager {
             return { ok: false, code: 'NOT_ADJACENT' };
         }
 
-        const vocationConfig = this.vocations.get(attacker.vocationId);
         if (!vocationConfig) {
             return { ok: false, code: 'INVALID_VOCATION' };
         }

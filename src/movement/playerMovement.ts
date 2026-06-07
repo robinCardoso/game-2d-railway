@@ -100,9 +100,12 @@ export const PlayerMovement: PlayerMovementController = {
         });
 
         // 2. Sprite — face travada durante deslize; teclas novas só após concluir
+        const combatLocksFacing =
+            activeCharacterController.currentState === 'attack' ||
+            activeCharacterController.currentState === 'cast';
         const lockedFacing = getActiveStepFacing(gridMovement);
         const spriteDir = lockedFacing ?? resolveSpriteDirection(gridMovement, keys);
-        if (spriteDir) {
+        if (spriteDir && !combatLocksFacing) {
             const animDirMap = {
                 north: 'up',
                 south: 'down',

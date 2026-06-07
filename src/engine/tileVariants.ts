@@ -1,4 +1,5 @@
 import type { RegistryTile, TileRegistry } from './types';
+import { resolveApiUrl } from '../shared/apiUrl';
 
 export const VARIANT_BRUSH_ID_BASE = 9000;
 export const VARIANT_BRUSH_ID_MAX = 9999;
@@ -44,7 +45,7 @@ export function formatVariantGroupLabel(groupKey: string, manifest?: VariantGrou
 export async function loadVariantGroupManifest(): Promise<VariantGroupManifest> {
     if (manifestCache) return manifestCache;
     try {
-        const res = await fetch('/tile_variant_groups.json');
+        const res = await fetch(resolveApiUrl('/tile_variant_groups.json'));
         if (res.ok) {
             manifestCache = (await res.json()) as VariantGroupManifest;
             return manifestCache;

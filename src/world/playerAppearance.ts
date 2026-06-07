@@ -1,6 +1,7 @@
 import type { PlayerAppearance } from '../../shared/protocol';
 import type { CharacterSpriteConfig, Direction } from '../character/spriteAnimation';
 import type { CharacterRow } from '../shared/types';
+import { resolveApiUrl } from '../shared/apiUrl';
 
 const DEFAULT_APPEARANCE: PlayerAppearance = {
     outfitId: 'knight',
@@ -40,7 +41,7 @@ export async function loadOutfitSpriteConfig(
     displayName?: string
 ): Promise<CharacterSpriteConfig> {
     const sheetPath = appearance.spriteSheetUrl.replace(/^\//, '');
-    const jsonUrl = '/' + sheetPath.replace(/\.png$/i, '.json');
+    const jsonUrl = resolveApiUrl('/' + sheetPath.replace(/\.png$/i, '.json'));
     try {
         const res = await fetch(jsonUrl);
         if (res.ok) {

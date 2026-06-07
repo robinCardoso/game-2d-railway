@@ -87,6 +87,8 @@ export interface PlayerSnapshot {
     stepDurationMs?: number;
     health?: number;
     maxHealth?: number;
+    mana?: number;
+    maxMana?: number;
 }
 
 export interface JoinMessage {
@@ -347,6 +349,8 @@ export interface PlayerRespawnedMessage {
     z: number;
     health: number;
     maxHealth: number;
+    mana?: number;
+    maxMana?: number;
 }
 
 export function playerRoomKey(p: Pick<PlayerSnapshot, 'mapId' | 'instanceId'>): string {

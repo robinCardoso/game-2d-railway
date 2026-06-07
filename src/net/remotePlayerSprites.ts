@@ -7,6 +7,11 @@ import {
     loadOutfitSpriteConfig,
     protocolDirectionToSprite,
 } from '../world/playerAppearance';
+import {
+    createFloatingDamageEntry,
+    pruneFloatingDamages,
+    type FloatingDamageEntry,
+} from '../game/floatingCombatText';
 
 const { TILE_SIZE } = ENGINE_CONFIG;
 
@@ -76,15 +81,19 @@ type RemoteVisualState = {
     /** Timestamp do último pacote de movimento recebido. */
     lastMovePacketAt: number;
     controller: SpriteAnimationController;
+    floatingDamages?: FloatingDamageEntry[];
 };
 
 /**
  * Estado visual dos jogadores remotos: interpolação entre SQMs + walk/idle contínuo.
  * O servidor manda tile discreto; o cliente suaviza o deslize e anima a outfit.
  */
+type PendingFloatingDamage = { damage: number; nowMs: number };
+
 export class RemotePlayerSpriteManager {
     private readonly states = new Map<string, RemoteVisualState>();
     private readonly loading = new Set<string>();
+    private readonly pendingDamages = new Map<string, PendingFloatingDamage[]>();
 
     sync(players: PlayerSnapshot[]): void {
         const nowMs = performance.now();
@@ -102,6 +111,7 @@ export class RemotePlayerSpriteManager {
         for (const id of this.states.keys()) {
             if (!activeIds.has(id)) {
                 this.states.delete(id);
+                this.pendingDamages.delete(id);
             }
         }
     }
@@ -112,6 +122,7 @@ export class RemotePlayerSpriteManager {
             const fallbackX = player.tileX * TILE_SIZE;
             const fallbackY = player.tileY * TILE_SIZE;
             return {
+                id: player.playerId,
                 tileX: player.tileX,
                 tileY: player.tileY,
                 z: player.z,
@@ -120,12 +131,20 @@ export class RemotePlayerSpriteManager {
                 controller: state?.controller,
                 worldX: state?.visualX ?? fallbackX,
                 worldY: state?.visualY ?? fallbackY,
+                health: player.health,
+                maxHealth: player.maxHealth,
+                mana: player.mana,
+                maxMana: player.maxMana,
+                floatingDamages: state?.floatingDamages,
             };
         });
     }
 
     tick(nowMs: number): void {
         for (const state of this.states.values()) {
+            if (state.floatingDamages) {
+                state.floatingDamages = pruneFloatingDamages(state.floatingDamages, nowMs);
+            }
             if (state.moving) {
                 const elapsed = nowMs - state.moveStartedAt;
                 const t = Math.min(1, elapsed / state.moveDurationMs);
@@ -164,6 +183,7 @@ export class RemotePlayerSpriteManager {
     clear(): void {
         this.states.clear();
         this.loading.clear();
+        this.pendingDamages.clear();
     }
 
     /** Snap visual remoto ao tile de rede após pausa do rAF. */
@@ -314,6 +334,34 @@ export class RemotePlayerSpriteManager {
         };
     }
 
+    spawnFloatingDamage(playerId: string, damage: number, nowMs: number): void {
+        const state = this.states.get(playerId);
+        if (state) {
+            this.pushFloatingDamage(state, damage, nowMs);
+            return;
+        }
+        const queue = this.pendingDamages.get(playerId) ?? [];
+        queue.push({ damage, nowMs });
+        this.pendingDamages.set(playerId, queue);
+    }
+
+    private pushFloatingDamage(state: RemoteVisualState, damage: number, nowMs: number): void {
+        if (!state.floatingDamages) state.floatingDamages = [];
+        state.floatingDamages = pruneFloatingDamages(state.floatingDamages, nowMs);
+        state.floatingDamages.push(
+            createFloatingDamageEntry(damage, nowMs, state.floatingDamages.length)
+        );
+    }
+
+    private flushPendingDamages(playerId: string, state: RemoteVisualState): void {
+        const queue = this.pendingDamages.get(playerId);
+        if (!queue?.length) return;
+        for (const pending of queue) {
+            this.pushFloatingDamage(state, pending.damage, pending.nowMs);
+        }
+        this.pendingDamages.delete(playerId);
+    }
+
     private async ensurePlayer(player: PlayerSnapshot): Promise<void> {
         if (!player.appearance) return;
 
@@ -334,7 +382,9 @@ export class RemotePlayerSpriteManager {
         try {
             const config = await loadOutfitSpriteConfig(player.appearance, player.name);
             const ctrl = new SpriteAnimationController(config);
-            this.states.set(player.playerId, this.createState(player, ctrl));
+            const state = this.createState(player, ctrl);
+            this.states.set(player.playerId, state);
+            this.flushPendingDamages(player.playerId, state);
         } catch (err) {
             console.warn('[RemotePlayerSprites] falha ao carregar outfit:', player.name, err);
         } finally {

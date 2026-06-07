@@ -29,6 +29,14 @@ describe('resolvePlayerAttackProfile', () => {
         expect(profile.attackType).toBe('distance');
         expect(profile.range).toBe(PLAYER_RANGED_RANGE);
     });
+
+    it('prioriza attackProfile do vocations.json sobre ID legado', () => {
+        const profile = resolvePlayerAttackProfile('custom_sorcerer', {
+            attackProfile: { attackType: 'magic', range: 5 },
+        });
+        expect(profile.attackType).toBe('magic');
+        expect(profile.range).toBe(5);
+    });
 });
 
 describe('isPlayerInAttackRange', () => {

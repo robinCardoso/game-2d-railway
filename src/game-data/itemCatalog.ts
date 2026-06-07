@@ -3,6 +3,7 @@ import {
     type ItemCatalogDocument,
     type ItemCatalogEntry,
 } from './itemCatalogTypes';
+import { resolveApiUrl } from '../shared/apiUrl';
 
 const CATALOG_URL = '/item_catalog.json';
 
@@ -36,7 +37,7 @@ export function itemExistsInCatalog(itemId: string): boolean {
 /** Carrega `public/item_catalog.json`. */
 export async function loadItemCatalog(): Promise<ItemCatalogDocument> {
     try {
-        const res = await fetch(CATALOG_URL, { cache: 'no-store' });
+        const res = await fetch(resolveApiUrl(CATALOG_URL), { cache: 'no-store' });
         if (!res.ok) {
             console.warn('[ItemCatalog] item_catalog.json ausente — catálogo vazio.');
             rebuildIndex({ items: [] });

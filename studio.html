@@ -1144,6 +1144,30 @@
               </div>
             </div>
 
+            <!-- Perfil de combate (alcance) -->
+            <fieldset style="border: 1px solid #2d3139; border-radius: 6px; padding: 8px 10px; margin: 0;">
+              <legend style="font-size: 10px; color: var(--accent-color); font-weight: bold; text-transform: uppercase; padding: 0 4px;">Combate — alcance</legend>
+              <div style="display: grid; grid-template-columns: 1fr 80px auto; gap: 8px; align-items: end;">
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Tipo de ataque</label>
+                  <select id="vocAttackType" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 5px; font-size: 10px; outline: none; box-sizing: border-box;">
+                    <option value="melee">Melee (corpo a corpo)</option>
+                    <option value="distance">Distância (arco/besta)</option>
+                    <option value="magic">Magia</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Alcance (SQM)</label>
+                  <input type="number" id="vocAttackRange" min="1" max="15" value="1" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+                <label style="font-size: 9px; color: var(--text-dim); display: flex; align-items: center; gap: 4px; padding-bottom: 4px; white-space: nowrap;">
+                  <input type="checkbox" id="vocAttackLos" />
+                  Exige linha de visão
+                </label>
+              </div>
+              <p style="font-size: 9px; color: var(--text-dim); margin: 6px 0 0;">Melee 1 SQM (8 direções). Magia/distância: até o alcance em tiles (Chebyshev). Salvo em <code>vocations.json</code>.</p>
+            </fieldset>
+
             <!-- Stats Base -->
             <fieldset style="border: 1px solid #2d3139; border-radius: 6px; padding: 8px 10px; margin: 0;">
               <legend style="font-size: 10px; color: var(--accent-color); font-weight: bold; text-transform: uppercase; padding: 0 4px;">Atributos Base (Lvl 1)</legend>

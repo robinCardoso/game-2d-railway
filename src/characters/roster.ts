@@ -8,6 +8,7 @@ import {
 import type { CharacterRow } from '../shared/types';
 import { track } from '../shared/analytics';
 import { resolveAnimationSourceRect } from '../character/sheetFrameLayout';
+import { resolveApiUrl } from '../shared/apiUrl';
 
 const session = await requireAuth();
 const errEl = document.getElementById('rosterError') as HTMLElement;
@@ -90,7 +91,8 @@ async function drawCharacterPreview(canvas: HTMLCanvasElement, spriteSheetUrl: s
     if (!ctx) return;
 
     // 1. Carrega a config JSON
-    const jsonUrl = spriteSheetUrl.replace(/\.png$/i, '.json');
+    const cleanPath = spriteSheetUrl.replace(/^\//, '');
+    const jsonUrl = resolveApiUrl('/' + cleanPath.replace(/\.png$/i, '.json'));
     let config: CharacterConfig | null = null;
     try {
         const res = await fetch(jsonUrl);
@@ -108,7 +110,7 @@ async function drawCharacterPreview(canvas: HTMLCanvasElement, spriteSheetUrl: s
         img.onload = () => resolve(true);
         img.onerror = () => resolve(false);
     });
-    img.src = spriteSheetUrl;
+    img.src = resolveApiUrl('/' + cleanPath);
     if (!(await loaded)) return;
 
     const frameWidth = config?.frameWidth ?? 32;

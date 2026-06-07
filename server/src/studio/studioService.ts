@@ -177,7 +177,7 @@ export class StudioService {
     }
 
     listCharacters(): ApiResult {
-        const charactersDir = paths.charactersDir;
+        const { charactersDir } = paths;
         const jsonFiles = getJsonFiles(charactersDir);
         const folders = getSubdirectories(charactersDir, charactersDir);
         const characters = jsonFiles.map((filePath) => {
@@ -194,7 +194,7 @@ export class StudioService {
     }
 
     listMapSprites(): ApiResult {
-        const tilesDir = paths.tilesDir;
+        const { tilesDir } = paths;
         const mapsDir = mapsTilesDir();
         const allPngs = getPngFiles(mapsDir);
         const folders = getSubdirectories(mapsDir, mapsDir);
@@ -349,20 +349,26 @@ export class StudioService {
     }
 
     saveMapSprite(body: Record<string, unknown>): ApiResult {
-        const name = body.name as string;
-        const assetType = body.assetType;
-        const category = body.category;
-        const spriteBase64 = body.spriteBase64;
-        const properties = (body.properties ?? {}) as Record<string, unknown>;
+        const {
+            name: rawName,
+            assetType,
+            category,
+            spriteBase64,
+            properties: rawProperties,
+            fileKey: explicitFileKey,
+            previousFileKey: rawPreviousFileKey,
+        } = body;
+        const name = rawName as string;
+        const properties = (rawProperties ?? {}) as Record<string, unknown>;
         const fileKey =
-            resolveMapSpriteFileKey({ explicitFileKey: body.fileKey, displayName: name }) ??
+            resolveMapSpriteFileKey({ explicitFileKey, displayName: name }) ??
             fileKeyFromDisplayName(String(name));
         if (!fileKey) {
             return { status: 400, body: { error: 'Nome ou fileKey do sprite inválido.' } };
         }
         const previousFileKey =
-            typeof body.previousFileKey === 'string'
-                ? normalizeMapSpriteFileKey(body.previousFileKey)
+            typeof rawPreviousFileKey === 'string'
+                ? normalizeMapSpriteFileKey(rawPreviousFileKey)
                 : '';
         const subPath = sanitizeMapSpriteSubPath(category);
         const targetDir = path.join(mapsTilesDir(), subPath);
@@ -411,9 +417,7 @@ export class StudioService {
     }
 
     saveMapSpritesBatch(body: Record<string, unknown>): ApiResult {
-        const assetType = body.assetType;
-        const category = body.category;
-        const sprites = body.sprites;
+        const { assetType, category, sprites } = body;
         if (!Array.isArray(sprites) || sprites.length === 0) {
             return { status: 400, body: { error: 'Lista de sprites vazia.' } };
         }
@@ -429,10 +433,13 @@ export class StudioService {
         }
         let savedCount = 0;
         for (const sprite of sprites) {
-            const s = sprite as Record<string, unknown>;
-            const spriteName = String(s.name);
-            const spriteBase64 = s.spriteBase64;
-            const properties = (s.properties ?? {}) as Record<string, unknown>;
+            const {
+                name: spriteNameRaw,
+                spriteBase64,
+                properties: rawProperties,
+            } = sprite as Record<string, unknown>;
+            const spriteName = String(spriteNameRaw);
+            const properties = (rawProperties ?? {}) as Record<string, unknown>;
             const filename = spriteName.toLowerCase().replace(/[^a-z0-9]/g, '_');
             if (spriteBase64 && String(spriteBase64).startsWith('data:image/png;base64,')) {
                 const imageBuffer = Buffer.from(String(spriteBase64).replace(/^data:image\/png;base64,/, ''), 'base64');
@@ -507,10 +514,9 @@ export class StudioService {
     }
 
     saveCharacter(body: Record<string, unknown>): ApiResult {
-        const name = body.name as string;
-        const category = body.category;
-        const spriteBase64 = body.spriteBase64;
-        const configJson = body.configJson as Record<string, unknown>;
+        const { name: rawName, category, spriteBase64, configJson: rawConfigJson } = body;
+        const name = rawName as string;
+        const configJson = rawConfigJson as Record<string, unknown>;
         const filename = String(name).toLowerCase().replace(/[^a-z0-9]/g, '_');
         const config = getGameConfig();
         const baseDirClean = config.charactersDir.replace(/\/+$/, '');
@@ -681,6 +687,7 @@ export class StudioService {
         fs.writeFileSync(paths.vocationsJsonPath, JSON.stringify(vocations, null, 2), 'utf-8');
 
         const codeContent = `import { CharacterStats } from '../../../shared/types/character';
+import type { VocationAttackProfileConfig } from '../../../shared/playerAttack';
 
 export interface VocationConfig {
   readonly name: string;
@@ -693,6 +700,7 @@ export interface VocationConfig {
     readonly health: number;
     readonly mana: number;
   };
+  readonly attackProfile?: VocationAttackProfileConfig;
 }
 
 export const VOCATIONS: Record<string, VocationConfig> = ${JSON.stringify(vocations, null, 2)};

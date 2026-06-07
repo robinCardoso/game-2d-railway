@@ -1,6 +1,7 @@
 import { getSpriteTilePlacement, drawSpriteYellowPulseHighlight, type SpriteSourceRect, type SpriteTilePlacement } from '../character/spriteDraw';
 import { shouldDrawCreatureCorpse } from '../game/creatureDeathLifecycle';
 import { drawCombatTargetRing } from '../game/combatTargetRing';
+import { drawFloatingDamages, type FloatingDamageEntry } from '../game/floatingCombatText';
 import type { GameEntity } from '../character/entity';
 import type { SpriteAnimationController } from '../character/spriteAnimation';
 import { ENGINE_CONFIG } from './config';
@@ -152,6 +153,7 @@ export interface DepthSortCamera {
 }
 
 export interface RemotePlayerDepthEntry {
+    id: string;
     tileX: number;
     tileY: number;
     z: number;
@@ -165,6 +167,7 @@ export interface RemotePlayerDepthEntry {
     maxHealth?: number;
     mana?: number;
     maxMana?: number;
+    floatingDamages?: FloatingDamageEntry[];
 }
 
 export function footSortKeyFromPlacement(
@@ -473,9 +476,10 @@ export function collectNpcDepthDrawables(
     return drawables;
 }
 
-/** Anel de alvo de combate — no chão, atrás do mob (sortY ligeiramente menor). */
+/** Anel de alvo de combate — no chão, atrás do mob ou player (sortY ligeiramente menor). */
 export function collectCombatTargetRingDrawable(
     npcs: GameEntity[],
+    remotes: RemotePlayerDepthEntry[],
     targetId: string | null,
     z: number,
     camera: DepthSortCamera,
@@ -484,39 +488,69 @@ export function collectCombatTargetRingDrawable(
 ): DepthDrawable[] {
     if (!targetId) return [];
 
-    const target = npcs.find((npc) => npc.id === targetId);
-    if (
-        !target ||
-        target.type !== 'monster' ||
-        target.isDead ||
-        target.worldZ !== z ||
-        !shouldDrawCreatureCorpse(target, nowMs)
-    ) {
-        return [];
+    // Tenta encontrar nos npcs (monstros)
+    const targetNpc = npcs.find((npc) => npc.id === targetId);
+    if (targetNpc) {
+        if (
+            targetNpc.isDead ||
+            targetNpc.worldZ !== z ||
+            !shouldDrawCreatureCorpse(targetNpc, nowMs)
+        ) {
+            return [];
+        }
+        const sortY = targetNpc.worldY + tileSize - 0.5;
+        const sortX = targetNpc.worldX + tileSize / 2;
+        const zoom = camera.zoom ?? 1;
+        return [
+            {
+                sortY,
+                sortX,
+                draw: (drawCtx) => {
+                    drawCombatTargetRing(
+                        drawCtx,
+                        targetNpc.worldX,
+                        targetNpc.worldY,
+                        camera.x,
+                        camera.y,
+                        tileSize,
+                        zoom,
+                        nowMs
+                    );
+                },
+            },
+        ];
     }
 
-    const sortY = target.worldY + tileSize - 0.5;
-    const sortX = target.worldX + tileSize / 2;
-    const zoom = camera.zoom ?? 1;
-
-    return [
-        {
-            sortY,
-            sortX,
-            draw: (drawCtx) => {
-                drawCombatTargetRing(
-                    drawCtx,
-                    target.worldX,
-                    target.worldY,
-                    camera.x,
-                    camera.y,
-                    tileSize,
-                    zoom,
-                    nowMs
-                );
+    // Se não for monstro, tenta encontrar nos jogadores remotos
+    const targetRemote = remotes.find((r) => r.id === targetId);
+    if (targetRemote) {
+        if (targetRemote.z !== z) return [];
+        const worldX = targetRemote.worldX ?? targetRemote.tileX * tileSize;
+        const worldY = targetRemote.worldY ?? targetRemote.tileY * tileSize;
+        const sortY = worldY + tileSize - 0.5;
+        const sortX = worldX + tileSize / 2;
+        const zoom = camera.zoom ?? 1;
+        return [
+            {
+                sortY,
+                sortX,
+                draw: (drawCtx) => {
+                    drawCombatTargetRing(
+                        drawCtx,
+                        worldX,
+                        worldY,
+                        camera.x,
+                        camera.y,
+                        tileSize,
+                        zoom,
+                        nowMs
+                    );
+                },
             },
-        },
-    ];
+        ];
+    }
+
+    return [];
 }
 
 export function collectRemoteDepthDrawables(
@@ -524,6 +558,7 @@ export function collectRemoteDepthDrawables(
     z: number,
     camera: DepthSortCamera,
     tileSize: number,
+    nowMs?: number
 ): DepthDrawable[] {
     const drawables: DepthDrawable[] = [];
     const zoom = camera.zoom ?? 1;
@@ -573,6 +608,12 @@ export function collectRemoteDepthDrawables(
                     const rMaxMp = remote.maxMana ?? 50;
                     const rMp = remote.mana ?? rMaxMp;
                     drawEntityHealthAndManaBar(drawCtx, x, y + 6, rHp, rMaxHp, rMp, rMaxMp);
+
+                    if (remote.floatingDamages && remote.floatingDamages.length > 0) {
+                        const anchorCenterX = placement.drawX + placement.drawW / 2;
+                        const anchorTopY = placement.drawY;
+                        drawFloatingDamages(drawCtx, remote.floatingDamages, anchorCenterX, anchorTopY, nowMs ?? performance.now());
+                    }
                 },
             });
             continue;
@@ -619,6 +660,12 @@ export function collectRemoteDepthDrawables(
                     rMp,
                     rMaxMp
                 );
+
+                if (remote.floatingDamages && remote.floatingDamages.length > 0) {
+                    const anchorCenterX = rx + tileSize / 2;
+                    const anchorTopY = ry;
+                    drawFloatingDamages(drawCtx, remote.floatingDamages, anchorCenterX, anchorTopY, nowMs ?? performance.now());
+                }
             },
         });
     }

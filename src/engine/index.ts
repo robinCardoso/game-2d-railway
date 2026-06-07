@@ -47,6 +47,7 @@ export {
     MAP_FORMAT_ID,
     MAP_SCHEMA_PATH,
     TILE_CATALOG_PATH,
+    getTileCatalogUrl,
     tileToCatalogEntry,
 } from './tileCatalog';
 export {

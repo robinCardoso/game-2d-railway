@@ -3,6 +3,7 @@
  * `tiles/effects/combat/target_ring.png` + JSON de config.
  */
 import { removeChromaKey } from '../utils/imageProcessor';
+import { resolveApiUrl } from '../shared/apiUrl';
 
 export interface CombatTargetRingConfig {
     sheetUrl: string;
@@ -15,7 +16,7 @@ export interface CombatTargetRingConfig {
 }
 
 const DEFAULT_CONFIG: CombatTargetRingConfig = {
-    sheetUrl: '/tiles/effects/combat/target_ring.png',
+    sheetUrl: 'tiles/effects/combat/target_ring.png',
     frameWidth: 64,
     frameHeight: 64,
     frameCount: 3,
@@ -46,7 +47,7 @@ export function ensureCombatTargetRingLoaded(): void {
     if (loadStarted) return;
     loadStarted = true;
 
-    void fetch('/tiles/effects/combat/target_ring.json')
+    void fetch(resolveApiUrl('/tiles/effects/combat/target_ring.json'))
         .then((res) => (res.ok ? res.json() : null))
         .then((json: Partial<CombatTargetRingConfig> | null) => {
             const img = new Image();
@@ -54,12 +55,13 @@ export function ensureCombatTargetRingLoaded(): void {
             img.onerror = () => {
                 console.warn('[combatTargetRing] PNG não encontrado:', config.sheetUrl);
             };
-            img.src = (json?.sheetUrl as string | undefined) ?? DEFAULT_CONFIG.sheetUrl;
+            const sheetUrl = (json?.sheetUrl as string | undefined) ?? DEFAULT_CONFIG.sheetUrl;
+            img.src = resolveApiUrl('/' + sheetUrl.replace(/^\//, ''));
         })
         .catch(() => {
             const img = new Image();
             img.onload = () => applySheetFromImage(img);
-            img.src = DEFAULT_CONFIG.sheetUrl;
+            img.src = resolveApiUrl('/' + DEFAULT_CONFIG.sheetUrl.replace(/^\//, ''));
         });
 }
 

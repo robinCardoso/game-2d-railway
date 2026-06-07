@@ -1108,18 +1108,46 @@ Sessão dedicada à resolução de problemas de usabilidade que causavam perda d
 ### 48.3 Flags de mapa no JSON
 - `public/maps/*.json` passam a incluir `pvpEnabled` e `instanced` explicitos (rookgaard false/false, mainland true/false, orc_cave true/true, meu_mapa true/false).
 
-### 48.5 Alcance de ataque por vocação (shared/playerAttack.ts)
+### 48.5 Alcance de ataque por vocação (shared/playerAttack.ts + Studio)
 - Distância em **Chebyshev** (`max(|dx|, |dy|)`): melee adjacente inclui **diagonal**.
-- **Knight** (default): melee, 1 SQM.
-- **Mage / Sorcerer**: magic, até 7 SQM.
-- **Archer / Paladin**: distance, até 7 SQM.
-- Servidor (`GameRoom`, `RoomCreatureManager`) e cliente (`playCombat`) usam o mesmo perfil; dano via `processAttack(attackType)` da vocação.
-- Testes: `shared/playerAttack.test.ts`, `pvp.test.ts` (diagonal, mage 7/8 SQM).
+- Campo `attackProfile` em `vocations.json` / `VocationConfig`: `attackType`, `range`, `requiresLineOfSight`.
+- **Gerenciar Vocações** no Studio (`#vocationEditorModal`): tipo, alcance (1–15 SQM) e checkbox de linha de visão.
+- Fallback por ID legado (`mage`, `sorcerer`, `archer`…) se `attackProfile` ausente.
+- Servidor e cliente leem o mesmo perfil; dano via `processAttack(attackType)`.
+- Testes: `shared/playerAttack.test.ts`, `pvp.test.ts`.
 
 ### 48.4 Checklist manual PvP (Railway — executar após deploy)
 - [ ] Jogador A mata B em mainland; B vê dano, morte e respawn no templo.
 - [ ] A e observador C veem B teleportar com HP cheio (`player_respawned`).
 - [ ] B reloga e permanece no spawn com HP persistido.
 - [ ] Ataque em rookgaard bloqueado com toast `NO_PVP_MAP`.
+
+---
+
+## 49. Feedback visual PvP — target ring, HP e hits (2026-06-07)
+
+### 49.1 Escopo
+- Paridade visual entre PvE e PvP: anel de alvo (`target_ring`), barra de vida remota e números de dano flutuantes nos jogadores remotos.
+
+### 49.2 Implementação
+- `depthSortDraw.ts`: `RemotePlayerDepthEntry` com `id`, HP, mana, `floatingDamages`; `collectCombatTargetRingDrawable` busca alvo em `remotes`; hits no ramo principal e fallback (placeholder).
+- `remotePlayerSprites.ts`: `spawnFloatingDamage`, prune em `tick`, fila `pendingDamages` para hits antes do sprite carregar, `buildRemoteDepthEntries` propaga snapshot de rede.
+- `playApp.ts`: `remoteEntries` no Pass 2 do Y-sort; `onPlayerDamaged` chama `remoteSprites.spawnFloatingDamage` (HP já atualizado em `gameNetClient`).
+- `tileCatalog.ts`: `getTileCatalogUrl()` com `resolveApiUrl` para Electron/produção.
+- Protocolo/servidor: `PlayerSnapshot` e `player_respawned` com `mana`/`maxMana` para barra azul remota.
+
+### 49.3 Testes automatizados
+- `src/net/remotePlayerSprites.test.ts` — propagação de depth entry, fila de danos pendentes.
+- `src/engine/depthSortDraw.combat.test.ts` — target ring em mob, remoto e filtro por Z.
+- `src/engine/tileCatalog.test.ts` — URL do catálogo.
+
+### 49.4 Checklist manual — feedback visual (2 clientes)
+1. Abrir duas instâncias (browser ou Electron) no mesmo mapa com `pvpEnabled: true`.
+2. Player A: botão direito em Player B para travar alvo — confirmar anel amarelo no chão sob B.
+3. Player A ataca B — confirmar números vermelhos de dano sobre B (tela do atacante).
+4. Confirmar barra de vida acima de B caindo em tempo real na tela do atacante.
+5. Na tela de B (vítima): confirmar dano flutuante local e queda da própria barra de HP.
+6. Repetir com B recém-conectado (antes do sprite carregar) — hits não devem sumir após outfit aparecer.
+7. Regressão PvE: mob ainda mostra ring, HP e hits ao atacar criatura.
 
 

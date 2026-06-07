@@ -1,4 +1,5 @@
 import type { CharacterStats } from '../../../shared/types/character';
+import type { VocationAttackProfileConfig } from '../../../shared/playerAttack';
 
 export interface VocationConfig {
   readonly name: string;
@@ -11,11 +12,13 @@ export interface VocationConfig {
     readonly health: number;
     readonly mana: number;
   };
+  readonly attackProfile?: VocationAttackProfileConfig;
 }
 
 export const VOCATIONS: Record<string, VocationConfig> = {
   knight: {
     name: 'Knight',
+    attackProfile: { attackType: 'melee', range: 1, requiresLineOfSight: false },
     baseStats: {
       melee: 10,
       magicAttack: 1,
@@ -38,6 +41,7 @@ export const VOCATIONS: Record<string, VocationConfig> = {
 
   mage: {
     name: 'Mage',
+    attackProfile: { attackType: 'magic', range: 7, requiresLineOfSight: false },
     baseStats: {
       melee: 2,
       magicAttack: 12,
@@ -60,6 +64,7 @@ export const VOCATIONS: Record<string, VocationConfig> = {
 
   archer: {
     name: 'Archer',
+    attackProfile: { attackType: 'distance', range: 7, requiresLineOfSight: false },
     baseStats: {
       melee: 4,
       magicAttack: 3,

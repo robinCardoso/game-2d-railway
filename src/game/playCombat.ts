@@ -26,7 +26,7 @@ export interface PlayCombatCallbacks {
         level: number;
         leveledUp: boolean;
     }) => void;
-    faceToward: (target: GameEntity) => void;
+    faceToward: (target: { tileX: number; tileY: number }) => void;
     onAttackSwing?: () => void;
 }
 
@@ -251,9 +251,14 @@ function getPlayerAttackCooldownMs(
     return Math.max(200, stats.attackSpeed || DEFAULT_ATTACK_COOLDOWN_MS);
 }
 
-function isAdjacentToPlayer(target: GameEntity, player: PlayCombatPlayer): boolean {
+function isAdjacentToPlayer(
+    target: GameEntity,
+    player: PlayCombatPlayer,
+    character: CharacterRow
+): boolean {
     const foot = target.getFootTile(ENGINE_CONFIG.TILE_SIZE);
-    const profile = resolvePlayerAttackProfile();
+    const vocationId = (character.vocation as VocationId) || 'knight';
+    const profile = resolvePlayerAttackProfile(vocationId, getVocationById(vocationId));
     return isPlayerInAttackRange(
         { tileX: player.tileX, tileY: player.tileY, z: player.worldZ },
         { tileX: foot.tileX, tileY: foot.tileY, z: target.worldZ },
@@ -342,10 +347,14 @@ export function tickPlayCombat(options: {
             return;
         }
 
+        if (!options.stepping) {
+            options.callbacks.faceToward(target);
+        }
+
         if (options.nowMs < attackCooldownUntil || options.stepping) return;
 
         const vocationId = (options.character.vocation as VocationId) || 'knight';
-        const attackProfile = resolvePlayerAttackProfile(vocationId);
+        const attackProfile = resolvePlayerAttackProfile(vocationId, getVocationById(vocationId));
         if (
             !isPlayerInAttackRange(
                 { tileX: options.player.tileX, tileY: options.player.tileY, z: options.player.worldZ },
@@ -359,9 +368,6 @@ export function tickPlayCombat(options: {
         const cooldownMs = getPlayerAttackCooldownMs(options.character, options.characterSpeed);
         attackCooldownUntil = options.nowMs + cooldownMs;
 
-        options.callbacks.faceToward({
-            getFootTile: () => ({ tileX: target.tileX, tileY: target.tileY })
-        } as any);
         options.callbacks.onAttackSwing?.();
 
         if (options.server?.multiplayerConfigured && options.server.wsConnected) {
@@ -372,8 +378,13 @@ export function tickPlayCombat(options: {
 
     const target = resolveCombatTarget(options.npcs);
     if (!target) return;
+
+    if (!options.stepping) {
+        options.callbacks.faceToward(target);
+    }
+
     if (options.nowMs < attackCooldownUntil || options.stepping) return;
-    if (!isAdjacentToPlayer(target, options.player)) return;
+    if (!isAdjacentToPlayer(target, options.player, options.character)) return;
 
     executeAttack(target, options);
 }

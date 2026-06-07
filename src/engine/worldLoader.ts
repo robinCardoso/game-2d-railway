@@ -8,6 +8,7 @@ import { loadMapFromJson } from './worldMap';
 import type { PortalData } from './types';
 import type { WorldMap, SpawnPoint, TileMetadata, HouseData, CreatureSpawn } from './types';
 import type { LayerMap } from './mapPaintLayers';
+import { resolveApiUrl } from '../shared/apiUrl';
 
 export interface LoadedMapResult {
     worldMap: WorldMap;
@@ -33,8 +34,8 @@ export async function loadMapFile(
     entry: MapEntry,
     tileRegistry?: import('./types').TileRegistry
 ): Promise<LoadedMapResult> {
-    const url = `/${entry.file}`;
-    const response = await fetch(url);
+    const url = entry.file;
+    const response = await fetch(resolveApiUrl('/' + url.replace(/^\//, '')));
     if (!response.ok) {
         throw new Error(`[WorldLoader] Falha ao carregar o mapa "${entry.id}" em "${url}": HTTP ${response.status}`);
     }

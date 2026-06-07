@@ -1,4 +1,5 @@
 import type { Gender, VocationId } from '../../../shared/types/character';
+import { resolveApiUrl } from '../../shared/apiUrl';
 
 export type OutfitPreset = {
   id: string;
@@ -11,7 +12,7 @@ export type OutfitPreset = {
 };
 
 export async function loadOutfitPresets(): Promise<OutfitPreset[]> {
-  const response = await fetch('/outfit_presets.json');
+  const response = await fetch(resolveApiUrl('/outfit_presets.json'));
 
   if (!response.ok) {
     throw new Error('Erro ao carregar outfit_presets.json');

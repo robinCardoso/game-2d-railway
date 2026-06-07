@@ -183,6 +183,8 @@ export function applyServerMessageToStore(msg: ServerMessage): void {
                 p.instanceId = msg.instanceId;
                 p.health = msg.health;
                 p.maxHealth = msg.maxHealth;
+                if (msg.mana !== undefined) p.mana = msg.mana;
+                if (msg.maxMana !== undefined) p.maxMana = msg.maxMana;
             }
             break;
         }

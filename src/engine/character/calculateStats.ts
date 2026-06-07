@@ -1,4 +1,5 @@
 import { CharacterStats } from '../../../shared/types/character.js';
+import type { VocationAttackProfileConfig } from '../../../shared/playerAttack.js';
 
 export interface VocationConfig {
   readonly name: string;
@@ -11,6 +12,8 @@ export interface VocationConfig {
     readonly health: number;
     readonly mana: number;
   };
+  /** Tipo e alcance de ataque — editável no Studio (Gerenciar Vocações). */
+  readonly attackProfile?: VocationAttackProfileConfig;
 }
 
 /**

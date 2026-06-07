@@ -1,6 +1,7 @@
 import type { AnimationDef, CharacterSpriteConfig } from '../character/spriteAnimation';
 import { resolveAnimationSourceRect } from '../character/sheetFrameLayout';
 import { removeChromaKey } from '../utils/imageProcessor';
+import { resolveApiUrl } from '../shared/apiUrl';
 
 const imageCache = new Map<string, Promise<HTMLImageElement | null>>();
 
@@ -23,7 +24,7 @@ async function loadSpriteImage(config: CharacterSpriteConfig): Promise<HTMLImage
     if (!pending) {
         pending = (async () => {
             try {
-                const src = normalizeSpriteUrl(url);
+                const src = resolveApiUrl(normalizeSpriteUrl(url));
                 const img = new Image();
                 img.crossOrigin = 'anonymous';
                 await new Promise<void>((resolve, reject) => {

@@ -11,6 +11,7 @@ import {
     type VocationsMap,
 } from '../game-data/vocationUi';
 import { getRuntimeVocations, loadRuntimeVocations } from '../game-data/vocationRegistry';
+import { resolveApiUrl } from '../shared/apiUrl';
 
 const session = await requireAuth();
 const errEl = document.getElementById('createError') as HTMLElement;
@@ -66,7 +67,8 @@ function applyChromaKey(imageData: ImageData, tolerance: number): void {
  * Converte tiles/characters/vocations/male/knight.png → tiles/characters/vocations/male/knight.json
  */
 async function loadCharacterConfig(spriteSheetUrl: string): Promise<CharacterConfig | null> {
-    const jsonUrl = spriteSheetUrl.replace(/\.png$/i, '.json');
+    const cleanPath = spriteSheetUrl.replace(/^\//, '');
+    const jsonUrl = resolveApiUrl('/' + cleanPath.replace(/\.png$/i, '.json'));
     try {
         const response = await fetch(jsonUrl);
         if (!response.ok) return null;
@@ -101,7 +103,7 @@ async function startAnimatedPreview(outfit: OutfitPreset): Promise<void> {
         img.onerror = () => resolve(false);
     });
 
-    img.src = outfit.spriteSheetUrl;
+    img.src = resolveApiUrl('/' + outfit.spriteSheetUrl.replace(/^\//, ''));
     const loaded = await imageLoaded;
     if (!loaded || thisAnimId !== previewAnimId) return;
 

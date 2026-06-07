@@ -84,6 +84,8 @@ interface ConnectedPlayer {
     experience: number;
     health: number;
     maxHealth: number;
+    mana: number;
+    maxMana: number;
     lastAttackAtMs: number;
     lastMoveRejectionSentAtMs: number;
     socket: WebSocket;
@@ -214,6 +216,8 @@ export class GameRoom {
             appearance: p.appearance,
             health: p.health,
             maxHealth: p.maxHealth,
+            mana: p.mana,
+            maxMana: p.maxMana,
         };
     }
 
@@ -222,8 +226,10 @@ export class GameRoom {
         const vocationConfig = this.vocations.get(vocationId);
         const stats = vocationConfig
             ? calculateStatsForLevel(vocationConfig, player.level)
-            : { health: 100 };
+            : { health: 100, mana: 50 };
         player.maxHealth = stats.health;
+        player.maxMana = stats.mana;
+        player.mana = Math.min(player.mana, player.maxMana);
     }
 
     private isWalkable(mapId: string, tileX: number, tileY: number, z: number): boolean {
@@ -464,14 +470,20 @@ export class GameRoom {
             experience: joinExp,
             health: 100, // will be overwritten below
             maxHealth: 100,
+            mana: 50,
+            maxMana: 50,
             lastAttackAtMs: 0,
             socket,
         };
 
         const pVocationId = (appearance.vocationId || 'knight') as VocationId;
         const pVocationConfig = this.vocations.get(pVocationId);
-        const pStats = pVocationConfig ? calculateStatsForLevel(pVocationConfig, joinLevelFromExp) : { health: 100 };
+        const pStats = pVocationConfig
+            ? calculateStatsForLevel(pVocationConfig, joinLevelFromExp)
+            : { health: 100, mana: 50 };
         player.maxHealth = pStats.health;
+        player.maxMana = pStats.mana;
+        player.mana = pStats.mana;
         
         // Use health from ticket if valid, otherwise default to max health
         if (msg.enterTicket) {
@@ -940,8 +952,11 @@ export class GameRoom {
                 return;
             }
 
-            // 5. Melee range (mesma regra que PvE: isPlayerInAttackRange)
-            const attackProfile = resolvePlayerAttackProfile(vocationId);
+            const vocationConfig = this.vocations.get(vocationId);
+            if (!vocationConfig) return;
+
+            // 5. Alcance (mesma regra que PvE: isPlayerInAttackRange + attackProfile da vocação)
+            const attackProfile = resolvePlayerAttackProfile(vocationId, vocationConfig);
             if (
                 !isPlayerInAttackRange(
                     { tileX: player.tileX, tileY: player.tileY, z: player.z },
@@ -957,9 +972,6 @@ export class GameRoom {
             }
 
             // 6. Resolve combat stats and process damage
-            const vocationConfig = this.vocations.get(vocationId);
-            if (!vocationConfig) return;
-
             const targetVocationId = (targetPlayer.appearance.vocationId || 'knight') as VocationId;
             const targetVocationConfig = this.vocations.get(targetVocationId);
             const targetStats = targetVocationConfig ? calculateStatsForLevel(targetVocationConfig, targetPlayer.level) : { defense: 5 };
@@ -1023,6 +1035,7 @@ export class GameRoom {
                 targetPlayer.tileY = spawn.y;
                 targetPlayer.z = spawn.z;
                 targetPlayer.health = targetPlayer.maxHealth;
+                targetPlayer.mana = targetPlayer.maxMana;
 
                 if (deathZone !== ZoneType.PVP_ARENA) {
                     this.send(targetPlayer.socket, {
@@ -1057,6 +1070,8 @@ export class GameRoom {
                     z: spawn.z,
                     health: targetPlayer.health,
                     maxHealth: targetPlayer.maxHealth,
+                    mana: targetPlayer.mana,
+                    maxMana: targetPlayer.maxMana,
                 });
 
                 this.sendPositionCorrection(targetPlayer);

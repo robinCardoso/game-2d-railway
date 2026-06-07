@@ -1,5 +1,6 @@
 import { removeChromaKey } from '../utils/imageProcessor';
 import { resolveAnimationSourceRect } from './sheetFrameLayout';
+import { resolveApiUrl } from '../shared/apiUrl';
 
 export type CharacterState = 'idle' | 'walk' | 'attack' | 'sit' | 'dead' | 'cast';
 export type Direction = 'up' | 'down' | 'left' | 'right';
@@ -63,7 +64,9 @@ export class SpriteAnimationController {
     public loadImage() {
         this.isLoaded = false;
         this.image = new Image();
-        this.image.src = this.config.spriteSheetUrl;
+        this.image.src = this.config.spriteSheetUrl.startsWith('data:')
+            ? this.config.spriteSheetUrl
+            : resolveApiUrl('/' + this.config.spriteSheetUrl.replace(/^\//, ''));
         this.image.onload = async () => {
             if (this.config.chromaKey && this.image) {
                 try {
