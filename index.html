@@ -3,58 +3,167 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Elarion Online — MMORPG 2D</title>
+    <title>Elarion Online — MMORPG 2D de Mundo Aberto</title>
+    <meta name="description" content="Jogue Elarion Online, um MMORPG 2D de mundo aberto completo com treino de skills clássico, dungeons automatizadas e itens evolutivos." />
     <link rel="icon" type="image/png" href="/brand/icon-elarion.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/src/landing/landing.css" />
   </head>
   <body class="landing-page">
     <header class="landing-header">
-      <div class="landing-logo">
-        <img src="/brand/icon-elarion.png" alt="Elarion Online" class="landing-logo-img" width="40" height="40" />
-        <span>Elarion Online</span>
-      </div>
-      <nav class="landing-nav">
-        <a href="login.html">Entrar</a>
-        <a href="register.html">Criar conta</a>
+      <a href="#inicio" class="landing-logo" aria-label="Elarion Online — Início">
+        <img src="/assets/brand/elarion-logo.png" alt="" class="landing-logo-img" width="40" height="40" />
+        <span class="landing-logo-text">
+          <span class="landing-logo-line">ELARION</span>
+          <span class="landing-logo-line landing-logo-line--sub">ONLINE</span>
+        </span>
+      </a>
+
+      <nav class="landing-nav" aria-label="Navegação principal">
+        <a href="#inicio" class="active" data-nav>INÍCIO</a>
+        <a href="#noticias" data-nav>NOTÍCIAS</a>
+        <a href="#ranking" data-nav>RANKING</a>
+        <a href="#comunidade" data-nav>COMUNIDADE</a>
+        <a href="#suporte" data-nav>SUPORTE</a>
       </nav>
+
+      <a href="login.html" class="nav-cta-btn" data-cta-play>JOGAR AGORA</a>
+
+      <button type="button" class="landing-nav-toggle" id="landingNavToggle" aria-label="Abrir menu" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
     </header>
 
-    <section class="landing-hero">
-      <h1>Bem-vindo a Elarion</h1>
-      <p>
-        Explore continentes, entre em dungeons instanciadas e encontre outros jogadores em tempo real.
-        Crie sua conta e seu personagem em minutos.
-      </p>
-      <div>
-        <a id="ctaPlay" class="landing-cta" href="login.html">Jogar agora</a>
-        <a class="landing-cta landing-cta--secondary" href="register.html">Criar conta</a>
-      </div>
-    </section>
+    <main>
+      <section id="inicio" class="hero-section">
+        <div class="hero-bg-overlay"></div>
 
-    <section class="landing-features">
-      <article class="landing-feature">
-        <h3>Multi-mapas</h3>
-        <p>Vá de Rookgaard ao continente principal e atravesse portais para novas áreas.</p>
-      </article>
-      <article class="landing-feature">
-        <h3>Dungeons instanciadas</h3>
-        <p>Cada grupo pode ter sua própria cópia da masmorra — loot e progresso isolados.</p>
-      </article>
-      <article class="landing-feature">
-        <h3>Multiplayer</h3>
-        <p>Veja outros jogadores no mesmo mapa em tempo real via servidor WebSocket.</p>
-      </article>
-      <article class="landing-feature">
-        <h3>Seu personagem</h3>
-        <p>Até 4 personagens por conta. Escolha nome e aparência antes de entrar no mundo.</p>
-      </article>
-    </section>
+        <div class="hero-content">
+          <div class="main-logo-container">
+            <h1 class="main-title">ELARION</h1>
+            <div class="logo-subtitle-container">
+              <span class="logo-line"></span>
+              <span class="main-subtitle">ONLINE</span>
+              <span class="logo-line"></span>
+            </div>
+          </div>
+
+          <p class="hero-pitch">UM MMORPG 2D DE MUNDO ABERTO</p>
+          <p class="hero-highlight">TREINE. EXPLORE. EVOLUA.</p>
+
+          <div class="hero-actions">
+            <a href="login.html" class="hero-btn-primary" data-cta-play>JOGAR AGORA</a>
+            <a href="#trailer" class="hero-btn-secondary" id="trailerBtn">
+              <svg class="play-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <path fill="currentColor" d="M8 5v14l11-7z"/>
+              </svg>
+              ASSISTIR TRAILER
+            </a>
+          </div>
+
+          <a href="#features" class="scroll-prompt">
+            <span class="scroll-text">JUNTE-SE A MILHARES DE AVENTUREIROS EM ELARION</span>
+            <div class="scroll-arrow" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="24" height="24">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </div>
+          </a>
+        </div>
+
+        <section id="features" class="features-section features-section--hero">
+          <div class="features-grid">
+            <article class="feature-card">
+              <div class="feature-icon-wrapper">
+                <img src="/assets/ui/icon-world.svg" alt="" width="40" height="40" class="feature-icon-img" />
+              </div>
+              <h3 class="feature-title">MUNDO ABERTO</h3>
+              <p class="feature-desc">Explore cidades, florestas, cavernas e áreas perigosas com outros jogadores.</p>
+            </article>
+
+            <article class="feature-card">
+              <div class="feature-icon-wrapper">
+                <img src="/assets/ui/icon-skill.svg" alt="" width="40" height="40" class="feature-icon-img" />
+              </div>
+              <h3 class="feature-title">TREINO DE SKILLS</h3>
+              <p class="feature-desc">Evolua seu personagem através do treino real de habilidades como nos clássicos.</p>
+            </article>
+
+            <article class="feature-card">
+              <div class="feature-icon-wrapper">
+                <img src="/assets/ui/icon-dungeon.svg" alt="" width="40" height="40" class="feature-icon-img" />
+              </div>
+              <h3 class="feature-title">DUNGEONS AUTOMATIZADAS</h3>
+              <p class="feature-desc">Entre em dungeons especiais e progrida mesmo quando estiver ausente.</p>
+            </article>
+
+            <article class="feature-card">
+              <div class="feature-icon-wrapper">
+                <img src="/assets/ui/icon-equipment.svg" alt="" width="40" height="40" class="feature-icon-img" />
+              </div>
+              <h3 class="feature-title">ITENS EVOLUTIVOS</h3>
+              <p class="feature-desc">Armas, armaduras e acessórios evoluem junto com o seu personagem.</p>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <section id="noticias" class="landing-placeholder">
+        <p class="landing-kicker">Notícias</p>
+        <h2>Atualizações do reino</h2>
+        <p class="landing-placeholder__text">Em breve — patch notes, eventos e novidades de Elarion Online.</p>
+      </section>
+
+      <section id="ranking" class="landing-placeholder">
+        <p class="landing-kicker">Ranking</p>
+        <h2>Heróis de Elarion</h2>
+        <p class="landing-placeholder__text">Em breve — ranking de nível, skills e guildas.</p>
+      </section>
+
+      <section id="comunidade" class="landing-placeholder">
+        <p class="landing-kicker">Comunidade</p>
+        <h2>Junte-se à guilda</h2>
+        <p class="landing-placeholder__text">Em breve — Discord, fórum e redes oficiais.</p>
+      </section>
+
+      <section id="suporte" class="landing-placeholder">
+        <p class="landing-kicker">Suporte</p>
+        <h2>Precisa de ajuda?</h2>
+        <p class="landing-placeholder__text">Em breve — central de suporte e FAQ do jogador.</p>
+      </section>
+
+      <section id="trailer" class="landing-trailer" hidden>
+        <div class="landing-trailer__backdrop" id="trailerBackdrop"></div>
+        <div class="landing-trailer__panel" role="dialog" aria-labelledby="trailerTitle" aria-modal="true">
+          <h2 id="trailerTitle">Trailer</h2>
+          <p>O trailer oficial de Elarion Online será publicado em breve.</p>
+          <button type="button" class="hero-btn-secondary" id="trailerClose">Fechar</button>
+        </div>
+      </section>
+
+      <section class="landing-cta-final">
+        <h2>Comece sua jornada em Elarion</h2>
+        <p>Crie sua conta, escolha sua vocação e entre no mundo aberto.</p>
+        <div class="hero-actions">
+          <a href="register.html" class="hero-btn-primary" data-cta-play>CRIAR CONTA</a>
+          <a href="login.html" class="hero-btn-secondary" data-cta-play>ENTRAR</a>
+        </div>
+      </section>
+    </main>
 
     <footer class="landing-footer">
-      <a href="terms.html">Termos</a>
-      <a href="privacy.html">Privacidade</a>
-      <span>·</span>
-      <a href="studio.html">Área de desenvolvimento (GM)</a>
+      <div class="footer-links">
+        <a href="terms.html">Termos de Uso</a>
+        <span class="footer-divider">|</span>
+        <a href="privacy.html">Política de Privacidade</a>
+        <span class="footer-divider">|</span>
+        <a href="#suporte">Suporte</a>
+        <span class="footer-divider">|</span>
+        <a href="studio.html">Área do Desenvolvedor (GM)</a>
+      </div>
+      <p class="footer-copyright">&copy; 2026 Elarion Online. Todos os direitos reservados.</p>
     </footer>
 
     <script type="module" src="/src/landing/main.ts"></script>
