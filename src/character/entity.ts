@@ -147,7 +147,7 @@ export class GameEntity {
         );
     }
 
-    /** XP ganho — mesmo estilo do dano (fonte + contorno), verde, sem balão. */
+    /** XP de jogador — preferir localPlayerFloatingText no playApp; mantido para reuso futuro. */
     spawnFloatingXp(xp: number, nowMs: number = performance.now()): void {
         if (xp <= 0) return;
         this.floatingDamages = pruneFloatingDamages(this.floatingDamages, nowMs);

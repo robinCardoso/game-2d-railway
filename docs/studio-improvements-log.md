@@ -998,3 +998,33 @@ Sessão dedicada à resolução de problemas de usabilidade que causavam perda d
 - **Arquivos:** `src/game/debug/clientDiagnostics.ts`, `shared/protocol.ts`, `server/src/GameRoom.ts`
 - **Mudança:** Inclusão dos campos `platform` e `clientBuildVersion` no handshake WS (`join`). Painel de debug local no cliente (`F3`) mostra ping, visibilidade, RTT e última vez que ocorreu state/creature/progress sync.
 - **Snapshots periódicos:** O `GameRoom.ts` envia snapshots periódicos completos quando há clientes, evitando a perda total de contexto em caso de lag no front.
+
+---
+
+## 43. Desync visual de morte de mobs online (2026-06-06)
+
+### 43.1 Problema
+- `creature_died` não trazia `tileX/tileY/z`; `applyDied` iniciava animação de morte em `worldX/worldY` do deslize (tile lógico já adiantado via `creature_moved`).
+- Corpo/efeito apareciam no SQM errado quando o mob morria durante perseguição.
+
+### 43.2 Protocolo e servidor
+- **`CreatureDiedMessage`:** campos `tileX`, `tileY`, `z` (tile autoritativo no kill).
+- **`RoomCreatureManager.processAttack`:** preenche posição da criatura no `creature_died`.
+
+### 43.3 Cliente
+- **`ServerCreatureSync.applyDied`:** snap ao tile do servidor antes de `beginCreatureDeath`.
+- **`beginCreatureDeath`:** `syncWorldToTile(TILE_SIZE)` defensivo.
+- **`applyMoved`:** ignorado se `combatHealth <= 0` (entre `creature_damaged` fatal e `creature_died`).
+- **Movimento online:** meta em `serverTiles`; **1 passo cardinal / ~320 ms** via lerp. Pacotes durante deslize só atualizam meta (`deferred: true`); próximo passo só após chegar no SQM (`tryBeginNextStep`). Sem retarget no meio do deslize (evita burst de pacotes WS).
+- **Debug:** `localStorage debug.creature.sync=1` → logs throttle em `creatureSyncDebug.ts` (`creature_moved`, `creature_damaged`, `creature_died`, `applyDied_snap`).
+- **F3:** linha “Creature desync max” quando `|world − tile×32| > 0.5px`.
+
+### 43.4 Testes
+- `src/net/serverCreatureSync.death.test.ts` — snap mid-slide + bloqueio de move pós-dano fatal.
+
+### Checklist manual
+- [ ] Matar mob parado adjacente — corpo no SQM do ataque; `desyncPx ≈ 0` com debug ligado.
+- [ ] Matar mob perseguindo — corpo no tile autoritativo (não no meio do deslize visual).
+- [ ] Andar 1 SQM após kill — corpo não “pula” para tile errado.
+- [ ] Perseguir mob andando — movimento contínuo tile a tile (sem saltos entre SQMs).
+- [ ] `npm test` — `serverCreatureSync.death.test.ts` passa.

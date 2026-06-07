@@ -130,7 +130,12 @@ export function applyServerMessageToStore(msg: ServerMessage): void {
 
         case 'creature_died': {
             const c = serverStateStore.creaturesById.get(msg.creatureId);
-            if (c) c.isDead = true;
+            if (c) {
+                c.isDead = true;
+                c.tileX = msg.tileX;
+                c.tileY = msg.tileY;
+                c.z = msg.z;
+            }
             break;
         }
 

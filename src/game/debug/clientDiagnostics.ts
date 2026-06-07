@@ -19,6 +19,7 @@ import type { GameNetClient } from '../../net/gameNetClient';
 export interface ClientDiagnosticsOptions {
     getGameNet: () => GameNetClient | null;
     getResyncController: () => ResyncController | null;
+    getMaxCreatureDesyncPx?: () => number;
 }
 
 const PANEL_ID = 'clientDiagnosticsPanel';
@@ -49,6 +50,11 @@ function buildPanelHtml(opts: ClientDiagnosticsOptions): string {
     const focused = document.hasFocus();
     const players = store.playersById.size;
     const creatures = store.creaturesById.size;
+    const creatureDesyncPx = opts.getMaxCreatureDesyncPx?.() ?? 0;
+    const creatureDesyncLine =
+        creatureDesyncPx > 0.5
+            ? `<div><span style="color:#94a3b8">Creature desync max:</span> <span style="color:#fbbf24">${creatureDesyncPx.toFixed(1)}px</span></div>`
+            : '';
 
     const statusColor = wsStatus === 'connected' ? '#4ade80' : wsStatus === 'connecting' ? '#facc15' : '#f87171';
 
@@ -76,6 +82,7 @@ function buildPanelHtml(opts: ClientDiagnosticsOptions): string {
             <div><span style="color:#94a3b8">Foco:</span> ${focused ? 'sim' : 'não'}</div>
             <div><span style="color:#94a3b8">Jogadores (store):</span> ${players}</div>
             <div><span style="color:#94a3b8">Criaturas (store):</span> ${creatures}</div>
+            ${creatureDesyncLine}
         </div>
     `;
 }
@@ -92,7 +99,7 @@ export function createClientDiagnostics(
     let panel: HTMLDivElement | null = null;
     let updateInterval: number | null = null;
 
-    function show(): void {
+    const show = (): void => {
         if (!panel) {
             panel = document.createElement('div');
             panel.id = PANEL_ID;
@@ -104,9 +111,9 @@ export function createClientDiagnostics(
                 panel.innerHTML = buildPanelHtml(opts);
             }
         }, 500);
-    }
+    };
 
-    function hide(): void {
+    const hide = (): void => {
         if (updateInterval !== null) {
             window.clearInterval(updateInterval);
             updateInterval = null;
@@ -115,13 +122,13 @@ export function createClientDiagnostics(
             panel.remove();
             panel = null;
         }
-    }
+    };
 
-    function toggle(): void {
+    const toggle = (): void => {
         visible = !visible;
         if (visible) show();
         else hide();
-    }
+    };
 
     const onKeyDown = (e: KeyboardEvent): void => {
         if (e.key === TOGGLE_KEY) {

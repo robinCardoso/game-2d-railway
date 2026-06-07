@@ -1,5 +1,6 @@
 import type { GameEntity } from '../character/entity';
 import type { CharacterSpriteConfig } from '../character/spriteAnimation';
+import { ENGINE_CONFIG } from '../engine/config';
 import {
     estimateCorpseVisibleMs,
     MONSTER_CORPSE_MIN_MS,
@@ -55,6 +56,7 @@ export function beginCreatureDeath(entity: GameEntity, nowMs: number): void {
     entity.respawnAtMs = nowMs + MONSTER_RESPAWN_MS;
     entity.setState(deathAnim.state);
     entity.animController.onAnimationEndCallback = undefined;
+    entity.syncWorldToTile(ENGINE_CONFIG.TILE_SIZE);
 }
 
 export function getCreatureRespawnAtMs(entity: GameEntity): number | undefined {

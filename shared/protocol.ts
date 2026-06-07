@@ -251,6 +251,9 @@ export interface CreatureDiedMessage {
     creatureId: string;
     mapId: string;
     instanceId?: string;
+    tileX: number;
+    tileY: number;
+    z: number;
     xpReward: number;
     killerPlayerId?: string;
 }

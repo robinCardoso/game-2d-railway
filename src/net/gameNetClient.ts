@@ -81,6 +81,9 @@ export interface GameNetClientOptions {
         creatureId: string;
         mapId: string;
         instanceId?: string;
+        tileX: number;
+        tileY: number;
+        z: number;
         xpReward: number;
         killerPlayerId?: string;
     }) => void;
@@ -590,6 +593,9 @@ export class GameNetClient {
                     creatureId: msg.creatureId,
                     mapId: msg.mapId,
                     instanceId: msg.instanceId,
+                    tileX: msg.tileX,
+                    tileY: msg.tileY,
+                    z: msg.z,
                     xpReward: msg.xpReward,
                     killerPlayerId: msg.killerPlayerId,
                 });

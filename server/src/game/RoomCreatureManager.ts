@@ -9,8 +9,10 @@ import type {
 import {
     MONSTER_STEP_MS,
     armMonsterWakeDelay,
-    resolveChaseIdleDirection,
+    chaseFaceDirectionWhenEngaged,
     isMonsterWakePaused,
+    isRangedInComfortZone,
+    resolveChaseIdleDirection,
     tickMonsterChaseStep,
     type CardinalDirection,
 } from '../../../shared/creatureChase.js';
@@ -246,6 +248,9 @@ export class RoomCreatureManager {
                 creatureId: creature.id,
                 mapId: state.mapId,
                 instanceId: state.instanceId,
+                tileX: creature.tileX,
+                tileY: creature.tileY,
+                z: creature.z,
                 xpReward: creature.xpReward,
                 killerPlayerId: attacker.playerId,
             },
@@ -352,13 +357,15 @@ export class RoomCreatureManager {
                     wakeUntilMs: creature.wakeUntilMs,
                 };
 
+                const chaseConfig = this.presets.getChaseConfig(creature.name);
+
                 const step = tickMonsterChaseStep(
                     mobState,
                     target,
                     nowMs,
                     canStepTo,
                     reservedGoals,
-                    this.presets.getChaseConfig(creature.name),
+                    chaseConfig,
                     canGoalTile
                 );
 
@@ -387,14 +394,30 @@ export class RoomCreatureManager {
                     continue;
                 }
 
-                const faceDir = resolveChaseIdleDirection(
-                    creature.tileX,
-                    creature.tileY,
-                    target.tileX,
-                    target.tileY,
-                    target.z,
-                    creature.z
-                );
+                const distToPlayer =
+                    Math.abs(target.tileX - creature.tileX) +
+                    Math.abs(target.tileY - creature.tileY);
+                const inCombatPosition =
+                    chaseConfig.chaseBehavior === 'melee'
+                        ? distToPlayer <= chaseConfig.attackRange
+                        : isRangedInComfortZone(distToPlayer, chaseConfig);
+
+                const faceDir = inCombatPosition
+                    ? chaseFaceDirectionWhenEngaged(
+                          creature.tileX,
+                          creature.tileY,
+                          target.tileX,
+                          target.tileY,
+                          chaseConfig
+                      )
+                    : resolveChaseIdleDirection(
+                          creature.tileX,
+                          creature.tileY,
+                          target.tileX,
+                          target.tileY,
+                          target.z,
+                          creature.z
+                      );
                 if (faceDir && faceDir !== creature.direction) {
                     creature.direction = faceDir;
                     moves.push({

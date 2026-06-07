@@ -125,6 +125,8 @@ Rodar após mudanças em protocolo, `GameRoom`, `remotePlayerSprites` ou `depthS
 6. [ ] Trocar de mapa — remoto some/entra na sala certa.
 7. [ ] Reconectar — `welcome` + lista de jogadores na sala.
 8. [ ] Aba em background — servidor continua; ao voltar foco, `resync_request` alinha mobs/remotos.
+9. [ ] Matar mob online em perseguição — corpo no SQM autoritativo (`creature_died` com tile); sem offset visual após mover 1 tile.
+10. [ ] `localStorage debug.creature.sync=1` — logs de desync; F3 mostra “Creature desync max” quando mob desliza.
 
 ### Aba em background (Page Visibility)
 

@@ -85,6 +85,8 @@ import { setupCapacitorLifecycle } from './runtime/capacitorLifecycle';
 import { ResyncController } from '../net/resyncController';
 import type { ClientDiagnosticsController } from './debug/clientDiagnostics';
 import { createClientDiagnostics } from './debug/clientDiagnostics';
+import { createLocalPlayerFloatingText } from './localPlayerFloatingText';
+import { getSpriteTilePlacement } from '../character/spriteDraw';
 
 const TILE_SIZE_SCREEN = ENGINE_CONFIG.TILE_SIZE;
 let TILE_TYPES = buildTileRegistry();
@@ -121,6 +123,7 @@ let activeCharacterController: SpriteAnimationController;
 let gameNet: GameNetClient | null = null;
 const remoteSprites = new RemotePlayerSpriteManager();
 const serverCreatures = new ServerCreatureSync();
+const localPlayerFloats = createLocalPlayerFloatingText();
 
 const CREATURE_SYNC_LOADING_TIMEOUT_MS = 3000;
 let playBootStartedAt = 0;
@@ -817,8 +820,8 @@ function update(): void {
                 onDamage: (target, damage) => {
                     target.spawnFloatingDamage(damage, nowMs);
                 },
-                onMonsterKilled: (target, xpReward) => {
-                    target.spawnFloatingXp(xpReward, nowMs);
+                onMonsterKilled: (_target, xpReward) => {
+                    localPlayerFloats.spawnXp(xpReward, nowMs);
                 },
                 onProgressUpdated: ({ experience, level }) => {
                     applyPlayProgressUpdate(level, experience);
@@ -826,6 +829,8 @@ function update(): void {
             },
         });
     }
+
+    localPlayerFloats.tick(nowMs);
 }
 
 function getPlayBorderDrawContext() {
@@ -1041,6 +1046,31 @@ function draw(): void {
         ctx.globalAlpha = 1;
         drawDepthSorted(ctx, depthDrawables);
 
+        if (
+            z === player.worldZ &&
+            activeCharacterController?.isLoaded &&
+            activeCharacterController.image
+        ) {
+            const rect = activeCharacterController.getSourceRect();
+            const drawScale = activeCharacterController.config.drawScale ?? 1;
+            const placement = getSpriteTilePlacement(
+                player.worldX,
+                player.worldY,
+                camX,
+                camY,
+                TILE_SIZE_SCREEN,
+                rect,
+                drawScale,
+                zoom
+            );
+            localPlayerFloats.draw(
+                ctx,
+                placement.drawX + placement.drawW / 2,
+                placement.drawY,
+                nowMs
+            );
+        }
+
         // Portais (UI) após Y-sort
         if (currentMapId && z === player.worldZ) {
             for (let y = startY; y <= endY; y++) {
@@ -1231,13 +1261,16 @@ function setupNetwork(
         },
         onCreatureDied: (msg) => {
             if (!currentMapId || msg.mapId !== currentMapId) return;
-            const entity = serverCreatures.applyDied(msg.creatureId);
+            serverCreatures.applyDied(msg.creatureId, {
+                tileX: msg.tileX,
+                tileY: msg.tileY,
+                z: msg.z,
+            });
             if (
-                entity &&
                 msg.killerPlayerId &&
                 msg.killerPlayerId === gameNet?.getLocalPlayerId()
             ) {
-                entity.spawnFloatingXp(msg.xpReward, performance.now());
+                localPlayerFloats.spawnXp(msg.xpReward, performance.now());
             }
         },
         onCreatureRespawned: (msg) => {
@@ -1383,6 +1416,7 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
     clientDiagnostics = createClientDiagnostics({
         getGameNet: () => gameNet,
         getResyncController: () => resyncController,
+        getMaxCreatureDesyncPx: () => serverCreatures.getMaxVisualDesyncPx(),
     });
     clientDiagnostics.mount();
 

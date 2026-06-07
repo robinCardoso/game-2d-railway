@@ -6,7 +6,6 @@ import type { VocationId } from '../../shared/types/character';
 import type { GameEntity } from '../character/entity';
 import type { CharacterRow } from '../shared/types';
 import type { CharacterSpeedState } from '../character/movementSpeed';
-import type { SpriteTilePlacement } from '../character/spriteDraw';
 import { applyExperienceGain } from './experience';
 import { beginCreatureDeath } from './creatureDeathLifecycle';
 import { isPlayerInAttackRange, resolvePlayerAttackProfile } from '../../shared/playerAttack';
@@ -84,40 +83,33 @@ export function clientToPlayWorld(
     };
 }
 
-function isPointInPlacement(
+export function worldPointToTile(
     worldX: number,
     worldY: number,
-    camera: PlayCombatCamera,
-    placement: SpriteTilePlacement
-): boolean {
-    const sx = worldX - camera.x;
-    const sy = worldY - camera.y;
-    return (
-        sx >= placement.drawX &&
-        sx <= placement.drawX + placement.drawW &&
-        sy >= placement.drawY &&
-        sy <= placement.drawY + placement.drawH
-    );
+    tileSize: number
+): { tileX: number; tileY: number } {
+    return {
+        tileX: Math.floor(worldX / tileSize),
+        tileY: Math.floor(worldY / tileSize),
+    };
 }
 
-function findMonsterAtWorldPoint(
+/** Seleção estilo Tibia: tile (SQM) clicado, não bbox do sprite. */
+export function findMonsterAtWorldPoint(
     npcs: GameEntity[],
     worldX: number,
     worldY: number,
     playerZ: number,
-    camera: PlayCombatCamera,
     tileSize: number
 ): GameEntity | null {
+    const { tileX, tileY } = worldPointToTile(worldX, worldY, tileSize);
     let best: GameEntity | null = null;
     let bestSortY = -Infinity;
 
     for (const npc of npcs) {
         if (npc.type !== 'monster' || npc.isDead) continue;
         if (npc.worldZ !== playerZ) continue;
-        if (!npc.animController.isLoaded || !npc.animController.image) continue;
-
-        const placement = npc.getDrawPlacement(camera, tileSize);
-        if (!isPointInPlacement(worldX, worldY, camera, placement)) continue;
+        if (!npc.occupiesTile(tileX, tileY, playerZ, tileSize)) continue;
 
         const sortY = npc.worldY + tileSize;
         if (sortY >= bestSortY) {
@@ -139,7 +131,7 @@ export function findMonsterAtClientPoint(
     tileSize: number
 ): GameEntity | null {
     const { worldX, worldY } = clientToPlayWorld(clientX, clientY, canvas, camera);
-    return findMonsterAtWorldPoint(npcs, worldX, worldY, playerZ, camera, tileSize);
+    return findMonsterAtWorldPoint(npcs, worldX, worldY, playerZ, tileSize);
 }
 
 export function updatePlayCombatHover(options: {
