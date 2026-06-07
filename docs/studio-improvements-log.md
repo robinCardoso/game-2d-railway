@@ -1093,4 +1093,25 @@ Sessão dedicada à resolução de problemas de usabilidade que causavam perda d
 - **PVP_ARENA (Zona 3):** Protege jogadores contra perda de XP caso morram nesta zona (ressuscitam com vida cheia no spawn padrão sem penalidade).
 - **PvP Aberto:** Aplica penalidade de 10% da experiência total se um jogador for derrotado por outro jogador em mundo aberto.
 
+---
+
+## 48. Robustez PvP pós-auditoria ChatGPT (2026-06-07)
+
+### 48.1 Alvo de combate explícito
+- `playCombat.ts`: `combatTarget { id, type: 'monster' | 'player' }` substitui `combatTargetId` + heurística `startsWith('p_')`.
+- `findTargetAtWorldPoint()` já retornava `type`; agora o tipo é preservado até o ataque.
+
+### 48.2 API URL
+- `resolveApiUrl()` remove barra final de `VITE_API_BASE_URL` antes de concatenar (evita `//api/...`).
+- Teste em `apiUrl.test.ts`.
+
+### 48.3 Flags de mapa no JSON
+- `public/maps/*.json` passam a incluir `pvpEnabled` e `instanced` explicitos (rookgaard false/false, mainland true/false, orc_cave true/true, meu_mapa true/false).
+
+### 48.4 Checklist manual PvP (Railway — executar após deploy)
+- [ ] Jogador A mata B em mainland; B vê dano, morte e respawn no templo.
+- [ ] A e observador C veem B teleportar com HP cheio (`player_respawned`).
+- [ ] B reloga e permanece no spawn com HP persistido.
+- [ ] Ataque em rookgaard bloqueado com toast `NO_PVP_MAP`.
+
 

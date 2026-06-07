@@ -43,13 +43,20 @@ export interface PlayCombatCamera {
     zoom?: number;
 }
 
+export type CombatTargetType = 'monster' | 'player';
+
+export interface CombatTarget {
+    id: string;
+    type: CombatTargetType;
+}
+
 let attackCooldownUntil = 0;
-let combatTargetId: string | null = null;
+let combatTarget: CombatTarget | null = null;
 let hoveredMonsterId: string | null = null;
 
 export function resetPlayCombatInput(): void {
     attackCooldownUntil = 0;
-    combatTargetId = null;
+    combatTarget = null;
     hoveredMonsterId = null;
 }
 
@@ -58,11 +65,15 @@ export function getPlayCombatHoverId(): string | null {
 }
 
 export function getPlayCombatTargetId(): string | null {
-    return combatTargetId;
+    return combatTarget?.id ?? null;
+}
+
+export function getPlayCombatTarget(): CombatTarget | null {
+    return combatTarget;
 }
 
 export function clearPlayCombatTarget(): void {
-    combatTargetId = null;
+    combatTarget = null;
 }
 
 export interface PlayCombatTargetable {
@@ -220,10 +231,10 @@ export function handlePlayCombatTargetClick(options: {
 
     if (!target) return false;
 
-    if (combatTargetId === target.id) {
-        combatTargetId = null;
+    if (combatTarget?.id === target.id && combatTarget.type === target.type) {
+        combatTarget = null;
     } else {
-        combatTargetId = target.id;
+        combatTarget = { id: target.id, type: target.type };
         attackCooldownUntil = 0;
     }
     return true;
@@ -251,10 +262,10 @@ function isAdjacentToPlayer(target: GameEntity, player: PlayCombatPlayer): boole
 }
 
 function resolveCombatTarget(npcs: GameEntity[]): GameEntity | null {
-    if (!combatTargetId) return null;
-    const target = npcs.find((n) => n.id === combatTargetId);
+    if (!combatTarget || combatTarget.type !== 'monster') return null;
+    const target = npcs.find((n) => n.id === combatTarget!.id);
     if (!target || target.type !== 'monster' || target.isDead) {
-        combatTargetId = null;
+        combatTarget = null;
         return null;
     }
     return target;
@@ -294,8 +305,8 @@ function executeAttack(
 
     if (target.combatHealth <= 0) {
         beginCreatureDeath(target, options.nowMs);
-        if (combatTargetId === target.id) {
-            combatTargetId = null;
+        if (combatTarget?.id === target.id) {
+            combatTarget = null;
         }
         const { xpReward } = target;
         const gain = applyExperienceGain(options.character.experience ?? 0, xpReward);
@@ -322,12 +333,12 @@ export function tickPlayCombat(options: {
     server?: PlayCombatServerBridge;
     remotes?: PlayCombatTargetable[];
 }): void {
-    if (!combatTargetId) return;
+    if (!combatTarget) return;
 
-    if (combatTargetId.startsWith('p_')) {
-        const target = options.remotes?.find((r) => r.id === combatTargetId);
+    if (combatTarget.type === 'player') {
+        const target = options.remotes?.find((r) => r.id === combatTarget!.id);
         if (!target || target.z !== options.player.worldZ) {
-            combatTargetId = null;
+            combatTarget = null;
             return;
         }
 
@@ -346,7 +357,7 @@ export function tickPlayCombat(options: {
         options.callbacks.onAttackSwing?.();
 
         if (options.server?.multiplayerConfigured && options.server.wsConnected) {
-            options.server.sendAttack(combatTargetId);
+            options.server.sendAttack(combatTarget.id);
         }
         return;
     }

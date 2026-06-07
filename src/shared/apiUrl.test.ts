@@ -15,6 +15,13 @@ describe('resolveApiUrl', () => {
         expect(resolveApiUrl('/api/auth/login')).toBe('https://api.example.com/api/auth/login');
     });
 
+    it('remove barra final do apiBaseUrl antes de concatenar', async () => {
+        vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.com/');
+        vi.resetModules();
+        const { resolveApiUrl } = await import('./apiUrl');
+        expect(resolveApiUrl('/api/auth/login')).toBe('https://api.example.com/api/auth/login');
+    });
+
     it('mantém caminho relativo quando apiBaseUrl está vazio', async () => {
         vi.stubEnv('VITE_API_BASE_URL', '');
         vi.resetModules();

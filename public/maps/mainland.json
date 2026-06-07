@@ -6,6 +6,8 @@
   "mapId": "mainland",
   "size": 256,
   "tileSize": 32,
+  "pvpEnabled": true,
+  "instanced": false,
   "coordSystem": {
     "origin": "top-left",
     "axisX": "columna — aumenta para leste (direita)",

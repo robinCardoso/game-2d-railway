@@ -6,6 +6,8 @@
   "mapId": "orc_cave",
   "size": 256,
   "tileSize": 32,
+  "pvpEnabled": true,
+  "instanced": true,
   "coordSystem": {
     "origin": "top-left",
     "axisX": "columna — aumenta para leste (direita)",

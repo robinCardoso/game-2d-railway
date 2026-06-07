@@ -6,6 +6,8 @@
   "mapId": "rookgaard",
   "size": 256,
   "tileSize": 32,
+  "pvpEnabled": false,
+  "instanced": false,
   "coordSystem": {
     "origin": "top-left",
     "axisX": "columna — aumenta para leste (direita)",
