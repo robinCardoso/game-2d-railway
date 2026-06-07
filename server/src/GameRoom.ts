@@ -17,7 +17,8 @@ import { buildRoomKey } from '../../shared/roomKey.js';
 import { canAdjacentStep } from '../../shared/tileWalkable.js';
 import type { MapCollisionStore } from './MapCollisionStore.js';
 import type { MapInstanceStore } from './MapInstanceStore.js';
-import { isInstancedMap } from './mapRegistry.js';
+import { isInstancedMap, getServerMapEntry } from './mapRegistry.js';
+import { processAttack } from './combat/combat.js';
 import { verifyEnterTicket } from './enterTicket.js';
 import {
     clearSteppingDest,
@@ -32,6 +33,7 @@ import type { VocationStore } from './game/VocationStore.js';
 import { applyExperienceGain } from '../../src/game/experience.js';
 import { getLevelFromExp, calculateStatsForLevel } from '../../src/engine/character/calculateStats.js';
 import type { VocationId } from '../../shared/types/character.js';
+import { ZoneType } from '../../src/engine/zones.js';
 import { env } from './config/env.js';
 import { shouldAcceptClientProgressSync } from '../../shared/progressSyncPolicy.js';
 
@@ -79,6 +81,8 @@ interface ConnectedPlayer {
     steppingDestExpiresAtMs?: number;
     level: number;
     experience: number;
+    health: number;
+    maxHealth: number;
     lastAttackAtMs: number;
     lastMoveRejectionSentAtMs: number;
     socket: WebSocket;
@@ -207,7 +211,18 @@ export class GameRoom {
             z: p.z,
             direction: p.direction,
             appearance: p.appearance,
+            health: p.health,
+            maxHealth: p.maxHealth,
         };
+    }
+
+    private recalcPlayerMaxHealth(player: ConnectedPlayer): void {
+        const vocationId = (player.appearance.vocationId || 'knight') as VocationId;
+        const vocationConfig = this.vocations.get(vocationId);
+        const stats = vocationConfig
+            ? calculateStatsForLevel(vocationConfig, player.level)
+            : { health: 100 };
+        player.maxHealth = stats.health;
     }
 
     private isWalkable(mapId: string, tileX: number, tileY: number, z: number): boolean {
@@ -271,6 +286,7 @@ export class GameRoom {
             tileY: player.tileY,
             z: player.z,
             direction: player.direction,
+            health: player.health,
         };
         if (immediate) {
             void this.positionPersistence.saveNow(loc);
@@ -346,7 +362,6 @@ export class GameRoom {
         let joinTileX = msg.tileX;
         let joinTileY = msg.tileY;
         let joinZ = msg.z;
-        let joinLevel = msg.level ?? 1;
         let joinExperience = msg.experience ?? 0;
 
         if (msg.enterTicket) {
@@ -368,7 +383,6 @@ export class GameRoom {
             joinTileX = ticket.tileX;
             joinTileY = ticket.tileY;
             joinZ = ticket.z;
-            joinLevel = ticket.level;
             joinExperience = ticket.experience;
             if (ticket.appearance) {
                 appearance = ticket.appearance;
@@ -447,9 +461,28 @@ export class GameRoom {
             lastMoveRejectionSentAtMs: 0,
             level: joinLevelFromExp,
             experience: joinExp,
+            health: 100, // will be overwritten below
+            maxHealth: 100,
             lastAttackAtMs: 0,
             socket,
         };
+
+        const pVocationId = (appearance.vocationId || 'knight') as VocationId;
+        const pVocationConfig = this.vocations.get(pVocationId);
+        const pStats = pVocationConfig ? calculateStatsForLevel(pVocationConfig, joinLevelFromExp) : { health: 100 };
+        player.maxHealth = pStats.health;
+        
+        // Use health from ticket if valid, otherwise default to max health
+        if (msg.enterTicket) {
+            const ticket = verifyEnterTicket(msg.enterTicket);
+            if (ticket && ticket.health !== undefined && ticket.health !== null && ticket.health > 0) {
+                player.health = Math.min(ticket.health, player.maxHealth);
+            } else {
+                player.health = player.maxHealth;
+            }
+        } else {
+            player.health = player.maxHealth;
+        }
 
         this.players.set(id, player);
         this.socketToPlayerId.set(socket, id);
@@ -471,6 +504,8 @@ export class GameRoom {
             v: PROTOCOL_VERSION,
             playerId: id,
             instanceId,
+            health: player.health,
+            maxHealth: player.maxHealth,
             players: others,
             creatures: creatureSnapshots,
         });
@@ -851,6 +886,176 @@ export class GameRoom {
 
         const room = this.roomKey(player);
         const vocationId = (player.appearance.vocationId || 'knight') as VocationId;
+
+        // PvP Attack Interception
+        if (msg.creatureId.startsWith('p_')) {
+            const targetPlayer = this.players.get(msg.creatureId);
+            if (!targetPlayer) return;
+
+            if (targetPlayer.mapId !== player.mapId || targetPlayer.instanceId !== player.instanceId) {
+                return;
+            }
+
+            // 1. Check PvP Map Property
+            const mapEntry = getServerMapEntry(player.mapId);
+            if (mapEntry && mapEntry.pvpEnabled === false) {
+                this.send(player.socket, {
+                    type: 'error',
+                    v: PROTOCOL_VERSION,
+                    code: 'NO_PVP_MAP',
+                    message: 'Combate PvP não é permitido neste mapa.',
+                });
+                return;
+            }
+
+            // 2. Check PZ (Protection Zone) for attacker
+            const attackerZone = this.collision.getZoneIdAt(player.mapId, player.tileX, player.tileY, player.z);
+            if (attackerZone === ZoneType.PROTECTION_ZONE) {
+                this.send(player.socket, {
+                    type: 'error',
+                    v: PROTOCOL_VERSION,
+                    code: 'ATTACKER_IN_PZ',
+                    message: 'Você não pode atacar dentro de uma Protection Zone (PZ).',
+                });
+                return;
+            }
+
+            // 3. Check PZ (Protection Zone) for target
+            const targetZone = this.collision.getZoneIdAt(targetPlayer.mapId, targetPlayer.tileX, targetPlayer.tileY, targetPlayer.z);
+            if (targetZone === ZoneType.PROTECTION_ZONE) {
+                this.send(player.socket, {
+                    type: 'error',
+                    v: PROTOCOL_VERSION,
+                    code: 'TARGET_IN_PZ',
+                    message: 'O alvo está dentro de uma Protection Zone (PZ).',
+                });
+                return;
+            }
+
+            // 4. Attack Cooldown
+            const now = Date.now();
+            const cooldownMs = this.resolveAttackCooldownMs(vocationId, player.level);
+            if (now - player.lastAttackAtMs < cooldownMs) {
+                return;
+            }
+
+            // 5. Adjacency
+            const dx = Math.abs(player.tileX - targetPlayer.tileX);
+            const dy = Math.abs(player.tileY - targetPlayer.tileY);
+            const dz = Math.abs(player.z - targetPlayer.z);
+            if (dz !== 0 || dx > 1 || dy > 1) {
+                return; // Enforce adjacency for standard melee PvP for now
+            }
+
+            // 6. Resolve combat stats and process damage
+            const vocationConfig = this.vocations.get(vocationId);
+            if (!vocationConfig) return;
+
+            const targetVocationId = (targetPlayer.appearance.vocationId || 'knight') as VocationId;
+            const targetVocationConfig = this.vocations.get(targetVocationId);
+            const targetStats = targetVocationConfig ? calculateStatsForLevel(targetVocationConfig, targetPlayer.level) : { defense: 5 };
+
+            const damageResult = processAttack(
+                {
+                    id: player.id,
+                    name: player.name,
+                    vocation: vocationId,
+                    level: player.level,
+                },
+                {
+                    id: targetPlayer.id,
+                    name: targetPlayer.name,
+                    health: targetPlayer.health,
+                    maxHealth: targetPlayer.maxHealth,
+                    defense: targetStats.defense || 5,
+                },
+                'melee',
+                vocationConfig
+            );
+
+            player.lastAttackAtMs = now;
+            targetPlayer.health = Math.max(0, targetPlayer.health - damageResult.finalDamage);
+
+            this.broadcastToRoom(room, {
+                type: 'player_damaged',
+                v: PROTOCOL_VERSION,
+                playerId: targetPlayer.id,
+                health: targetPlayer.health,
+                maxHealth: targetPlayer.maxHealth,
+                damage: damageResult.finalDamage,
+                attackerPlayerId: player.id,
+            });
+
+            this.persistPlayerPosition(targetPlayer);
+
+            if (targetPlayer.health <= 0) {
+                this.broadcastToRoom(room, {
+                    type: 'player_died',
+                    v: PROTOCOL_VERSION,
+                    playerId: targetPlayer.id,
+                    killerPlayerId: player.id,
+                });
+
+                const deathZone = this.collision.getZoneIdAt(
+                    targetPlayer.mapId,
+                    targetPlayer.tileX,
+                    targetPlayer.tileY,
+                    targetPlayer.z
+                );
+                if (deathZone !== ZoneType.PVP_ARENA) {
+                    const lostXp = Math.floor(targetPlayer.experience * 0.1);
+                    targetPlayer.experience = Math.max(0, targetPlayer.experience - lostXp);
+                    targetPlayer.level = getLevelFromExp(targetPlayer.experience);
+                    this.recalcPlayerMaxHealth(targetPlayer);
+                }
+
+                const spawn = this.collision.getMapSpawn(targetPlayer.mapId) ?? { x: 50, y: 50, z: 0 };
+                targetPlayer.tileX = spawn.x;
+                targetPlayer.tileY = spawn.y;
+                targetPlayer.z = spawn.z;
+                targetPlayer.health = targetPlayer.maxHealth;
+
+                if (deathZone !== ZoneType.PVP_ARENA) {
+                    this.send(targetPlayer.socket, {
+                        type: 'player_progress',
+                        v: PROTOCOL_VERSION,
+                        playerId: targetPlayer.id,
+                        level: targetPlayer.level,
+                        experience: targetPlayer.experience,
+                        leveledUp: false,
+                        health: targetPlayer.health,
+                        maxHealth: targetPlayer.maxHealth,
+                    });
+
+                    if (targetPlayer.characterId && targetPlayer.accountId) {
+                        void this.progressPersistence.saveNow({
+                            characterId: targetPlayer.characterId,
+                            accountId: targetPlayer.accountId,
+                            level: targetPlayer.level,
+                            experience: targetPlayer.experience,
+                        });
+                    }
+                }
+
+                this.broadcastToRoom(room, {
+                    type: 'player_respawned',
+                    v: PROTOCOL_VERSION,
+                    playerId: targetPlayer.id,
+                    mapId: targetPlayer.mapId,
+                    instanceId: targetPlayer.instanceId,
+                    tileX: spawn.x,
+                    tileY: spawn.y,
+                    z: spawn.z,
+                    health: targetPlayer.health,
+                    maxHealth: targetPlayer.maxHealth,
+                });
+
+                this.sendPositionCorrection(targetPlayer);
+                this.persistPlayerPosition(targetPlayer, true);
+            }
+            return;
+        }
+
         const outcome = this.creatures.processAttack(
             room,
             {

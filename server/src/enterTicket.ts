@@ -15,6 +15,7 @@ export interface EnterTicketPayload {
     appearance?: PlayerAppearance;
     level: number;
     experience: number;
+    health?: number | null;
     exp: number;
 }
 
@@ -76,12 +77,16 @@ export function verifyEnterTicket(ticket: string): EnterTicketPayload | null {
         const appearance = parsePlayerAppearance(payload.appearance);
         const level = Math.max(1, Math.floor(Number(payload.level) || 1));
         const experience = Math.max(0, Math.floor(Number(payload.experience) || 0));
+        const health = payload.health !== undefined && payload.health !== null
+            ? Math.floor(Number(payload.health))
+            : null;
         return {
             ...payload,
             direction: dir ?? 'south',
             appearance,
             level,
             experience,
+            health,
         };
     } catch {
         return null;

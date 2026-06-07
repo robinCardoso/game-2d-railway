@@ -88,6 +88,7 @@ import { ResyncController } from '../net/resyncController';
 import type { ClientDiagnosticsController } from './debug/clientDiagnostics';
 import { createClientDiagnostics } from './debug/clientDiagnostics';
 import { createLocalPlayerFloatingText } from './localPlayerFloatingText';
+import { toast } from '../utils/popup';
 import { getSpriteTilePlacement } from '../character/spriteDraw';
 
 const TILE_SIZE_SCREEN = ENGINE_CONFIG.TILE_SIZE;
@@ -477,6 +478,16 @@ function triggerPlayAttackAnimation(): void {
     };
 }
 
+function getRemoteTargetables(): import('./playCombat').PlayCombatTargetable[] {
+    if (!currentMapId || !gameNet) return [];
+    return gameNet.getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId()).map(p => ({
+        id: p.playerId,
+        tileX: p.tileX,
+        tileY: p.tileY,
+        z: p.z
+    }));
+}
+
 function setupPlayCombatControls(): void {
     const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
 
@@ -491,6 +502,7 @@ function setupPlayCombatControls(): void {
             npcs: getPlayEntities(),
             playerZ: player.worldZ,
             tileSize: TILE_SIZE_SCREEN,
+            remotes: getRemoteTargetables(),
         });
     });
 
@@ -508,6 +520,7 @@ function setupPlayCombatControls(): void {
             npcs: getPlayEntities(),
             playerZ: player.worldZ,
             tileSize: TILE_SIZE_SCREEN,
+            remotes: getRemoteTargetables(),
         });
         if (selected) e.preventDefault();
     });
@@ -523,6 +536,7 @@ function setupPlayCombatControls(): void {
                 playerZ: player.worldZ,
                 tileSize: TILE_SIZE_SCREEN,
                 enabled: true,
+                remotes: getRemoteTargetables(),
             });
         });
         canvas.addEventListener('mouseleave', () => {
@@ -556,10 +570,16 @@ let progressSaveTimerId: number | null = null;
 /** Level conhecido nesta sessão — banner só quando sobe acima deste valor. */
 let playSessionLevel = 1;
 
-function applyPlayProgressUpdate(level: number, experience: number): void {
+function applyPlayProgressUpdate(
+    level: number,
+    experience: number,
+    options?: { health?: number; maxHealth?: number; leveledUp?: boolean }
+): void {
     if (!activeCharacter) return;
 
-    const leveledUp = shouldCelebrateSessionLevelUp(playSessionLevel, level);
+    const leveledUp =
+        options?.leveledUp === true ||
+        shouldCelebrateSessionLevelUp(playSessionLevel, level);
 
     activeCharacter.experience = experience;
     activeCharacter.level = level;
@@ -569,10 +589,18 @@ function applyPlayProgressUpdate(level: number, experience: number): void {
     const vocationId = (activeCharacter.vocation as VocationId) || 'knight';
     const vocationConfig = getVocationById(vocationId);
     const stats = calculateStatsForLevel(vocationConfig, level);
-    player.maxHealth = stats.health;
+    player.maxHealth = options?.maxHealth ?? stats.health;
     player.maxMana = stats.mana;
-    player.health = stats.health;
-    player.mana = stats.mana;
+
+    if (options?.health !== undefined) {
+        player.health = options.health;
+    } else if (leveledUp) {
+        player.health = player.maxHealth;
+        player.mana = stats.mana;
+    } else {
+        player.health = Math.min(player.health, player.maxHealth);
+        player.mana = Math.min(player.mana, stats.mana);
+    }
 
     updateCharacterStatsUi(activeCharacter, { flashLevel: leveledUp });
     if (leveledUp) {
@@ -835,6 +863,7 @@ function update(): void {
             character: activeCharacter,
             characterSpeed,
             server: buildPlayCombatServerBridge(),
+            remotes: getRemoteTargetables(),
             callbacks: {
                 faceToward: faceTowardEntity,
                 onAttackSwing: triggerPlayAttackAnimation,
@@ -1245,9 +1274,19 @@ function setupNetwork(
                 respawnEntities();
             }
         },
-        onWelcome: () => {
+        onWelcome: ({ health, maxHealth }) => {
             logPlayJoinTimeline('welcome received');
+            player.health = health;
+            player.maxHealth = maxHealth;
+            if (activeCharacter) {
+                updateCharacterStatsUi(activeCharacter, { flashLevel: false });
+            }
             syncProgressToServer();
+        },
+        onServerError: ({ code, message }) => {
+            if (code === 'NO_PVP_MAP') {
+                toast.info(message);
+            }
         },
         onCreatureSync: ({ mapId, instanceId, creatures }) => {
             if (!currentMapId || mapId !== currentMapId) return;
@@ -1303,7 +1342,59 @@ function setupNetwork(
             serverCreatures.applyRespawned(msg);
         },
         onPlayerProgress: (msg) => {
-            applyPlayProgressUpdate(msg.level, msg.experience);
+            applyPlayProgressUpdate(msg.level, msg.experience, {
+                health: msg.health,
+                maxHealth: msg.maxHealth,
+                leveledUp: msg.leveledUp,
+            });
+        },
+        onPlayerDamaged: (msg) => {
+            const now = performance.now();
+            const myPlayerId = gameNet?.getLocalPlayerId();
+            if (msg.playerId === myPlayerId) {
+                player.health = msg.health;
+                player.maxHealth = msg.maxHealth;
+                updateCharacterStatsUi(activeCharacter!, { flashLevel: false });
+                localPlayerFloats.spawnDamage(msg.damage, now);
+            } else {
+                const remote = gameNet?.getRemotePlayers(currentMapId ?? '')?.find(p => p.playerId === msg.playerId);
+                if (remote) {
+                    remote.health = msg.health;
+                    remote.maxHealth = msg.maxHealth;
+                }
+            }
+        },
+        onPlayerDied: (msg) => {
+            const myPlayerId = gameNet?.getLocalPlayerId();
+            if (msg.playerId === myPlayerId) {
+                toast.info('Você morreu em PvP e renasceu no templo!');
+            } else {
+                const remote = gameNet?.getRemotePlayers(currentMapId ?? '')?.find(p => p.playerId === msg.playerId);
+                if (remote) {
+                    remote.health = 0;
+                }
+            }
+        },
+        onPlayerRespawned: (msg) => {
+            const myPlayerId = gameNet?.getLocalPlayerId();
+            if (msg.playerId === myPlayerId) {
+                player.health = msg.health;
+                player.maxHealth = msg.maxHealth;
+                if (activeCharacter) {
+                    updateCharacterStatsUi(activeCharacter, { flashLevel: false });
+                }
+            } else {
+                const remote = gameNet?.getRemotePlayers(currentMapId ?? '')?.find(
+                    (p) => p.playerId === msg.playerId
+                );
+                if (remote) {
+                    remote.tileX = msg.tileX;
+                    remote.tileY = msg.tileY;
+                    remote.z = msg.z;
+                    remote.health = msg.health;
+                    remote.maxHealth = msg.maxHealth;
+                }
+            }
         },
     });
 

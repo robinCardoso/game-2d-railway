@@ -10,6 +10,7 @@ export interface PersistedLocation {
     tileY: number;
     z: number;
     direction: 'north' | 'south' | 'east' | 'west';
+    health?: number;
 }
 
 interface PendingEntry {
@@ -19,6 +20,7 @@ interface PendingEntry {
     tileY: number;
     z: number;
     direction: 'north' | 'south' | 'east' | 'west';
+    health?: number;
     timer: ReturnType<typeof setTimeout> | null;
 }
 
@@ -44,6 +46,7 @@ export class PositionPersistence {
             tileY: loc.tileY,
             z: loc.z,
             direction: loc.direction,
+            health: loc.health,
             timer: setTimeout(() => {
                 void this.flush(loc.characterId);
             }, this.debounceMs),
@@ -66,6 +69,7 @@ export class PositionPersistence {
                 positionY: loc.tileY,
                 positionZ: loc.z,
                 direction: loc.direction,
+                health: loc.health,
             });
         } catch (err) {
             console.error(`[PositionPersistence] Falha ao salvar ${loc.characterId}:`, err);
@@ -90,6 +94,7 @@ export class PositionPersistence {
                 positionY: entry.tileY,
                 positionZ: entry.z,
                 direction: entry.direction,
+                health: entry.health,
             });
         } catch (err) {
             console.error(`[PositionPersistence] Falha ao salvar ${characterId}:`, err);

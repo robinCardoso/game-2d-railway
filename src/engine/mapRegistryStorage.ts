@@ -8,6 +8,7 @@ export interface MapEntry {
     file: string;
     size: number;
     instanced: boolean;
+    pvpEnabled?: boolean;
     description?: string;
     minLevel?: number;
 }
@@ -37,11 +38,12 @@ function normalizeEntry(raw: MapEntry): MapEntry | null {
     if (!file.startsWith('maps/') || file.includes('..')) return null;
 
     return {
-        id,
+        id: id,
         name: raw.name.trim().slice(0, 96) || id,
-        file,
-        size,
+        file: file,
+        size: size,
         instanced: !!raw.instanced,
+        pvpEnabled: typeof raw.pvpEnabled === 'boolean' ? raw.pvpEnabled : undefined,
         description:
             typeof raw.description === 'string'
                 ? raw.description.trim().slice(0, 256)
@@ -128,6 +130,7 @@ export function persistMapRegistry(
                 file: entry.file,
                 size: entry.size,
                 instanced: entry.instanced,
+                pvpEnabled: entry.pvpEnabled,
                 description: entry.description,
                 minLevel: entry.minLevel,
             };

@@ -2052,7 +2052,31 @@ function buildCurrentMapDocument() {
         grassOverlay: grassOverlayMap,
         borderOverlay: borderOverlayMap,
         itemsOverlay: itemsOverlayMap,
+        pvpEnabled: entry?.pvpEnabled !== false,
+        instanced: entry?.instanced === true,
     });
+}
+
+function syncMapRegistryFromLoaded(loaded: ReturnType<typeof loadMapFromJson>): void {
+    if (!loaded.mapId) return;
+    const existing = MAP_REGISTRY.find((m) => m.id === loaded.mapId);
+    if (!existing) return;
+
+    const updated: MapEntry = { ...existing };
+    let changed = false;
+
+    if (typeof loaded.pvpEnabled === 'boolean' && updated.pvpEnabled !== loaded.pvpEnabled) {
+        updated.pvpEnabled = loaded.pvpEnabled;
+        changed = true;
+    }
+    if (typeof loaded.instanced === 'boolean' && updated.instanced !== loaded.instanced) {
+        updated.instanced = loaded.instanced;
+        changed = true;
+    }
+
+    if (changed) {
+        registerMap(updated);
+    }
 }
 
 function getCurrentMapExportFilename(): string {
@@ -2223,6 +2247,7 @@ function applyLoadedMap(loaded: ReturnType<typeof loadMapFromJson>) {
     updateActiveMapHud();
     invalidateBorderDrawCache();
     markMinimapDirty();
+    syncMapRegistryFromLoaded(loaded);
 }
 
 function createBlankMap(entry: MapEntry) {
@@ -2255,6 +2280,8 @@ function duplicateFromCurrent(entry: MapEntry) {
         grassOverlay: grassOverlayMap,
         borderOverlay: borderOverlayMap,
         itemsOverlay: itemsOverlayMap,
+        pvpEnabled: entry.pvpEnabled !== false,
+        instanced: entry.instanced === true,
     });
     const loaded = loadMapFromJson(doc, mapSpawn, TILE_TYPES);
     registerMap(entry);

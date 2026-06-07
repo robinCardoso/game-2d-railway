@@ -103,6 +103,10 @@ export interface MapDocument {
     size: number;
     /** ID que referencia este mapa no MAP_REGISTRY. */
     mapId?: string;
+    /** Determina se o combate PvP (Player vs Player) está habilitado neste mapa. */
+    pvpEnabled?: boolean;
+    /** Dungeon instanciada — cada grupo recebe cópia em memória. */
+    instanced?: boolean;
     /** Tamanho do tile em pixels (64). Mapas antigos sem campo assumem o da engine. */
     tileSize?: number;
     /** Legenda dos tile IDs presentes em `tiles` neste arquivo. */

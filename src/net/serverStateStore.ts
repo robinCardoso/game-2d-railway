@@ -156,6 +156,37 @@ export function applyServerMessageToStore(msg: ServerMessage): void {
             serverStateStore.lastProgressSyncAtMs = now;
             break;
 
+        case 'player_damaged': {
+            const p = serverStateStore.playersById.get(msg.playerId);
+            if (p) {
+                p.health = msg.health;
+                p.maxHealth = msg.maxHealth;
+            }
+            break;
+        }
+
+        case 'player_died': {
+            const p = serverStateStore.playersById.get(msg.playerId);
+            if (p) {
+                p.health = 0;
+            }
+            break;
+        }
+
+        case 'player_respawned': {
+            const p = serverStateStore.playersById.get(msg.playerId);
+            if (p) {
+                p.tileX = msg.tileX;
+                p.tileY = msg.tileY;
+                p.z = msg.z;
+                p.mapId = msg.mapId;
+                p.instanceId = msg.instanceId;
+                p.health = msg.health;
+                p.maxHealth = msg.maxHealth;
+            }
+            break;
+        }
+
         case 'pong':
             serverStateStore.lastPongAtMs = now;
             if (_pendingPingT > 0 && msg.t === _pendingPingT) {

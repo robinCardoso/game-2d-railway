@@ -30,6 +30,11 @@ export interface MapPlayerSpawn {
     z: number;
 }
 
+interface ServerTileMetadata {
+    zoneId?: number;
+    houseId?: number;
+}
+
 interface LoadedCollisionMap {
     mapId: string;
     size: number;
@@ -37,6 +42,7 @@ interface LoadedCollisionMap {
     spawns: MapSpawnEntry[];
     playerSpawn?: MapPlayerSpawn;
     items: ItemOverlayByFloor;
+    metadata: Record<string, ServerTileMetadata>;
 }
 
 export class MapCollisionStore {
@@ -121,6 +127,7 @@ export class MapCollisionStore {
             spawn?: { x?: number; y?: number; z?: number };
             layers?: { items?: Record<string, { x: number; y: number; id: number; ref?: string }[]> };
             tileRefs?: Record<string, { ref?: string }>;
+            metadata?: Record<string, ServerTileMetadata>;
         };
 
         const size = Math.min(raw.size ?? SERVER_MAP_SIZE, SERVER_MAP_SIZE);
@@ -162,6 +169,8 @@ export class MapCollisionStore {
         const playerSpawn = this.sanitizePlayerSpawn(raw.spawn, size);
         const items = this.parseItemOverlay(raw, size);
 
+        const metadata = raw.metadata ?? {};
+
         this.templates.set(mapId, {
             mapId,
             size,
@@ -169,6 +178,7 @@ export class MapCollisionStore {
             spawns,
             playerSpawn,
             items,
+            metadata,
         });
     }
 
@@ -276,5 +286,16 @@ export class MapCollisionStore {
 
     getMapSize(mapId: string): number {
         return this.templates.get(mapId)?.size ?? SERVER_MAP_SIZE;
+    }
+
+    getZoneIdAt(mapId: string, tileX: number, tileY: number, z: number): number {
+        const tpl = this.templates.get(mapId);
+        if (!tpl) return 0;
+        const key = `${z}_${tileY}_${tileX}`;
+        return tpl.metadata?.[key]?.zoneId ?? 0;
+    }
+
+    async reloadTemplate(mapId: string, file: string): Promise<void> {
+        await this.loadTemplate(mapId, file);
     }
 }

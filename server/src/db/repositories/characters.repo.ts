@@ -21,12 +21,13 @@ export interface CharacterDbRow {
     created_at: string;
     updated_at: string;
     last_played_at: string | null;
+    health: number | null;
 }
 
 const SELECT_FIELDS = `
   id, account_id, name, vocation_id, gender, outfit_id, sprite_sheet_url,
   level, experience, map_id, position_x, position_y, position_z, direction,
-  outfit_config, spawn_map_id, deleted_at, created_at, updated_at, last_played_at
+  outfit_config, spawn_map_id, deleted_at, created_at, updated_at, last_played_at, health
 `;
 
 export async function listCharactersByAccount(accountId: string): Promise<CharacterDbRow[]> {
@@ -145,6 +146,7 @@ export async function updateCharacterLocation(
         positionY: number;
         positionZ: number;
         direction: 'north' | 'south' | 'east' | 'west';
+        health?: number;
     }
 ): Promise<CharacterDbRow | null> {
     const pool = getPool();
@@ -166,6 +168,7 @@ export async function updateCharacterLocation(
            position_z = $6,
            direction = $7,
            outfit_config = $8,
+           health = coalesce($9, health),
            updated_at = now()
          where id = $1 and account_id = $2 and deleted_at is null
          returning ${SELECT_FIELDS}`,
@@ -178,6 +181,7 @@ export async function updateCharacterLocation(
             location.positionZ,
             location.direction,
             JSON.stringify(outfitConfig),
+            location.health !== undefined ? location.health : null,
         ]
     );
     return rows[0] ?? null;

@@ -16,6 +16,7 @@ export interface LoadedMapResult {
     spawn: SpawnPoint;
     name: string;
     mapId?: string;
+    pvpEnabled?: boolean;
     metadata: Record<string, TileMetadata>;
     houses: Record<number, HouseData>;
     spawns: CreatureSpawn[];

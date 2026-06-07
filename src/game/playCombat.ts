@@ -65,6 +65,13 @@ export function clearPlayCombatTarget(): void {
     combatTargetId = null;
 }
 
+export interface PlayCombatTargetable {
+    id: string;
+    tileX: number;
+    tileY: number;
+    z: number;
+}
+
 export function clientToPlayWorld(
     clientX: number,
     clientY: number,
@@ -134,6 +141,34 @@ export function findMonsterAtClientPoint(
     return findMonsterAtWorldPoint(npcs, worldX, worldY, playerZ, tileSize);
 }
 
+export function findTargetAtWorldPoint(
+    npcs: GameEntity[],
+    remotes: PlayCombatTargetable[],
+    worldX: number,
+    worldY: number,
+    playerZ: number,
+    tileSize: number
+): { id: string; type: 'monster' | 'player' } | null {
+    const { tileX, tileY } = worldPointToTile(worldX, worldY, tileSize);
+
+    for (const npc of npcs) {
+        if (npc.type !== 'monster' || npc.isDead) continue;
+        if (npc.worldZ !== playerZ) continue;
+        if (npc.occupiesTile(tileX, tileY, playerZ, tileSize)) {
+            return { id: npc.id, type: 'monster' };
+        }
+    }
+
+    for (const remote of remotes) {
+        if (remote.z !== playerZ) continue;
+        if (remote.tileX === tileX && remote.tileY === tileY) {
+            return { id: remote.id, type: 'player' };
+        }
+    }
+
+    return null;
+}
+
 export function updatePlayCombatHover(options: {
     clientX: number;
     clientY: number;
@@ -143,22 +178,23 @@ export function updatePlayCombatHover(options: {
     playerZ: number;
     tileSize: number;
     enabled: boolean;
+    remotes?: PlayCombatTargetable[];
 }): void {
     if (!options.enabled) {
         hoveredMonsterId = null;
         return;
     }
 
-    const monster = findMonsterAtClientPoint(
-        options.clientX,
-        options.clientY,
-        options.canvas,
-        options.camera,
+    const { worldX, worldY } = clientToPlayWorld(options.clientX, options.clientY, options.canvas, options.camera);
+    const target = findTargetAtWorldPoint(
         options.npcs,
+        options.remotes || [],
+        worldX,
+        worldY,
         options.playerZ,
         options.tileSize
     );
-    hoveredMonsterId = monster?.id ?? null;
+    hoveredMonsterId = target?.id ?? null;
 }
 
 /** Desktop: botão direito (toggle). Mobile/toque: tap no mob (toggle). */
@@ -170,22 +206,24 @@ export function handlePlayCombatTargetClick(options: {
     npcs: GameEntity[];
     playerZ: number;
     tileSize: number;
+    remotes?: PlayCombatTargetable[];
 }): boolean {
-    const monster = findMonsterAtClientPoint(
-        options.clientX,
-        options.clientY,
-        options.canvas,
-        options.camera,
+    const { worldX, worldY } = clientToPlayWorld(options.clientX, options.clientY, options.canvas, options.camera);
+    const target = findTargetAtWorldPoint(
         options.npcs,
+        options.remotes || [],
+        worldX,
+        worldY,
         options.playerZ,
         options.tileSize
     );
-    if (!monster) return false;
 
-    if (combatTargetId === monster.id) {
+    if (!target) return false;
+
+    if (combatTargetId === target.id) {
         combatTargetId = null;
     } else {
-        combatTargetId = monster.id;
+        combatTargetId = target.id;
         attackCooldownUntil = 0;
     }
     return true;
@@ -282,7 +320,37 @@ export function tickPlayCombat(options: {
     characterSpeed: CharacterSpeedState;
     callbacks: PlayCombatCallbacks;
     server?: PlayCombatServerBridge;
+    remotes?: PlayCombatTargetable[];
 }): void {
+    if (!combatTargetId) return;
+
+    if (combatTargetId.startsWith('p_')) {
+        const target = options.remotes?.find((r) => r.id === combatTargetId);
+        if (!target || target.z !== options.player.worldZ) {
+            combatTargetId = null;
+            return;
+        }
+
+        if (options.nowMs < attackCooldownUntil || options.stepping) return;
+
+        const dx = Math.abs(options.player.tileX - target.tileX);
+        const dy = Math.abs(options.player.tileY - target.tileY);
+        if (dx > 1 || dy > 1) return;
+
+        const cooldownMs = getPlayerAttackCooldownMs(options.character, options.characterSpeed);
+        attackCooldownUntil = options.nowMs + cooldownMs;
+
+        options.callbacks.faceToward({
+            getFootTile: () => ({ tileX: target.tileX, tileY: target.tileY })
+        } as any);
+        options.callbacks.onAttackSwing?.();
+
+        if (options.server?.multiplayerConfigured && options.server.wsConnected) {
+            options.server.sendAttack(combatTargetId);
+        }
+        return;
+    }
+
     const target = resolveCombatTarget(options.npcs);
     if (!target) return;
     if (options.nowMs < attackCooldownUntil || options.stepping) return;

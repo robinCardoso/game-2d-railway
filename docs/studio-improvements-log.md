@@ -1053,3 +1053,44 @@ Sessão dedicada à resolução de problemas de usabilidade que causavam perda d
 ### 45.2 Solução
 - **Ajuste de sortY:** Modificado o arquivo `src/engine/depthSortDraw.ts` na função `collectNpcDepthDrawables` para que, se a criatura estiver morta (`isDead`), o `sortY` seja calculado com base no SQM mais ao norte que o corpo ocupa visualmente (`topTileY`), considerando a altura do sprite (`drawH`) e a âncora vertical (`ay`). Isso garante que o player ou outras entidades vivas sejam desenhados por cima do corpo morto mesmo se caminharem sobre o SQM superior de corpos maiores (ex: 64x64 que cobrem 2 SQMs verticais).
 
+---
+
+## 46. Combate PvP Avançado e Persistência de HP (2026-06-07)
+
+### 46.1 Persistência de HP do Jogador
+- **Banco de Dados & Persistência:** Adicionada coluna `health` na tabela `characters` via migração SQL e atualizado `characters.repo.ts` e `PositionPersistence.ts` para salvar e restaurar o HP atual no login/logout/debounce.
+- **WebSocket Tickets:** O HP do personagem é passado no ticket WS e carregado como HP inicial do jogador ao logar no servidor (`GameRoom.ts`).
+
+### 46.2 Configuração PvP por Mapa no Studio
+- **Configuração no JSON:** Campo `pvpEnabled` adicionado ao formato do mapa. Lógica de descoberta (`mapRegistry.ts` no servidor) lê as flags `pvpEnabled` e `instanced` dinamicamente do JSON do mapa.
+- **Formulário no Gerenciador de Mapas:** PvP e instanciado são checkboxes no painel lateral `#mapEntryEditorPanel` (substitui cadeia de `popup.prompt`/`popup.confirm`). Editar/Novo/Duplicar/Registrar antes de salvar usam o mesmo formulário.
+
+---
+
+## 47. UX do Gerenciador de Mapas — formulário único (2026-06-07)
+
+### 47.1 Substituição dos popups em cadeia
+- **Antes:** Editar/Criar/Duplicar mapa abria até 6 modais sequenciais (`popup.prompt` + `popup.confirm`).
+- **Agora:** Modal `Gerenciar Mapas` em duas colunas — lista à esquerda, formulário `#mapEntryEditorPanel` à direita.
+- **Campos:** ID, nome, tamanho, descrição, arquivo JSON (readonly), checkboxes instanciado e PvP.
+- **Modos:** `edit` (ID readonly), `create`, `duplicate`, `register` (para `ensureMapEntryForSave`).
+- **Popups mantidos:** apenas exclusão de mapa e conflito de ID duplicado (`popup.confirm`).
+
+### 47.2 IDs estáveis
+- `#mapManagerNewBtn`, `#mapManagerSearchInput`, `#mapManagerClearSearchBtn`, `#mapManagerFilterSummary`, `#mapEntryEditorPanel`, `#mapEntryIdInput`, `#mapEntryNameInput`, `#mapEntrySizeInput`, `#mapEntryDescriptionInput`, `#mapEntryInstancedCheck`, `#mapEntryPvpEnabledCheck`, `#mapEntryFileDisplay`, `#mapEntrySaveBtn`, `#mapEntryCancelBtn`
+
+### 47.3 Busca e layout ampliado
+- Modal ampliado para `min(960px, 96vw)` (antes 720px).
+- Campo `#mapManagerSearchInput` filtra por nome, ID, arquivo, descrição e tags (PvP/instância).
+- Contador `#mapManagerFilterSummary` (ex.: `2 de 15 mapa(s)`); estado vazio quando nenhum resultado.
+
+### 47.4 Tema cinza (Studio)
+- Gerenciador de mapas migrado de estilos inline escuros (`#111318`) para classes CSS em `style.css` usando variáveis do tema (`--sidebar-bg`, `--surface-2`, `--text-main`).
+- Cards, inputs e botões alinhados ao restante do Studio (fundo claro/cinza).
+- Paleta escura removida também em listas de spawns, portais e calibrador de auto-borda.
+
+### 46.3 Morte e Penalidades PvP vs Arena
+- **PVP_ARENA (Zona 3):** Protege jogadores contra perda de XP caso morram nesta zona (ressuscitam com vida cheia no spawn padrão sem penalidade).
+- **PvP Aberto:** Aplica penalidade de 10% da experiência total se um jogador for derrotado por outro jogador em mundo aberto.
+
+

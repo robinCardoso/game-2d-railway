@@ -39,7 +39,10 @@ export type ServerMessage =
     | StateSyncMessage
     | PositionCorrectionMessage
     | ErrorMessage
-    | PongMessage;
+    | PongMessage
+    | PlayerDamagedMessage
+    | PlayerDiedMessage
+    | PlayerRespawnedMessage;
 
 export interface PlayerAppearance {
     outfitId: string;
@@ -82,6 +85,8 @@ export interface PlayerSnapshot {
     appearance?: PlayerAppearance;
     /** Última duração do passo em ms (interpolação remota). */
     stepDurationMs?: number;
+    health?: number;
+    maxHealth?: number;
 }
 
 export interface JoinMessage {
@@ -173,6 +178,9 @@ export interface WelcomeMessage {
     playerId: string;
     /** instanceId atribuído pelo servidor (mapas instanciados). */
     instanceId?: string;
+    /** Vida autoritativa do jogador local ao entrar. */
+    health: number;
+    maxHealth: number;
     players: PlayerSnapshot[];
     /** Criaturas autoritativas da sala (mobs compartilhados). */
     creatures?: CreatureSnapshot[];
@@ -278,6 +286,8 @@ export interface PlayerProgressMessage {
     level: number;
     experience: number;
     leveledUp?: boolean;
+    health?: number;
+    maxHealth?: number;
 }
 
 export interface StateSyncMessage {
@@ -307,6 +317,36 @@ export interface PongMessage {
     type: 'pong';
     v: number;
     t: number;
+}
+
+export interface PlayerDamagedMessage {
+    type: 'player_damaged';
+    v: number;
+    playerId: string;
+    health: number;
+    maxHealth: number;
+    damage: number;
+    attackerPlayerId?: string;
+}
+
+export interface PlayerDiedMessage {
+    type: 'player_died';
+    v: number;
+    playerId: string;
+    killerPlayerId?: string;
+}
+
+export interface PlayerRespawnedMessage {
+    type: 'player_respawned';
+    v: number;
+    playerId: string;
+    mapId: string;
+    instanceId?: string;
+    tileX: number;
+    tileY: number;
+    z: number;
+    health: number;
+    maxHealth: number;
 }
 
 export function playerRoomKey(p: Pick<PlayerSnapshot, 'mapId' | 'instanceId'>): string {

@@ -5,6 +5,7 @@
 
 import {
     createFloatingXpEntry,
+    createFloatingDamageEntry,
     drawFloatingDamages,
     pruneFloatingDamages,
     type FloatingDamageEntry,
@@ -12,6 +13,7 @@ import {
 
 export interface LocalPlayerFloatingText {
     spawnXp(xp: number, nowMs: number): void;
+    spawnDamage(damage: number, nowMs: number): void;
     tick(nowMs: number): void;
     draw(
         ctx: CanvasRenderingContext2D,
@@ -29,6 +31,12 @@ export function createLocalPlayerFloatingText(): LocalPlayerFloatingText {
             if (xp <= 0) return;
             entries = pruneFloatingDamages(entries, nowMs);
             entries.push(createFloatingXpEntry(xp, nowMs, entries.length));
+        },
+
+        spawnDamage(damage: number, nowMs: number): void {
+            if (damage <= 0) return;
+            entries = pruneFloatingDamages(entries, nowMs);
+            entries.push(createFloatingDamageEntry(damage, nowMs, entries.length));
         },
 
         tick(nowMs: number): void {

@@ -102,9 +102,33 @@ export interface GameNetClientOptions {
         level: number;
         experience: number;
         leveledUp?: boolean;
+        health?: number;
+        maxHealth?: number;
     }) => void;
+    onPlayerDamaged?: (payload: {
+        playerId: string;
+        health: number;
+        maxHealth: number;
+        damage: number;
+        attackerPlayerId?: string;
+    }) => void;
+    onPlayerDied?: (payload: {
+        playerId: string;
+        killerPlayerId?: string;
+    }) => void;
+    onPlayerRespawned?: (payload: {
+        playerId: string;
+        mapId: string;
+        instanceId?: string;
+        tileX: number;
+        tileY: number;
+        z: number;
+        health: number;
+        maxHealth: number;
+    }) => void;
+    onServerError?: (payload: { code: string; message: string }) => void;
     /** Após `welcome` — sincronizar XP local com o servidor (dev/mock). */
-    onWelcome?: () => void;
+    onWelcome?: (payload: { health: number; maxHealth: number }) => void;
 }
 
 /**
@@ -482,7 +506,10 @@ export class GameNetClient {
                         creatures: msg.creatures,
                     });
                 }
-                this.options.onWelcome?.();
+                this.options.onWelcome?.({
+                    health: msg.health,
+                    maxHealth: msg.maxHealth,
+                });
                 break;
             case 'instance_assigned':
                 this.networkInstanceId = msg.instanceId;
@@ -554,6 +581,7 @@ export class GameNetClient {
                 break;
             case 'error':
                 console.warn(`[GameNet] ${msg.code}: ${msg.message}`);
+                this.options.onServerError?.({ code: msg.code, message: msg.message });
                 break;
             case 'pong':
                 break;
@@ -619,9 +647,72 @@ export class GameNetClient {
                         level: msg.level,
                         experience: msg.experience,
                         leveledUp: msg.leveledUp,
+                        health: msg.health,
+                        maxHealth: msg.maxHealth,
                     });
                 }
                 break;
+            case 'player_damaged': {
+                const existing = this.remotePlayers.get(msg.playerId);
+                if (existing) {
+                    existing.health = msg.health;
+                    existing.maxHealth = msg.maxHealth;
+                }
+                this.options.onPlayerDamaged?.({
+                    playerId: msg.playerId,
+                    health: msg.health,
+                    maxHealth: msg.maxHealth,
+                    damage: msg.damage,
+                    attackerPlayerId: msg.attackerPlayerId,
+                });
+                break;
+            }
+            case 'player_died': {
+                const existing = this.remotePlayers.get(msg.playerId);
+                if (existing) {
+                    existing.health = 0;
+                }
+                this.options.onPlayerDied?.({
+                    playerId: msg.playerId,
+                    killerPlayerId: msg.killerPlayerId,
+                });
+                break;
+            }
+            case 'player_respawned': {
+                const existing = this.remotePlayers.get(msg.playerId);
+                if (existing) {
+                    existing.tileX = msg.tileX;
+                    existing.tileY = msg.tileY;
+                    existing.z = msg.z;
+                    existing.mapId = msg.mapId;
+                    existing.instanceId = msg.instanceId;
+                    existing.health = msg.health;
+                    existing.maxHealth = msg.maxHealth;
+                } else {
+                    this.remotePlayers.set(msg.playerId, {
+                        playerId: msg.playerId,
+                        name: '',
+                        mapId: msg.mapId,
+                        instanceId: msg.instanceId,
+                        tileX: msg.tileX,
+                        tileY: msg.tileY,
+                        z: msg.z,
+                        health: msg.health,
+                        maxHealth: msg.maxHealth,
+                    });
+                }
+                this.options.onPlayerRespawned?.({
+                    playerId: msg.playerId,
+                    mapId: msg.mapId,
+                    instanceId: msg.instanceId,
+                    tileX: msg.tileX,
+                    tileY: msg.tileY,
+                    z: msg.z,
+                    health: msg.health,
+                    maxHealth: msg.maxHealth,
+                });
+                break;
+            }
         }
     }
 }

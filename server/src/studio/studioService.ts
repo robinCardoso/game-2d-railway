@@ -3,6 +3,8 @@ import path from 'node:path';
 import { sanitizeCreaturePresetEntry } from '../../../src/game-data/mobPresetTypes.js';
 import { sanitizeItemCatalogDocument, findUnknownLootItemIds } from '../../../src/game-data/itemCatalogTypes.js';
 import { paths } from '../config/paths.js';
+import { refreshServerMapEntry } from '../mapRegistry.js';
+import type { MapCollisionStore } from '../MapCollisionStore.js';
 import {
     MAX_MAP_SAVE_BYTES,
     alternateMapSpriteFileKeys,
@@ -39,6 +41,12 @@ export interface ApiResult {
 }
 
 export class StudioService {
+    private collision?: MapCollisionStore;
+
+    setCollisionStore(collision: MapCollisionStore): void {
+        this.collision = collision;
+    }
+
     getSpriteUsage(filenameParam: unknown): ApiResult {
         const filename = sanitizeMapSpriteFilename(filenameParam);
         if (!filename) return { status: 400, body: { error: 'Parâmetro filename inválido.' } };
@@ -480,6 +488,13 @@ export class StudioService {
                     : `${body.json}\n`
                 : `${JSON.stringify(body.document, null, 2)}\n`;
         fs.writeFileSync(targetPath, fileContents, 'utf-8');
+        const mapId = safeName.replace(/\.json$/i, '');
+        refreshServerMapEntry(mapId);
+        if (this.collision) {
+            void this.collision.reloadTemplate(mapId, `maps/${safeName}`).catch((err) => {
+                console.error(`[StudioService] Falha ao recarregar colisão do mapa ${mapId}:`, err);
+            });
+        }
         return { status: 200, body: { success: true, path: `public/maps/${safeName}` } };
     }
 

@@ -52,6 +52,8 @@ export function buildMapDocumentExportView(doc: MapDocument): Record<string, unk
 
     if (doc.mapId) out.mapId = doc.mapId;
     if (doc.tileSize !== undefined) out.tileSize = doc.tileSize;
+    if (typeof doc.pvpEnabled === 'boolean') out.pvpEnabled = doc.pvpEnabled;
+    if (typeof doc.instanced === 'boolean') out.instanced = doc.instanced;
 
     if (doc.tileRefs && Object.keys(doc.tileRefs).length > 0) {
         out.tileRefs = doc.tileRefs;
@@ -179,7 +181,7 @@ export function formatMapDocumentJson(doc: MapDocument): string {
         sections.push(`  "format": ${JSON.stringify(view.format)}`);
     }
 
-    const headerKeys = ['version', 'name', 'mapId', 'size', 'tileSize'] as const;
+    const headerKeys = ['version', 'name', 'mapId', 'size', 'tileSize', 'pvpEnabled', 'instanced'] as const;
     for (const key of headerKeys) {
         if (view[key] === undefined) continue;
         sections.push(`  "${key}": ${JSON.stringify(view[key])}`);

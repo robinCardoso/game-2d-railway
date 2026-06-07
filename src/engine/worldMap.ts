@@ -144,6 +144,8 @@ export function serializeMapDocument(
         grassOverlay?: LayerMap;
         borderOverlay?: LayerMap;
         itemsOverlay?: LayerMap;
+        pvpEnabled?: boolean;
+        instanced?: boolean;
     } = {}
 ): MapDocument {
     const size = options.size ?? MAP_SIZE;
@@ -162,6 +164,8 @@ export function serializeMapDocument(
         spawns: options.spawns ?? [],
         portals: options.portals ?? [],
         spawn: options.spawn ?? { x: 50, y: 50, z: 0 },
+        pvpEnabled: options.pvpEnabled,
+        instanced: options.instanced,
     };
 
     if (Object.keys(tilesRaw).length > 0) {
@@ -295,6 +299,8 @@ export function loadMapFromJson(
     spawn: SpawnPoint;
     name: string;
     mapId?: string;
+    pvpEnabled?: boolean;
+    instanced?: boolean;
     size: number;
     metadata: Record<string, import('./types').TileMetadata>;
     houses: Record<number, import('./types').HouseData>;
@@ -338,6 +344,8 @@ export function loadMapFromJson(
             ),
             name: sanitizeMapDocumentName(doc.name),
             mapId: typeof doc.mapId === 'string' ? doc.mapId.trim().slice(0, 64) : undefined,
+            pvpEnabled: typeof doc.pvpEnabled === 'boolean' ? doc.pvpEnabled : undefined,
+            instanced: typeof doc.instanced === 'boolean' ? doc.instanced : undefined,
             size: mapSize,
             metadata: sanitizeMetadata(doc.metadata, mapSize),
             houses: sanitizeHouses(doc.houses, mapSize),

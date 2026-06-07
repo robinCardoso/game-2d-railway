@@ -61,6 +61,7 @@ export function createWsTicketRouter(collision: MapCollisionStore): Router {
                 appearance: appearanceFromCharacterRow(character),
                 level: character.level ?? 1,
                 experience: Math.max(0, Math.floor(Number(character.experience) || 0)),
+                health: character.health,
             });
 
             res.json({ ticket, expiresAt: Date.now() + env.wsTicketTtlMs });

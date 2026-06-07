@@ -48,6 +48,14 @@
       "type": "integer",
       "description": "Pixels por tile no spritesheet (32 neste projeto)."
     },
+    "pvpEnabled": {
+      "type": "boolean",
+      "description": "Se false, combate PvP é bloqueado neste mapa. Omitido = habilitado."
+    },
+    "instanced": {
+      "type": "boolean",
+      "description": "Se true, cada grupo de jogadores recebe cópia isolada do mapa."
+    },
     "tileRefs": {
       "type": "object",
       "description": "Legenda dos IDs usados neste mapa. Chave = id string.",
