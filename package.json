@@ -41,7 +41,7 @@
   },
   "build": {
     "appId": "com.robincardoso.game2drailway",
-    "productName": "Game 2D Railway",
+    "productName": "Elarion Online",
     "directories": {
       "output": "release"
     },
@@ -60,6 +60,7 @@
           ]
         }
       ],
+      "icon": "public/brand/icon-elarion.png",
       "artifactName": "${productName}-${version}-Setup.${ext}"
     },
     "nsis": {
@@ -68,7 +69,7 @@
       "perMachine": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Game 2D Railway"
+      "shortcutName": "Elarion Online"
     },
     "publish": [
       {

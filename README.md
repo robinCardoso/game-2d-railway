@@ -1,4 +1,4 @@
-# Game 2D Railway
+# Elarion Online
 
 MMORPG 2D no browser estilo Tibia — editor de mapas (Studio GM), engine Canvas 2D, dungeons instanciadas, combate com mobs autoritativos no servidor e multiplayer em tempo real via WebSocket.
 
@@ -378,10 +378,10 @@ npm run electron:check    # valida build web + compile do main process
 npm run electron:build    # gera instalador NSIS (somente local)
 ```
 
-**Saída do build:** pasta `release/` ou `release-build-<timestamp>/` (se `release/win-unpacked` estiver bloqueado). Instalador:
+**Saída do build:** pasta `release/` (instalador copiado automaticamente). Se `release/win-unpacked` estiver bloqueado, o build usa `%TEMP%\elarion-electron-build\<timestamp>\` e copia o `.exe` para `release/`. Instalador:
 
 ```
-Game 2D Railway-0.1.1-Setup.exe
+Elarion Online-0.1.1-Setup.exe
 ```
 
 **Antes de distribuir o instalador**, defina no `.env.production` (ou no build):
@@ -397,7 +397,7 @@ Sem isso, o app instalado não encontra o servidor. URL Railway que muda quebra 
 
 | Sintoma | Solução |
 |---------|---------|
-| `EBUSY` em `app.asar` | Feche o jogo/Explorer em `release/`; o script `prepare-electron-release.mjs` tenta limpar e, se falhar, usa `release-build-<timestamp>/`. Opcional: `FORCE_KILL_ELECTRON_DEV=true` mata também `electron.exe` em dev |
+| `EBUSY` / `EPERM` em `app.asar` ou `win-unpacked` | Feche o jogo e o Explorer em `release/`; `prepare-electron-release.mjs` mata `Elarion Online.exe` (e legado `Game 2D Railway.exe`), limpa pastas e, se falhar, empacota em `%TEMP%\elarion-electron-build\`. Opcional: `FORCE_KILL_ELECTRON_DEV=true` mata também `electron.exe` em dev |
 | Entrada órfã em “Apps instalados” | `scripts/cleanup-orphan-desktop-install.ps1` (PowerShell **como Administrador**) |
 | SmartScreen no Windows | Normal sem code signing na primeira instalação |
 
@@ -429,7 +429,7 @@ O builder envia para **GitHub → Releases**:
 
 | Arquivo | Função |
 |---------|--------|
-| `Game 2D Railway-X.Y.Z-Setup.exe` | Instalador NSIS |
+| `Elarion Online-X.Y.Z-Setup.exe` | Instalador NSIS |
 | `latest.yml` | Metadados que o `electron-updater` lê |
 | `*.blockmap` | Download delta (opcional) |
 

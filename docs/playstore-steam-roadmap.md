@@ -1,6 +1,6 @@
 # Roadmap de Publicação: Steam & Google Play Store
 
-Este documento detalha o planejamento, ferramentas necessárias e modificações arquiteturais necessárias para empacotar e publicar o **2D World** (Studio/Engine estilo Tibia) nas plataformas Steam (PC/Mac/Linux) e Google Play Store (Android).
+Este documento detalha o planejamento, ferramentas necessárias e modificações arquiteturais necessárias para empacotar e publicar o **Elarion Online** (Elarion Studio / engine estilo Tibia) nas plataformas Steam (PC/Mac/Linux) e Google Play Store (Android).
 
 ---
 

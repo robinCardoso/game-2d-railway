@@ -1,4 +1,5 @@
-# Remove entrada órfã do Game 2D Railway quando a pasta/uninstaller já foi apagada.
+# Remove entrada órfã do Elarion Online quando a pasta/uninstaller já foi apagada.
+# Também limpa registros legados "Game 2D Railway".
 # Execute como Administrador:
 #   powershell -ExecutionPolicy Bypass -File scripts/cleanup-orphan-desktop-install.ps1
 
@@ -11,6 +12,12 @@ if (-not $isAdmin) {
     Write-Host 'ERRO: execute este script como Administrador (PowerShell elevado).' -ForegroundColor Red
     exit 1
 }
+
+$productPatterns = @('*Elarion Online*', '*Game 2D Railway*')
+$installFolders = @(
+    'C:\Program Files\Elarion Online',
+    'C:\Program Files\Game 2D Railway'
+)
 
 $uninstallRoots = @(
     'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
@@ -25,10 +32,18 @@ foreach ($root in $uninstallRoots) {
     Get-ChildItem $root | ForEach-Object {
         $props = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue
         if ($null -eq $props.DisplayName) { return }
-        if ($props.DisplayName -notlike '*Game 2D Railway*') { return }
+
+        $matchesProduct = $false
+        foreach ($pattern in $productPatterns) {
+            if ($props.DisplayName -like $pattern) {
+                $matchesProduct = $true
+                break
+            }
+        }
+        if (-not $matchesProduct) { return }
 
         $uninstaller = ($props.UninstallString -replace '"','').Split(' ')[0]
-        $folderMissing = -not (Test-Path 'C:\Program Files\Game 2D Railway')
+        $folderMissing = ($installFolders | Where-Object { Test-Path $_ }).Count -eq 0
         $uninstallerMissing = [string]::IsNullOrWhiteSpace($uninstaller) -or -not (Test-Path $uninstaller)
 
         if ($folderMissing -or $uninstallerMissing) {
@@ -42,6 +57,9 @@ foreach ($root in $uninstallRoots) {
 }
 
 $shortcutPaths = @(
+    "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Elarion Online.lnk",
+    "$env:PUBLIC\Desktop\Elarion Online.lnk",
+    "$env:USERPROFILE\Desktop\Elarion Online.lnk",
     "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Game 2D Railway.lnk",
     "$env:PUBLIC\Desktop\Game 2D Railway.lnk",
     "$env:USERPROFILE\Desktop\Game 2D Railway.lnk"

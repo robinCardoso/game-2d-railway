@@ -1,6 +1,6 @@
 # AGENTS.md — guia para agentes IA
 
-Este repositório é um **Studio 2D estilo Tibia** (editor + engine). Leia isto antes de alterar mapas, tiles ou sprites.
+Este repositório é **Elarion Online** — MMORPG 2D estilo Tibia com **Elarion Studio** (editor + engine). Leia isto antes de alterar mapas, tiles ou sprites.
 
 ## Regras Cursor (obrigatório)
 

@@ -112,17 +112,11 @@ body {
     animation: fadeInScale 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-.loading-logo {
+.loading-logo-img {
     width: 60px;
     height: 60px;
-    background: var(--accent-color);
     border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: 28px;
-    color: #fff;
+    object-fit: contain;
     box-shadow: 0 0 30px rgba(99, 102, 241, 0.4);
     animation: pulseGlow 2s infinite ease-in-out;
 }
@@ -209,9 +203,12 @@ body {
 .menubar-scroll::-webkit-scrollbar { height: 4px; }
 
 .logo-area { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-.logo-box {
-    width: 26px; height: 26px; background: var(--accent-color); border-radius: 4px;
-    display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px;
+.logo-brand-img {
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
+    object-fit: contain;
+    flex-shrink: 0;
 }
 .logo-text { font-weight: 700; font-size: 13px; white-space: nowrap; }
 .logo-version { font-size: 10px; font-weight: 400; opacity: 0.45; margin-left: 4px; }

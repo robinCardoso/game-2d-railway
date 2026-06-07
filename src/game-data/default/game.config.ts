@@ -1,6 +1,6 @@
 export const DEFAULT_GAME_CONFIG = {
   id: 'default',
-  name: 'Game 2D Default',
+  name: 'Elarion Default',
 
   start: {
     mapId: 'rookgaard',

@@ -2,7 +2,7 @@ import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.robson.game2drailway',
-  appName: 'Game 2D Railway',
+  appName: 'Elarion Online',
   webDir: 'dist',
   bundledWebRuntime: false,
   server: {

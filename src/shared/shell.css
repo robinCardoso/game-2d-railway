@@ -31,6 +31,14 @@
     margin-bottom: 24px;
 }
 
+.shell-brand-img {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    object-fit: contain;
+    margin-bottom: 12px;
+}
+
 .shell-logo h1 {
     font-size: 1.35rem;
     margin: 0 0 4px;

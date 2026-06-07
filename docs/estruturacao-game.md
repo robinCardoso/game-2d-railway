@@ -24,7 +24,7 @@ Exemplo:
 
 export const DEFAULT_GAME_CONFIG = {
   id: 'default',
-  name: 'Game 2D Default',
+  name: 'Elarion Default',
 
   start: {
     mapId: 'main-town',
@@ -50,7 +50,7 @@ Em que jogo estou?
 → default
 
 Qual nome do jogo?
-→ Game 2D Default
+→ Elarion Default
 
 Onde personagem novo começa?
 → mapa main-town, posição x10 y10 z0

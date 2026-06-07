@@ -1,5 +1,5 @@
 /**
- * Electron main process — Game 2D Railway Desktop Client
+ * Electron main process — Elarion Online Desktop Client
  *
  * Configurações críticas para jogos que precisam continuar
  * processando enquanto minimizados:
@@ -25,7 +25,7 @@ function createWindow(): void {
         height: 720,
         minWidth: 960,
         minHeight: 540,
-        title: 'Game 2D Railway',
+        title: 'Elarion Online',
         backgroundColor: '#0a0b0e',
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),

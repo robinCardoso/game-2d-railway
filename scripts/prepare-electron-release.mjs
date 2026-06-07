@@ -1,5 +1,6 @@
-import { existsSync, rmSync, renameSync, writeFileSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, renameSync, writeFileSync, unlinkSync } from 'node:fs';
 import { execSync } from 'node:child_process';
+import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
@@ -10,7 +11,10 @@ const winUnpacked = path.join(releaseDir, 'win-unpacked');
 const winUnpackedTmp = path.join(releaseDir, 'win-unpacked.tmp');
 
 function killDesktopProcesses() {
-    const commands = ['taskkill /F /T /IM "Game 2D Railway.exe"'];
+    const commands = [
+        'taskkill /F /T /IM "Elarion Online.exe"',
+        'taskkill /F /T /IM "Game 2D Railway.exe"',
+    ];
     if (process.env.FORCE_KILL_ELECTRON_DEV === 'true') {
         commands.push('taskkill /F /T /IM electron.exe');
     }
@@ -48,6 +52,22 @@ async function quarantineDir(target) {
     }
 }
 
+function fallbackOutputDir() {
+    const dir = path.join(os.tmpdir(), 'elarion-electron-build', String(Date.now()));
+    mkdirSync(dir, { recursive: true });
+    return dir;
+}
+
+async function cleanPackagingDirs(outputDir) {
+    for (const name of ['win-unpacked.tmp', 'win-unpacked']) {
+        const target = path.join(outputDir, name);
+        const removed = await removeDir(target);
+        if (!removed && existsSync(target)) {
+            await quarantineDir(target);
+        }
+    }
+}
+
 if (existsSync(markerFile)) {
     unlinkSync(markerFile);
 }
@@ -62,11 +82,15 @@ for (const dir of [winUnpackedTmp, winUnpacked]) {
     if (!removed && existsSync(dir)) {
         const moved = await quarantineDir(dir);
         if (!moved) {
-            outputDir = `${defaultOutput}-build-${Date.now()}`;
-            console.warn(`[electron:prepare] release/win-unpacked bloqueado — usando saída alternativa: ${outputDir}`);
+            outputDir = fallbackOutputDir();
+            console.warn(
+                `[electron:prepare] release/win-unpacked bloqueado — usando pasta temporária: ${outputDir}`,
+            );
             break;
         }
     }
 }
+
+await cleanPackagingDirs(outputDir);
 
 writeFileSync(markerFile, outputDir, 'utf8');

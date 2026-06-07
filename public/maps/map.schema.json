@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://game-2d.local/maps/map.schema.json",
-  "title": "Game 2D MapDocument",
+  "title": "Elarion MapDocument",
   "description": "Mapa esparso para o editor/jogo. Tiles só listam células pintadas. Catálogo completo em /tile_catalog.json.",
   "type": "object",
   "required": ["version", "name", "size", "spawn"],
