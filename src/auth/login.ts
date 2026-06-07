@@ -1,6 +1,9 @@
 import '../shared/shell.css';
 import { resolveAuthNextRedirect } from '../shared/authNavigation';
 import { redirectIfAuthenticated, signIn } from '../shared/authGuard';
+import { initDesktopClientShell } from '../ui/initDesktopClient';
+
+initDesktopClientShell();
 
 await redirectIfAuthenticated();
 

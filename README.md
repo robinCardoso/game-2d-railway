@@ -34,10 +34,10 @@ MMORPG 2D no browser estilo Tibia — editor de mapas (Studio GM), engine Canvas
 | **Conta e personagens** | Registro/login JWT, até 4 personagens por conta (PostgreSQL); mock localStorage em dev |
 | **Play** | Movimento em grid 32×32, andares Z (−7…+7), portais, dungeons instanciadas, XP/nível |
 | **Multiplayer** | Salas `mapId@instanceId`, posição autoritativa, jogadores remotos com interpolação visual |
-| **Combate** | Ataque a mobs (servidor autoritativo), chase AI, dano/XP, anel de alvo, texto flutuante |
+| **Combate** | Ataque a mobs e PvP (servidor autoritativo), chase AI, dano/XP, anel de alvo, texto flutuante |
 | **Studio GM** | Pintura de mapas, auto-borda de grama, spawns, portais, zonas, sprites, outfits, presets |
 | **Persistência** | Mapas/sprites no volume Railway; posição de personagem no PostgreSQL via WS |
-| **Multiplataforma** | Cliente Electron (Windows), shell Capacitor (Android), resync ao voltar de background |
+| **Multiplataforma** | Cliente Electron (Windows) com auto-update, shell Capacitor (Android), resync ao voltar de background |
 | **Segurança WS** | Ticket HMAC no join, reconexão proativa (~13 min), rate limit de movimento/resync |
 
 ---
@@ -93,8 +93,9 @@ O comando `npm run dev` sobe **dois processos**:
 | `npm run preview` | Preview do build Vite |
 | `npm test` | Vitest — protocolo WS, tile refs, políticas de sync |
 | `npm run electron:dev` | Dev + janela Electron apontando para `:5173/play.html` |
-| `npm run electron:build` | Build + instalador NSIS (Windows) |
+| `npm run electron:build` | Build + instalador NSIS (Windows) + publish GitHub Releases |
 | `npm run electron:compile` | Compila só `desktop/electron/` |
+| `npm run electron:check` | Build web + compile Electron (validação pré-release) |
 | `npm run mobile:build` | Build web + `cap sync android` |
 | `npm run mobile:open:android` | Abre projeto no Android Studio |
 
@@ -200,6 +201,7 @@ game-2d-railway/
 │   ├── studio/           # Bootstrap GM
 │   ├── auth/             # Login/registro
 │   ├── characters/       # Roster e criação
+│   ├── ui/               # Toast auto-update Electron, version gate
 │   ├── movement/         # Grid movement
 │   ├── character/        # Stats, sprites, equipamento
 │   └── shared/           # Auth client, API fetch, tipos
@@ -326,7 +328,7 @@ Tipos em [`shared/protocol.ts`](shared/protocol.ts).
 |--------|-----------|
 | `join` | Entrada na sala (+ ticket HMAC, `platform`, `clientBuildVersion`) |
 | `move` / `map_change` | Passo de grid com `stepDurationMs`, direção |
-| `attack` | Ataque a criatura |
+| `attack` | Ataque a criatura ou jogador (PvP conforme mapa/zona) |
 | `resync_request` | Pedido de snapshot completo (rate limit 2 s) |
 | `ping` | Latência |
 
@@ -369,12 +371,41 @@ Cliente desktop com `backgroundThrottling: false` — timers e rede não pausam 
 
 ```bash
 npm run electron:dev      # requer npm run dev implícito (API + Vite)
-npm run electron:build    # gera instalador NSIS
+npm run electron:check    # valida build + compile TypeScript do main
+npm run electron:build    # gera instalador NSIS e publica no GitHub Releases
 ```
 
-Arquivos: `desktop/electron/main.ts`, `preload.ts`, `electron-builder.yml`
+Arquivos principais:
+
+| Arquivo | Função |
+|---------|--------|
+| `desktop/electron/main.ts` | Janela, IPC, inicialização do updater |
+| `desktop/electron/updater.ts` | `electron-updater` — check, download, install |
+| `desktop/electron/preload.ts` | `electronAPI` exposto ao renderer |
+| `src/ui/desktopUpdateToast.ts` | Toast de progresso e restart |
+| `src/ui/desktopVersionGate.ts` | Bloqueio de clientes abaixo da versão mínima |
+| `src/ui/initDesktopClient.ts` | Shell Electron (toast + gate) nas páginas |
+
+#### Auto-update (GitHub Releases)
+
+- Updates via `electron-updater` + `electron-builder` (`publish` → `robinCardoso/game-2d-railway`)
+- **Nunca** reinicia automaticamente em combate: download só com confirmação do jogador
+- Toast aparece em landing, login, roster e play (~8 s após abrir o app)
+- Na página de jogo, o botão de restart fica oculto até o usuário sair do mundo
+
+#### Version gate (servidor)
+
+`GET /api/desktop/version?clientVersion=0.1.0&platform=electron` retorna se o cliente pode entrar no mundo.
+
+| Campo | Descrição |
+|-------|-----------|
+| `allowed` | `false` bloqueia entrada no roster/play |
+| `minVersion` | Versão mínima exigida (`DESKTOP_MIN_VERSION`) |
+| `latestVersion` | Versão mais recente publicada (`DESKTOP_LATEST_VERSION`) |
 
 > **Importante:** defina **domínio próprio** (`VITE_API_BASE_URL`, `VITE_WS_BASE_URL`) antes de distribuir. URL Railway que muda quebra instaladores antigos.
+
+> **Publicar release:** exporte `GH_TOKEN` (PAT com escopo `repo`) antes de `npm run electron:build`. Sem code signing, o Windows SmartScreen avisa na primeira instalação.
 
 ### Capacitor (Android)
 
@@ -433,6 +464,13 @@ cp .env.example .env
 | `CREATURE_SNAPSHOT_INTERVAL_MS` | `1000` | `creature_sync` periódico; `0` desliga |
 | `RESYNC_MIN_INTERVAL_MS` | `2000` | Rate limit de `resync_request` |
 
+**Servidor — version gate Electron (opcional):**
+
+| Variável | Padrão | Descrição |
+|----------|--------|-----------|
+| `DESKTOP_MIN_VERSION` | `0.1.0` | Clientes abaixo desta versão não entram no mundo |
+| `DESKTOP_LATEST_VERSION` | `0.1.0` | Versão mais recente (informativo no endpoint) |
+
 Lista completa: [.env.example](.env.example) · [server/README.md](server/README.md)
 
 ---
@@ -460,6 +498,7 @@ Configuração em [`railway.json`](railway.json):
 - [ ] `NODE_ENV=production`, `HOST=0.0.0.0`
 - [ ] **Não** usar `STUDIO_MOCK_GM=true` nem `ALLOW_CLIENT_PROGRESS_SYNC=true`
 - [ ] Conta GM com `can_access_studio = true` para acessar Studio
+- [ ] `DESKTOP_MIN_VERSION` alinhada à release Electron publicada (se usar version gate)
 
 Guia passo a passo: **[docs/hosting.md](docs/hosting.md)**
 
@@ -508,12 +547,16 @@ Ver [docs/studio-improvements-log.md](docs/studio-improvements-log.md) §7.8.
 npm test
 ```
 
-Suite Vitest (28 testes) cobre:
+Suite Vitest (~90 testes) cobre:
 
 - Resolução de `ref` em mapas (`tileRefResolver`)
 - Protocolo WS (`resync_request`, mensagens cliente)
 - Políticas de `steppingDest` e `progress_sync`
 - Chase de criaturas (`creatureChase`)
+- Combate PvP no servidor (`src/server/combat/pvp.test.ts`)
+- Feedback visual de combate (remotos, floating damage, Y-sort)
+- Version gate Electron (`shared/desktopVersion`, `/api/desktop/version`)
+- Navegação auth compatível com `file://` (Electron)
 
 Invariantes críticos para contribuidores: [AGENTS.md](AGENTS.md)
 
@@ -549,7 +592,7 @@ Invariantes críticos para contribuidores: [AGENTS.md](AGENTS.md)
 | Banco | PostgreSQL (migrations em `database/migrations/`) |
 | Auth | JWT + bcrypt |
 | WS segurança | Ticket HMAC (`ENTER_TICKET_SECRET`) |
-| Desktop | Electron 36 + electron-builder |
+| Desktop | Electron 36 + electron-builder + electron-updater |
 | Mobile | Capacitor 8 (Android) |
 | Testes | Vitest |
 | Deploy | Railway (`railway.json`) |

@@ -26,4 +26,8 @@ export const env = {
     studioMockGm: process.env.STUDIO_MOCK_GM === 'true',
     clientOrigin: process.env.CLIENT_ORIGIN?.trim() || null,
     isProduction: process.env.NODE_ENV === 'production',
+    /** Versão mínima do cliente desktop (Electron) permitida a jogar. */
+    desktopMinVersion: process.env.DESKTOP_MIN_VERSION?.trim() || '0.1.0',
+    /** Versão mais recente recomendada (informativa para o cliente). */
+    desktopLatestVersion: process.env.DESKTOP_LATEST_VERSION?.trim() || '0.1.0',
 } as const;

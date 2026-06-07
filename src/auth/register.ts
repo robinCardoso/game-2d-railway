@@ -1,6 +1,9 @@
 import '../shared/shell.css';
 import { redirectIfAuthenticated, signUp } from '../shared/authGuard';
 import { track } from '../shared/analytics';
+import { initDesktopClientShell } from '../ui/initDesktopClient';
+
+initDesktopClientShell();
 
 await redirectIfAuthenticated();
 

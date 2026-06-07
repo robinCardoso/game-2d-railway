@@ -1,6 +1,9 @@
 import './landing.css';
 import { getSession } from '../shared/authGuard';
 import { track } from '../shared/analytics';
+import { initDesktopClientShell } from '../ui/initDesktopClient';
+
+initDesktopClientShell();
 
 track('landing_view');
 

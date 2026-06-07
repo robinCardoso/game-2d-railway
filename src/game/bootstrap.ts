@@ -1,7 +1,10 @@
 import { requireAuth, signOut } from '../shared/authGuard';
 import { getCharacter } from '../shared/characterStore';
 import { track } from '../shared/analytics';
+import { enforceDesktopVersionGate, initDesktopClientShell } from '../ui/initDesktopClient';
 import { startPlay, stopLocationAutosave } from './playApp';
+
+initDesktopClientShell();
 
 // Listeners cedo — evita navegação pelo href antes do save (durante carregamento do mapa).
 document.getElementById('changeCharLink')?.addEventListener('click', async (e) => {
@@ -29,8 +32,11 @@ if (!characterId) {
         if (!character) {
             location.href = 'characters.html';
         } else {
-            track('first_world_enter', { characterId });
-            await startPlay(character, session.userId);
+            const versionOk = await enforceDesktopVersionGate();
+            if (versionOk) {
+                track('first_world_enter', { characterId });
+                await startPlay(character, session.userId);
+            }
         }
     } catch {
         /* redirect em requireAuth */

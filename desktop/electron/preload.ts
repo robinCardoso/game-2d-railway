@@ -39,4 +39,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     /** Janela recuperou foco */
     onWindowFocus: (callback: () => void) => on('window-focus', callback),
+
+    /** API de Auto-Update */
+    updater: {
+        check: (): Promise<{ ok: boolean; reason?: string }> =>
+            ipcRenderer.invoke('updater:check'),
+
+        download: (): Promise<{ ok: boolean; reason?: string }> =>
+            ipcRenderer.invoke('updater:download'),
+
+        install: (): Promise<{ ok: boolean; reason?: string }> =>
+            ipcRenderer.invoke('updater:install'),
+
+        onStatus: (callback: (status: any) => void): (() => void) => {
+            const listener = (_event: unknown, status: any) => callback(status);
+            ipcRenderer.on('updater:status', listener);
+
+            return () => {
+                ipcRenderer.removeListener('updater:status', listener);
+            };
+        }
+    }
 });

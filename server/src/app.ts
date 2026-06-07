@@ -8,6 +8,7 @@ import { createAuthRouter } from './routes/auth.js';
 import { createCharactersRouter } from './routes/characters.js';
 import { createWsTicketRouter } from './routes/wsTicket.js';
 import { createStudioRouter } from './routes/studio/index.js';
+import { desktopVersionHandler } from './routes/desktopVersion.js';
 import { studioService } from './studio/studioService.js';
 import { isDatabaseConfigured } from './db/pool.js';
 import type { MapCollisionStore } from './MapCollisionStore.js';
@@ -57,6 +58,7 @@ export function createApp(getOnline: (() => number) | undefined, collision: MapC
     app.use('/api/auth', createAuthRouter());
     app.use('/api/characters', createCharactersRouter((mapId) => collision.getMapSpawn(mapId)));
     app.use('/api/ws-ticket', createWsTicketRouter(collision));
+    app.get('/api/desktop/version', desktopVersionHandler);
     studioService.setCollisionStore(collision);
     app.use('/api', createStudioRouter());
 

@@ -36,6 +36,46 @@
   "dependencies": {
     "@capacitor/android": "^8.4.0",
     "@capacitor/app": "^8.1.0",
-    "@capacitor/core": "^8.4.0"
+    "@capacitor/core": "^8.4.0",
+    "electron-updater": "^6.8.9"
+  },
+  "build": {
+    "appId": "com.robincardoso.game2drailway",
+    "productName": "Game 2D Railway",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "desktop/electron/dist/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": false,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Game 2D Railway"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "robinCardoso",
+        "repo": "game-2d-railway",
+        "releaseType": "release"
+      }
+    ]
   }
 }

@@ -1,5 +1,8 @@
 import '../shared/shell.css';
 import { requireAuth, signOut, getProfile } from '../shared/authGuard';
+import { enforceDesktopVersionGate, initDesktopClientShell } from '../ui/initDesktopClient';
+
+initDesktopClientShell();
 import {
     listCharacters,
     softDeleteCharacter,
@@ -197,6 +200,8 @@ function escapeHtml(s: string): string {
 enterBtn.addEventListener('click', async () => {
     if (!selectedId) return;
     try {
+        const versionOk = await enforceDesktopVersionGate();
+        if (!versionOk) return;
         await markCharacterPlayed(selectedId, session.userId);
         sessionStorage.setItem('activeCharacterId', selectedId);
         track('first_world_enter', { characterId: selectedId });
