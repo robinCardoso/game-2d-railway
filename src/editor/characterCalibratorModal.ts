@@ -830,8 +830,9 @@ export function openCharacterCalibrator(
         calBorderPreviewCanvas,
         'click',
         (e) => {
-            if (!isBorderSetMode || !borderSetUi) return;
-            const grid = pickPreviewGridCell(calBorderPreviewCanvas, e.clientX, e.clientY);
+            if (!isBorderSetMode || !borderSetUi || !calBorderPreviewCanvas) return;
+            const me = e as MouseEvent;
+            const grid = pickPreviewGridCell(calBorderPreviewCanvas, me.clientX, me.clientY);
             if (!grid) return;
             if (grid.x === 1 && grid.y === 1) {
                 toast.info('O centro é a grama — clique numa célula de pedra ao redor.');
@@ -858,11 +859,12 @@ export function openCharacterCalibrator(
         calBorderInnerPreviewCanvas,
         'click',
         (e) => {
-            if (!isBorderSetMode || !borderSetUi) return;
+            if (!isBorderSetMode || !borderSetUi || !calBorderInnerPreviewCanvas) return;
+            const me = e as MouseEvent;
             const col = pickInnerCornerPreviewIndex(
                 calBorderInnerPreviewCanvas,
-                e.clientX,
-                e.clientY
+                me.clientX,
+                me.clientY
             );
             if (col === null) return;
             const mask = INNER_CORNER_4_SLOTS[col]?.mask ?? 0;
@@ -1026,6 +1028,7 @@ export function openCharacterCalibrator(
     bind(calMapFrameColInput, 'change', applyMapFrameFromInputs);
 
     bind(calMapMultiSelectToggle, 'change', () => {
+        if (!calMapMultiSelectToggle) return;
         mapMultiSelectMode = calMapMultiSelectToggle.checked;
         updateMultiSelectUI();
         updateMapFrameUI();
