@@ -6,6 +6,7 @@ import {
     resolveSpriteDirection,
     tickGridMovement,
 } from './gridMovement';
+import { getPlayCombatTargetId } from '../game/playCombat';
 
 export interface PlayerMovementController {
     updateMovement(options: {
@@ -102,7 +103,8 @@ export const PlayerMovement: PlayerMovementController = {
         // 2. Sprite — face travada durante deslize; teclas novas só após concluir
         const combatLocksFacing =
             activeCharacterController.currentState === 'attack' ||
-            activeCharacterController.currentState === 'cast';
+            activeCharacterController.currentState === 'cast' ||
+            getPlayCombatTargetId() !== null;
         const lockedFacing = getActiveStepFacing(gridMovement);
         const spriteDir = lockedFacing ?? resolveSpriteDirection(gridMovement, keys);
         if (spriteDir && !combatLocksFacing) {

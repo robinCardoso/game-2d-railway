@@ -2,12 +2,14 @@ import { ENGINE_CONFIG } from '../engine/config';
 import type { CreatureSnapshot } from '../../shared/protocol';
 import { MONSTER_STEP_MS } from '../../shared/creatureChase';
 import { GameEntity } from '../character/entity';
+import type { CharacterSpriteConfig } from '../character/spriteAnimation';
 import { createCreatureConfigForSpawn } from '../character/creatureConfigs';
 import { resolveCreatureCombatStats } from '../game/creatureCombatStats';
 import { getCreaturePreset } from '../editor/creaturePresets';
 import { protocolDirectionToSprite } from '../world/playerAppearance';
 import {
     beginCreatureDeath,
+    refreshCreatureDeathVisual,
     respawnCreatureAtSpawn,
     tickCreatureCorpse,
 } from '../game/creatureDeathLifecycle';
@@ -133,6 +135,27 @@ function isSlideActive(slide: CreatureSlide | undefined): boolean {
     return slide?.active === true;
 }
 
+function configHasDeathAnimations(config: CharacterSpriteConfig): boolean {
+    return Object.keys(config.animations).some((key) => key.startsWith('dead_'));
+}
+
+function applySpriteConfigToEntity(entity: GameEntity, config: CharacterSpriteConfig): void {
+    const ctrl = entity.animController;
+    const prevSheet = ctrl.config.spriteSheetUrl.replace(/^\//, '');
+    const nextSheet = config.spriteSheetUrl.replace(/^\//, '');
+    ctrl.config = { ...config, name: entity.name };
+    if (nextSheet !== prevSheet) {
+        ctrl.loadImage();
+    }
+}
+
+function ensureEntityPresetConfig(entity: GameEntity): void {
+    const fresh = createCreatureConfigForSpawn(entity.name);
+    if (!configHasDeathAnimations(fresh)) return;
+    if (configHasDeathAnimations(entity.animController.config)) return;
+    applySpriteConfigToEntity(entity, fresh);
+}
+
 /**
  * Criaturas online — 1 tile por deslize (~320 ms), meta sempre atualizada no servidor.
  * Pacotes durante deslize só atualizam a meta; o próximo passo começa ao chegar no SQM.
@@ -242,6 +265,7 @@ export class ServerCreatureSync {
         this.networkCommitted.delete(creatureId);
         snapEntityToTile(entity, tile.tileX, tile.tileY);
         entity.worldZ = tile.z;
+        ensureEntityPresetConfig(entity);
         beginCreatureDeath(entity, performance.now());
         this.stepDurationMs.delete(creatureId);
         this.chaseActiveUntil.delete(creatureId);
@@ -565,6 +589,20 @@ export class ServerCreatureSync {
         this.loading.clear();
     }
 
+    /** Atualiza JSON/spritesheet das criaturas já instanciadas (ex.: após `loadCreaturePresets`). */
+    reloadSpriteConfigsFromPresets(): void {
+        for (const entity of this.entities.values()) {
+            const fresh = createCreatureConfigForSpawn(entity.name);
+            const hadDeath = configHasDeathAnimations(entity.animController.config);
+            const hasDeath = configHasDeathAnimations(fresh);
+            applySpriteConfigToEntity(entity, fresh);
+
+            if (entity.isDead && !hadDeath && hasDeath) {
+                refreshCreatureDeathVisual(entity);
+            }
+        }
+    }
+
     resetFrameClock(): void {
     }
 
@@ -726,6 +764,11 @@ export class ServerCreatureSync {
 
     private buildEntityImmediate(snap: CreatureSnapshot): GameEntity {
         const config = createCreatureConfigForSpawn(snap.name);
+        if (!configHasDeathAnimations(config)) {
+            console.warn(
+                `[ServerCreatureSync] Preset incompleto para "${snap.name}" — morte pode não animar. Verifique creature_presets.json.`
+            );
+        }
         const entity = new GameEntity(
             snap.creatureId,
             snap.name,

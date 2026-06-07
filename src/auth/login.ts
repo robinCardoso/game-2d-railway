@@ -1,4 +1,5 @@
 import '../shared/shell.css';
+import { resolveAuthNextRedirect } from '../shared/authNavigation';
 import { redirectIfAuthenticated, signIn } from '../shared/authGuard';
 
 await redirectIfAuthenticated();
@@ -14,7 +15,7 @@ form.addEventListener('submit', async (e) => {
     try {
         await signIn(email, password);
         const next = new URLSearchParams(location.search).get('next');
-        location.href = next && next.startsWith('/') ? next : 'characters.html';
+        location.href = resolveAuthNextRedirect(next);
     } catch (err) {
         errEl.textContent = err instanceof Error ? err.message : 'Falha ao entrar.';
         errEl.hidden = false;

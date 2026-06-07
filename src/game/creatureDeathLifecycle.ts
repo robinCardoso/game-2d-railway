@@ -40,6 +40,17 @@ function resolveDeathAnimation(entity: GameEntity): { state: 'dead' | 'idle'; du
     return { state: 'idle', durationMs: MONSTER_CORPSE_MIN_MS };
 }
 
+/** Re-aplica animação `dead_*` quando o JSON da criatura carrega após a morte (produção/Electron). */
+export function refreshCreatureDeathVisual(entity: GameEntity): void {
+    if (!entity.isDead || entity.deathAtMs === undefined) return;
+    const deathAnim = resolveDeathAnimation(entity);
+    entity.corpseVisibleUntilMs = entity.deathAtMs + estimateCorpseVisibleMs(deathAnim);
+    entity.setState(deathAnim.state);
+    entity.animController.onAnimationEndCallback = undefined;
+    entity.animController.currentFrameIndex = 0;
+    entity.animController.lastFrameTime = 0;
+}
+
 /** Inicia morte: para IA/movimento, tenta outfit `dead_*`, marca timestamps. */
 export function beginCreatureDeath(entity: GameEntity, nowMs: number): void {
     if (entity.isDead && entity.deathAtMs !== undefined) return;

@@ -498,7 +498,15 @@ export function collectCombatTargetRingDrawable(
         ) {
             return [];
         }
-        const sortY = targetNpc.worldY + tileSize - 0.5;
+        
+        let sortY = targetNpc.worldY + tileSize - 1.0;
+        if (targetNpc.animController && targetNpc.animController.isLoaded && targetNpc.animController.image) {
+            const rect = targetNpc.getDrawSourceRect();
+            const drawScale = targetNpc.animController.config.drawScale ?? 1;
+            const footKey = getEntityFootSortKey(targetNpc.worldX, targetNpc.worldY, rect, tileSize, drawScale);
+            sortY = footKey.sortY - 1.0;
+        }
+        
         const sortX = targetNpc.worldX + tileSize / 2;
         const zoom = camera.zoom ?? 1;
         return [
@@ -527,7 +535,16 @@ export function collectCombatTargetRingDrawable(
         if (targetRemote.z !== z) return [];
         const worldX = targetRemote.worldX ?? targetRemote.tileX * tileSize;
         const worldY = targetRemote.worldY ?? targetRemote.tileY * tileSize;
-        const sortY = worldY + tileSize - 0.5;
+        
+        let sortY = worldY + tileSize - 1.0;
+        const ctrl = targetRemote.controller;
+        if (ctrl?.isLoaded && ctrl.image) {
+            const rect = ctrl.getSourceRect();
+            const drawScale = ctrl.config.drawScale ?? 1;
+            const footKey = getEntityFootSortKey(worldX, worldY, rect, tileSize, drawScale);
+            sortY = footKey.sortY - 1.0;
+        }
+
         const sortX = worldX + tileSize / 2;
         const zoom = camera.zoom ?? 1;
         return [

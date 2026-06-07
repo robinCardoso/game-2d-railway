@@ -16,6 +16,7 @@ import {
     mockSignUp,
 } from './mockAuth';
 import type { AuthSession, UserProfile } from './types';
+import { getCurrentPageReturnPath } from './authNavigation';
 
 export async function getSession(): Promise<AuthSession | null> {
     if (isMockAuthEnabled()) {
@@ -77,7 +78,7 @@ export async function signOut(): Promise<void> {
 export async function requireAuth(redirectTo = 'login.html'): Promise<AuthSession> {
     const session = await getSession();
     if (!session) {
-        const next = encodeURIComponent(location.pathname + location.search);
+        const next = encodeURIComponent(getCurrentPageReturnPath());
         location.href = `${redirectTo}?next=${next}`;
         throw new Error('Não autenticado');
     }

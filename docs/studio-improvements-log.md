@@ -1150,4 +1150,24 @@ Sessão dedicada à resolução de problemas de usabilidade que causavam perda d
 6. Repetir com B recém-conectado (antes do sprite carregar) — hits não devem sumir após outfit aparecer.
 7. Regressão PvE: mob ainda mostra ring, HP e hits ao atacar criatura.
 
+### 49.5 Combate Play/Electron — direção e morte de mob (2026-06-07)
+- **Direção ao atacar:** `playerMovement` trava facing enquanto há alvo de combate; `faceTowardEntity` e `triggerPlayAttackAnimation` usam `resolveSpriteDirectionForState` para só mirar em direções com `attack_*` no JSON.
+- **Mob DEAD em produção:** `ServerCreatureSync.reloadSpriteConfigsFromPresets` após `loadCreaturePresets`; `applyDied` garante preset com `dead_*` antes de `beginCreatureDeath`; `refreshCreatureDeathVisual` re-aplica animação se o JSON chegou tarde.
+- **Diagnóstico:** console avisa `[ServerCreatureSync] Preset incompleto` se `creature_presets.json` ou JSON do mob falhar no fetch (Electron/Railway).
+
+## 50. Correção de profundidade do Target Ring (2026-06-07)
+
+### 50.1 Escopo
+- Corrigir a ordenação visual (Z-sort) do anel de alvo (`target_ring`), garantindo que ele sempre renderize por baixo dos monstros e jogadores remotos.
+
+### 50.2 Implementação
+- `depthSortDraw.ts`:
+  - Aumentamos a margem de profundidade do target ring subtraindo `1.0` (em vez de `0.5`) da coordenada de pé (`sortY`).
+  - Unificamos o cálculo do `sortY` do target ring para monstros de forma que ele utilize a âncora/footKey real do mob caso a `animController` esteja carregada (assim como já era feito para jogadores remotos).
+  - Adicionamos verificações seguras de existência de `animController` para evitar exceções do tipo `TypeError` em objetos mockados nos testes unitários.
+- `depthSortDraw.combat.test.ts`:
+  - Atualizamos a asserção do teste para validar o novo valor de ordenação de profundidade com offset de `-1.0`.
+
+### 50.3 Testes automatizados
+- Executados com sucesso via `npm test` (80/80 testes passando).
 

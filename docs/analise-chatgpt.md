@@ -1,137 +1,159 @@
-o ataque hoje só funciona se tiver do lado do mob ou player, mais é o servidor que valida isso? se alguem mandar atacar pela pagina alterando código, atacando de longe, e mudando seu skill, o servidor bloqueia?
+Vou analisar esses dois commits dentro do repositório e focar principalmente no motivo de o build Electron se comportar diferente da web: rotas, paths, assets, APIs e integração preload/main.
 
-Vou verificar no código do servidor quem valida distância, alvo e dano, porque a resposta correta depende de onde o cálculo acontece: cliente pode sugerir ataque, mas servidor precisa ser autoritativo.
+Pensou por 1m 7s
 
-Pensou por 28s
+Sim, isso é normal acontecer. Não é estranho o Electron quebrar algo que funcionava na web, porque no build desktop o app não está rodando igual ao browser em http://localhost:5173 ou no domínio Railway.
 
-Sim: hoje o servidor valida o ataque, então alterar o código da página para “atacar de longe” ou “mudar skill” não deveria funcionar, desde que você esteja rodando produção com ticket WS e sem aceitar sync de progresso do cliente.
+No seu caso, o principal problema parece ter sido este:
 
-Pelo código atual, a mensagem de ataque do cliente só envia:
+Diagnóstico
 
-{
-  type: 'attack',
-  creatureId: string,
-  mapId: string,
-  instanceId?: string
-}
+Você corrigiu uma parte importante no commit ef6394f: trocar links HTML absolutos, tipo:
 
-Ou seja: o cliente não envia dano, skill, level, melee, magic, distance, defense, health ou attack speed. O dano é calculado no servidor com a vocação e level que o servidor tem para aquele jogador.
+<a href="/characters.html">
 
-Ataque em mob
+para links relativos:
 
-Para mob, está bem protegido.
+<a href="characters.html">
 
-O servidor passa pelo RoomCreatureManager.processAttack() e valida:
+Isso faz sentido para Electron, porque no build empacotado a janela carrega o HTML via loadFile(...), não via servidor HTTP. O seu main.ts faz exatamente isso em produção: carrega dist/index.html com mainWindow.loadFile(...).
 
-cooldown do ataque;
-se a sala existe;
-se a criatura existe;
-se é monstro;
-se não está morta;
-se o atacante está no mesmo z;
-se o atacante está dentro do alcance permitido por isPlayerInAttackRange;
-depois calcula o dano no servidor com processAttack() usando stats da vocação.
+Então, quando uma página no Electron usa /characters.html, isso pode virar algo como:
 
-Então, se alguém abrir o DevTools e mandar:
+file:///characters.html
 
-ws.send(JSON.stringify({
-  type: 'attack',
-  v: 1,
-  creatureId: 'monster_123',
-  mapId: 'main'
-}))
+ou tentar resolver a partir da raiz errada, em vez de:
 
-estando longe, o servidor deve rejeitar internamente com NOT_ADJACENT / ataque inválido e não aplicar dano.
+file:///.../dist/characters.html
 
-Ataque em player PvP
+Por isso as páginas “não abriam”.
 
-Para player também existe validação no servidor.
+O commit foi na direção certa
 
-O servidor valida:
+O commit ef6394f mostra claramente que você mudou links de navegação para relativos em várias páginas, por exemplo characters-new.html, characters.html, index.html, login.html e register.html.
 
-atacante está conectado;
-atacante está no mesmo mapa/instância informado;
-alvo existe;
-alvo está no mesmo mapa/instância;
-mapa permite PvP;
-atacante não está em Protection Zone;
-alvo não está em Protection Zone;
-cooldown do ataque;
-distância: mesmo z, dx <= 1 e dy <= 1;
-dano calculado no servidor com vocação/level do atacante e defesa do alvo.
+Isso é uma melhoria real para compatibilidade com Electron/Capacitor.
 
-Então, para PvP melee atual, se alguém tentar atacar de longe, cai aqui:
+Mas ainda tem um ponto que eu validaria com muito cuidado:
 
-if (dz !== 0 || dx > 1 || dy > 1) {
-  return;
-}
+Ainda pode faltar base: './' no Vite
 
-Logo, não aplica dano.
+Seu vite.config.ts atual tem build.rollupOptions.input para várias páginas HTML, mas não vi base: './' configurado.
 
-Mudar skill pelo cliente
+Isso é importante porque o Vite, por padrão, pode gerar assets no build com caminhos absolutos, tipo:
 
-Pelo fluxo de ataque atual, não funciona, porque o cliente não envia skill no ataque.
+<script src="/assets/play-xxxx.js">
+<link href="/assets/style-xxxx.css">
 
-O cálculo de dano chama calculateStatsForLevel(vocationConfig, attacker.level) dentro do servidor. Isso significa que o servidor pega os stats da vocação e level do player, não valores inventados pelo browser.
+No navegador web isso funciona, porque /assets/... aponta para a raiz do domínio.
 
-Então alterar algo no JS do cliente tipo:
+No Electron com file://, isso pode quebrar, porque /assets/... não aponta para a pasta dist/assets, e sim para uma raiz errada do sistema.
 
-player.melee = 999999
-player.magicAttack = 999999
+Eu recomendaria ajustar o Vite assim:
 
-não deveria mudar o dano real, porque o servidor não usa esse objeto local para calcular dano.
+// vite.config.ts
+import { defineConfig } from 'vite';
+import path from 'path';
 
-O ponto que precisa atenção: progress_sync
+const API_PORT = Number(process.env.GAME_SERVER_PORT ?? process.env.PORT ?? 8787);
+const API_TARGET = `http://localhost:${API_PORT}`;
 
-Aqui tem um cuidado importante.
+export default defineConfig({
+  base: './',
 
-Existe proteção para progress_sync: em produção, ele não deve aceitar XP vindo do cliente. A regra diz: produção nunca aceita XP do cliente; em dev só aceita com opt-in explícito e sem ticket WS.
+  build: {
+    target: 'es2022',
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        studio: path.resolve(__dirname, 'studio.html'),
+        play: path.resolve(__dirname, 'play.html'),
+        login: path.resolve(__dirname, 'login.html'),
+        register: path.resolve(__dirname, 'register.html'),
+        characters: path.resolve(__dirname, 'characters.html'),
+        charactersNew: path.resolve(__dirname, 'characters-new.html'),
+        terms: path.resolve(__dirname, 'terms.html'),
+        privacy: path.resolve(__dirname, 'privacy.html'),
+      },
+    },
+  },
 
-Mas no GameRoom.ts, o servidor chama:
+  server: {
+    proxy: {
+      '/api': { target: API_TARGET, changeOrigin: true },
+      '/health': { target: API_TARGET, changeOrigin: true },
+      '/tiles': { target: API_TARGET, changeOrigin: true },
+    },
+  },
+});
 
-shouldAcceptClientProgressSync({
-  isProduction: env.isProduction,
-  allowClientProgressSync: env.allowClientProgressSync,
-  requireWsTicket: this.requireWsTicket,
-})
+Isso é provavelmente a peça mais importante para o Electron build funcionar como app instalado.
 
-Só que no env.ts atual que eu consultei, eu não vi allowClientProgressSync definido no objeto env.
+O problema não era só “link de página”
 
-Na prática, isso tende a virar undefined, que funciona como false, então bloqueia. Mas eu corrigiria mesmo assim, para ficar explícito e evitar confusão:
+Pelo seu projeto, existem três categorias de path:
 
-allowClientProgressSync:
-  process.env.ALLOW_CLIENT_PROGRESS_SYNC === 'true',
+1. Navegação entre HTML
 
-No env.ts.
+Exemplo:
 
-Resumo direto
+<a href="characters.html">
 
-Hoje está assim:
+Aqui você corrigiu bem.
 
-Atacar mob de longe: servidor bloqueia.
-Atacar player de longe: servidor bloqueia.
-Alterar dano no cliente: não afeta, dano é servidor.
-Alterar skill no cliente: não afeta ataque, servidor recalcula por vocação/level.
-Alterar XP pelo cliente: política bloqueia em produção.
-Movimento teleport/speed hack: servidor valida passo, walkable e rate limit.
+2. Assets internos do Vite
 
-Mas eu faria mais um commit de segurança pequeno:
+Exemplo gerado no build:
 
-fix: make combat/progress authority explicit
+/assets/index-xxx.js
+/assets/index-xxx.css
 
-Com estes ajustes:
+Aqui entra o base: './'.
 
-// server/src/config/env.ts
-allowClientProgressSync:
-  process.env.ALLOW_CLIENT_PROGRESS_SYNC === 'true',
+3. APIs, WebSocket e tiles vindos do servidor
 
-E também adicionaria testes específicos:
+Aqui você já começou certo também. Seu .env.production adiciona:
 
-1. não causa dano em mob fora do range
-2. não causa dano em player fora do range
-3. não causa dano em player em PZ
-4. não causa dano se mapa pvpEnabled=false
-5. não aceita progress_sync em production
-6. não aceita progress_sync quando REQUIRE_WS_TICKET=true
+VITE_API_BASE_URL=https://game-2d-railway-production.up.railway.app
+VITE_WS_BASE_URL=wss://game-2d-railway-production.up.railway.app
 
-Minha resposta final: sim, a validação principal está no servidor e está correta para bloquear ataque distante e skill fake. A única melhoria que eu faria é deixar allowClientProgressSync explícito no env.ts e cobrir isso com testes.
+Esse commit adicionou essas variáveis.
+
+E seu resolveApiUrl() já prefixa /api/* com VITE_API_BASE_URL, o que é necessário para Electron/Capacitor.
+
+Ou seja: para APIs você já pensou certo. O Electron não pode depender de /api same-origin quando está em file://.
+
+O Electron instalado roda assim:
+
+file:///C:/.../resources/app.asar/dist/play.html
+./assets/...
+https://seu-servidor.com/api/...
+wss://seu-servidor.com
+https://seu-servidor.com/tiles/...
+
+Então o Electron exige uma separação clara:
+
+HTML/pages/assets locais  => caminhos relativos
+API/WS/dados servidor     => URL absoluta Railway/domínio próprio
+Checklist que eu aplicaria agora
+Adicionar base: './' no vite.config.ts.
+Rodar:
+npm run build
+Abrir dist/index.html, dist/login.html, dist/characters.html, dist/play.html e conferir se os scripts estão assim:
+<script src="./assets/...">
+
+e não assim:
+
+<script src="/assets/...">
+Rodar:
+npm run electron:build
+Instalar o .exe gerado e testar o fluxo completo:
+index.html → login.html → characters.html → play.html
+Testar no DevTools do Electron se não aparece erro tipo:
+Not allowed to load local resource
+Failed to fetch
+ERR_FILE_NOT_FOUND
+Cannot GET /api/...
+Validar se todas as chamadas /api, /tiles, /maps, /tile_catalog.json e WebSocket estão resolvendo para Railway ou para paths relativos corretos.
+
+A melhoria foi significativa sim. Só que eu não consideraria o Electron 100% fechado sem o base: './' e sem revisar todos os location.href = '/alguma.html' no TypeScript, porque esses também quebram em file://.

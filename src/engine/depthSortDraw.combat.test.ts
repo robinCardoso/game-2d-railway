@@ -45,7 +45,7 @@ describe('collectCombatTargetRingDrawable', () => {
         const remotes = [makeRemote('p_remote', 8, 9)];
         const drawables = collectCombatTargetRingDrawable([], remotes, 'p_remote', 0, camera, TILE, nowMs);
         expect(drawables).toHaveLength(1);
-        expect(drawables[0].sortY).toBe(9 * TILE + TILE - 0.5);
+        expect(drawables[0].sortY).toBe(9 * TILE + TILE - 1.0);
     });
 
     it('retorna vazio quando alvo remoto está em outro andar Z', () => {

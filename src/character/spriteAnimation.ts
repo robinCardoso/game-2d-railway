@@ -5,6 +5,21 @@ import { resolveApiUrl } from '../shared/apiUrl';
 export type CharacterState = 'idle' | 'walk' | 'attack' | 'sit' | 'dead' | 'cast';
 export type Direction = 'up' | 'down' | 'left' | 'right';
 
+const DIRECTION_FALLBACK_ORDER: Direction[] = ['right', 'left', 'down', 'up'];
+
+/** Escolhe direção com animação disponível para o estado (evita frame errado quando falta `attack_*`). */
+export function resolveSpriteDirectionForState(
+    config: CharacterSpriteConfig,
+    state: CharacterState,
+    preferred: Direction
+): Direction {
+    if (config.animations[`${state}_${preferred}`]) return preferred;
+    for (const dir of DIRECTION_FALLBACK_ORDER) {
+        if (config.animations[`${state}_${dir}`]) return dir;
+    }
+    return preferred;
+}
+
 export interface AnimationEvent {
     frameIndex: number;
     action: 'sound' | 'effect';
@@ -109,6 +124,10 @@ export class SpriteAnimationController {
 
     setDirection(dir: Direction) {
         this.currentDirection = dir;
+    }
+
+    hasAnimation(state: CharacterState, dir: Direction): boolean {
+        return Boolean(this.config.animations[`${state}_${dir}`]);
     }
 
     private getAnimationKey(): string {

@@ -1,6 +1,10 @@
 import '../style.css';
 import { resolveApiUrl } from '../shared/apiUrl';
 import {
+    resolveSpriteDirectionForState,
+    type Direction,
+} from '../character/spriteAnimation';
+import {
     ENGINE_CONFIG,
     buildTileRegistry,
     clampFloorZ,
@@ -358,6 +362,9 @@ function respawnEntities(): void {
 async function reloadCreaturePresetsForPlay(): Promise<void> {
     await loadItemCatalog();
     await loadCreaturePresets();
+    if (usesServerCreatures()) {
+        serverCreatures.reloadSpriteConfigsFromPresets();
+    }
     if (worldSpawns.length > 0) respawnEntities();
 }
 
@@ -469,6 +476,12 @@ function handleBeforeUnload(): void {
 }
 
 function triggerPlayAttackAnimation(): void {
+    const facing = resolveSpriteDirectionForState(
+        activeCharacterController.config,
+        'attack',
+        activeCharacterController.currentDirection
+    );
+    activeCharacterController.setDirection(facing);
     activeCharacterController.setState('attack');
     activeCharacterController.onAnimationEndCallback = () => {
         if (gridMovement.stepping) {
@@ -560,15 +573,26 @@ function faceTowardEntity(target: { tileX: number; tileY: number }): void {
     const dx = target.tileX - player.tileX;
     const dy = target.tileY - player.tileY;
     if (dx === 0 && dy === 0) return;
+
+    let dir: Direction;
     if (Math.abs(dx) > Math.abs(dy)) {
-        activeCharacterController.setDirection(dx > 0 ? 'right' : 'left');
+        dir = dx > 0 ? 'right' : 'left';
     } else if (Math.abs(dy) > Math.abs(dx)) {
-        activeCharacterController.setDirection(dy > 0 ? 'down' : 'up');
+        dir = dy > 0 ? 'down' : 'up';
     } else if (dx !== 0) {
-        activeCharacterController.setDirection(dx > 0 ? 'right' : 'left');
+        dir = dx > 0 ? 'right' : 'left';
     } else {
-        activeCharacterController.setDirection(dy > 0 ? 'down' : 'up');
+        dir = dy > 0 ? 'down' : 'up';
     }
+
+    const animState =
+        activeCharacterController.currentState === 'attack' ? 'attack' : 'idle';
+    dir = resolveSpriteDirectionForState(
+        activeCharacterController.config,
+        animState,
+        dir
+    );
+    activeCharacterController.setDirection(dir);
 }
 
 let pendingProgressSave: { level: number; experience: number } | null = null;
