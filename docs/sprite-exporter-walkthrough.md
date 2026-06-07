@@ -146,6 +146,35 @@ Ao reabrir calibrador de sprite salva, grade aparecia 1×1 ou frames 64×64 inco
 
 ---
 
+## 🏃 7.1 Calibrador de personagem — animações e ciclo de vida do modal
+
+### Sintoma corrigido
+Ao salvar animações no calibrador (`#calibratorAnimPanel`) e reabrir o outfit, linha/frame/FPS apareciam diferentes ou revertiam para valores antigos.
+
+### Causa
+`openCharacterCalibrator()` registra listeners no DOM compartilhado `#calibratorModal` **a cada abertura**. Sem `AbortController.signal` em todos os handlers, sessões antigas continuavam ativas e o botão **Confirmar** gravava snapshots obsoletos por cima do save correto.
+
+### Solução
+| Componente | Papel |
+|------------|--------|
+| `characterCalibratorModal.ts` | `bind()` + `{ signal }` em **todos** os listeners; `activeCalibratorSession` aborta sessão anterior ao reabrir |
+| `characterAnimationDraft.ts` | Fonte única para chave `estado_direção`, troca de seleção e flush dos inputs |
+| `spriteSheetEditor.ts` | Mesmo draft no painel lateral (`clone: false`); `focus` no select antes de `change` |
+| `scripts/check-calibrator-listeners.mjs` | Falha o CI se alguém reintroduzir `addEventListener` nu no calibrador |
+
+### Convenção (modais reabertos no Studio)
+Modais abertos por função (`openX()` a cada uso), com HTML único em `studio.html`:
+- **Obrigatório** `AbortController` + helper `bind(..., { signal })` em todos os listeners.
+- **Proibido** `element.addEventListener` direto sem cleanup.
+- Modais com init único (ex. `vocationEditorModal`) podem registrar uma vez no boot.
+
+### Checklist manual
+- [ ] Abrir calibrador de personagem 3×, editar animações, **Confirmar** — valores estáveis após recarregar outfit do servidor
+- [ ] Trocar Estado/Direção no modal e no painel lateral — sem reset dos números da animação anterior
+- [ ] `npm test` passa (inclui `check-calibrator-listeners`)
+
+---
+
 ## 🖼️ 8. Paleta Tileset vs Seletor Criar Sprites
 
 | UI | Fonte de dados | Escopo |

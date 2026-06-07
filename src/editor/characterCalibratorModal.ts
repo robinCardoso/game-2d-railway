@@ -1,5 +1,10 @@
 import type { CharacterSpriteConfig } from '../character/spriteAnimation';
 import { getAnimationFrameIndexAtCell } from '../character/sheetFrameLayout';
+import {
+    CharacterAnimationDraft,
+    parseAnimationInputFields,
+    type AnimationInputValues,
+} from './characterAnimationDraft';
 import { computeFrameDimensionsFromGrid } from './calibratorGrid';
 import { createBorderSetCalibratorUi, type BorderSetCellAssignment } from './borderSetCalibratorUi';
 import { inferBorderSlotGrid } from './borderSetExport';
@@ -53,6 +58,8 @@ export interface CalibrationResult {
     borderSlotCols?: number;
     borderSlotRows?: number;
 }
+
+let activeCalibratorSession: AbortController | null = null;
 
 export function openCharacterCalibrator(
     imageElement: HTMLImageElement,
@@ -134,8 +141,24 @@ export function openCharacterCalibrator(
 
     if (!modal || !canvas || !ctx) return;
 
+    if (activeCalibratorSession) {
+        activeCalibratorSession.abort();
+        activeCalibratorSession = null;
+    }
+
     const abortController = new AbortController();
+    activeCalibratorSession = abortController;
     const { signal } = abortController;
+
+    /** Evita listeners duplicados ao reabrir o modal (corrompia saves de animação). */
+    const bind = (
+        target: EventTarget | null | undefined,
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: AddEventListenerOptions
+    ) => {
+        target?.addEventListener(type, listener, { ...options, signal });
+    };
 
     const imageW = imageElement.naturalWidth || imageElement.width;
     const imageH = imageElement.naturalHeight || imageElement.height;
@@ -201,9 +224,14 @@ export function openCharacterCalibrator(
     let localAnchorY = initialConfig.anchorY ?? 0;
     let localSheetLayout = initialConfig.sheetLayout || 'horizontal';
 
-    let localAnimations = JSON.parse(JSON.stringify(initialConfig.animations));
-    let activeState = initialState;
-    let activeDirection = initialDirection;
+    const animDraft = new CharacterAnimationDraft(
+        initialConfig.animations,
+        initialState,
+        initialDirection,
+        { defaultSpeedFps: 5, clone: true }
+    );
+    let activeState = animDraft.activeState;
+    let activeDirection = animDraft.activeDirection;
 
     let localGridCols = Math.max(1, options?.initialGridCols ?? (isMapMode ? 1 : 1));
     let localGridRows = Math.max(1, options?.initialGridRows ?? (isMapMode ? 1 : 1));
@@ -393,39 +421,33 @@ export function openCharacterCalibrator(
     calAnimStateSelect.value = activeState;
     calAnimDirSelect.value = activeDirection;
 
-    // Sincroniza a animação selecionada para a UI
-    function syncAnimationToUI() {
-        const key = `${activeState}_${activeDirection}`;
-        let anim = localAnimations[key];
-        if (!anim) {
-            localAnimations[key] = { row: 0, startFrame: 0, frames: 1, speedFps: 5, loop: true };
-            anim = localAnimations[key];
-        }
-        calAnimRowInput.value = anim.row.toString();
-        calAnimStartFrameInput.value = (anim.startFrame ?? 0).toString();
-        calAnimFramesInput.value = anim.frames.toString();
-        calAnimSpeedInput.value = anim.speedFps.toString();
+    function parseCalAnimInputs(): AnimationInputValues {
+        return parseAnimationInputFields(
+            {
+                row: calAnimRowInput.value,
+                startFrame: calAnimStartFrameInput.value,
+                frames: calAnimFramesInput.value,
+                speedFps: calAnimSpeedInput.value,
+            },
+            { defaultSpeedFps: 5 }
+        );
     }
 
-    // Salva a animação atual que está na UI de volta para o objeto local
-    function syncUIToAnimation() {
-        const key = `${activeState}_${activeDirection}`;
-        if (!localAnimations[key]) {
-            localAnimations[key] = { row: 0, startFrame: 0, frames: 1, speedFps: 5, loop: true };
-        }
-        const anim = localAnimations[key];
-        
-        const valRow = parseInt(calAnimRowInput.value, 10);
-        anim.row = Number.isNaN(valRow) ? 0 : valRow;
+    function applyAnimInputsToUI(values: AnimationInputValues): void {
+        calAnimRowInput.value = values.row.toString();
+        calAnimStartFrameInput.value = values.startFrame.toString();
+        calAnimFramesInput.value = values.frames.toString();
+        calAnimSpeedInput.value = values.speedFps.toString();
+    }
 
-        const valStart = parseInt(calAnimStartFrameInput.value, 10);
-        anim.startFrame = Number.isNaN(valStart) ? 0 : valStart;
+    function syncAnimationToUI(): void {
+        animDraft.setActive(activeState, activeDirection);
+        applyAnimInputsToUI(animDraft.writeInputsForActive());
+    }
 
-        const valFrames = parseInt(calAnimFramesInput.value, 10);
-        anim.frames = Number.isNaN(valFrames) || valFrames < 1 ? 1 : valFrames;
-
-        const valSpeed = parseInt(calAnimSpeedInput.value, 10);
-        anim.speedFps = Number.isNaN(valSpeed) || valSpeed < 1 ? 1 : valSpeed;
+    function syncUIToAnimation(): void {
+        animDraft.setActive(activeState, activeDirection);
+        animDraft.readInputs(parseCalAnimInputs());
     }
 
     // Atualiza a visualização do Zoom
@@ -436,7 +458,7 @@ export function openCharacterCalibrator(
         canvas.style.height = `${canvas.height * zoom}px`;
     }
 
-    calZoomInput.addEventListener('input', updateZoom);
+    bind(calZoomInput, 'input', updateZoom);
 
     let selectedFrameCol = isMapMode || isBorderSetMode ? -1 : 0;
     let selectedFrameRow = isMapMode || isBorderSetMode ? -1 : 0;
@@ -519,7 +541,7 @@ export function openCharacterCalibrator(
             gapY: localGapY,
             anchorX: localAnchorX,
             anchorY: localAnchorY,
-            animations: localAnimations,
+            animations: animDraft.toAnimations(),
             currentState: activeState,
             currentDirection: activeDirection,
             sheetLayout: localSheetLayout,
@@ -642,8 +664,7 @@ export function openCharacterCalibrator(
         const cols = Math.floor((canvas.width - localOffsetX) / (localFrameWidth + localGapX));
         const rows = Math.floor((canvas.height - localOffsetY) / (localFrameHeight + localGapY));
 
-        const key = `${activeState}_${activeDirection}`;
-        const activeAnim = localAnimations[key];
+        const activeAnim = animDraft.getDef(activeState, activeDirection);
 
         for (let r = 0; r < rows; r++) {
             for (let c = 0; c < cols; c++) {
@@ -783,10 +804,11 @@ export function openCharacterCalibrator(
     }
 
     // Clique no canvas — seleção de frames (mapa) ou tile de borda (borderSet)
-    canvas.addEventListener(
+    bind(
+        canvas,
         'click',
         (e) => {
-            const picked = pickFrameAtClientPoint(e.clientX, e.clientY);
+            const picked = pickFrameAtClientPoint((e as MouseEvent).clientX, (e as MouseEvent).clientY);
             if (!picked) return;
             if (isMapMode) {
                 applyFramePick(picked.col, picked.row);
@@ -801,11 +823,11 @@ export function openCharacterCalibrator(
                     toast.info('Clique numa célula da prévia 3×3 ou num slot à direita, depois clique na imagem.');
                 }
             }
-        },
-        { signal }
+        }
     );
 
-    calBorderPreviewCanvas?.addEventListener(
+    bind(
+        calBorderPreviewCanvas,
         'click',
         (e) => {
             if (!isBorderSetMode || !borderSetUi) return;
@@ -829,11 +851,11 @@ export function openCharacterCalibrator(
                 `Posição M${meta} ativa. Clique o tile na imagem à esquerda (filete encostando na grama).`,
                 3200
             );
-        },
-        { signal }
+        }
     );
 
-    calBorderInnerPreviewCanvas?.addEventListener(
+    bind(
+        calBorderInnerPreviewCanvas,
         'click',
         (e) => {
             if (!isBorderSetMode || !borderSetUi) return;
@@ -856,8 +878,7 @@ export function openCharacterCalibrator(
                 `Quina interna M${mask} ativa. Clique o tile em L na sheet à esquerda.`,
                 3200
             );
-        },
-        { signal }
+        }
     );
 
     // Arraste para alinhar margem (desativado durante seleção múltipla no modo mapa)
@@ -868,59 +889,48 @@ export function openCharacterCalibrator(
     let originalOffsetX = 0;
     let originalOffsetY = 0;
 
-    canvas.addEventListener(
-        'mousedown',
-        (e) => {
-            if (isMapMode && mapMultiSelectMode) return;
-            isDragging = true;
-            hasDragged = false;
-            dragStartX = e.clientX;
-            dragStartY = e.clientY;
-            originalOffsetX = localOffsetX;
-            originalOffsetY = localOffsetY;
-        },
-        { signal }
-    );
+    bind(canvas, 'mousedown', (e) => {
+        if (isMapMode && mapMultiSelectMode) return;
+        isDragging = true;
+        hasDragged = false;
+        dragStartX = (e as MouseEvent).clientX;
+        dragStartY = (e as MouseEvent).clientY;
+        originalOffsetX = localOffsetX;
+        originalOffsetY = localOffsetY;
+    });
 
-    window.addEventListener(
-        'mousemove',
-        (e) => {
-            if (!isDragging) return;
+    bind(window, 'mousemove', (e) => {
+        if (!isDragging) return;
 
-            const dx = e.clientX - dragStartX;
-            const dy = e.clientY - dragStartY;
+        const me = e as MouseEvent;
+        const dx = me.clientX - dragStartX;
+        const dy = me.clientY - dragStartY;
 
-            if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-                hasDragged = true;
-            }
+        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+            hasDragged = true;
+        }
 
-            if (hasDragged) {
-                const rect = canvas.getBoundingClientRect();
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
-                localOffsetX = Math.round(originalOffsetX + dx * scaleX);
-                localOffsetY = Math.round(originalOffsetY + dy * scaleY);
+        if (hasDragged) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            localOffsetX = Math.round(originalOffsetX + dx * scaleX);
+            localOffsetY = Math.round(originalOffsetY + dy * scaleY);
 
-                calOffsetXInput.value = localOffsetX.toString();
-                calOffsetYInput.value = localOffsetY.toString();
-                renderCalibrator();
-            }
-        },
-        { signal }
-    );
+            calOffsetXInput.value = localOffsetX.toString();
+            calOffsetYInput.value = localOffsetY.toString();
+            renderCalibrator();
+        }
+    });
 
-    window.addEventListener(
-        'mouseup',
-        (e) => {
-            if (!isDragging) return;
-            isDragging = false;
-            if (!hasDragged && !isMapMode && !isBorderSetMode) {
-                const picked = pickFrameAtClientPoint(e.clientX, e.clientY);
-                if (picked) applyFramePick(picked.col, picked.row);
-            }
-        },
-        { signal }
-    );
+    bind(window, 'mouseup', (e) => {
+        if (!isDragging) return;
+        isDragging = false;
+        if (!hasDragged && !isMapMode && !isBorderSetMode) {
+            const picked = pickFrameAtClientPoint((e as MouseEvent).clientX, (e as MouseEvent).clientY);
+            if (picked) applyFramePick(picked.col, picked.row);
+        }
+    });
 
     // Inputs globais atualizam em tempo real
     const gridInputs = [
@@ -928,7 +938,7 @@ export function openCharacterCalibrator(
         calOffsetYInput, calGapXInput, calGapYInput, calAnchorXInput, calAnchorYInput
     ];
     gridInputs.forEach(el => {
-        el.addEventListener('input', () => {
+        bind(el, 'input', () => {
             const fw = parseInt(calFrameWidthInput.value, 10);
             const fh = parseInt(calFrameHeightInput.value, 10);
             localFrameWidth = Number.isFinite(fw) && fw > 0 ? fw : localFrameWidth;
@@ -948,20 +958,20 @@ export function openCharacterCalibrator(
         });
     });
 
-    calGridApplyBtn?.addEventListener('click', () => {
+    bind(calGridApplyBtn, 'click', () => {
         const { cols, rows } = readGridInputsFromUI();
         applyGridDivision(cols, rows, true);
     });
 
-    calGrid1x1Btn?.addEventListener('click', () => {
+    bind(calGrid1x1Btn, 'click', () => {
         applyGridDivision(1, 1, true);
     });
 
-    calGrid4x4Btn?.addEventListener('click', () => {
+    bind(calGrid4x4Btn, 'click', () => {
         applyGridDivision(4, 4, true);
     });
 
-    calBorderPreset3x3?.addEventListener('click', () => {
+    bind(calBorderPreset3x3, 'click', () => {
         borderSlotCols = 3;
         borderSlotRows = 3;
         borderSetUi?.applyFullNeighborPreset();
@@ -970,7 +980,7 @@ export function openCharacterCalibrator(
         );
     });
 
-    calBorderPreset4x4?.addEventListener('click', () => {
+    bind(calBorderPreset4x4, 'click', () => {
         borderSlotCols = 4;
         borderSlotRows = 1;
         borderSetUi?.applyCardinalPreset();
@@ -979,7 +989,7 @@ export function openCharacterCalibrator(
         );
     });
 
-    calBorderPresetInnerL?.addEventListener('click', () => {
+    bind(calBorderPresetInnerL, 'click', () => {
         const size = borderSetUi?.getSlotGridSize();
         const hasNeighbor = (size?.rows ?? 0) >= 3 && (size?.cols ?? 0) >= 3;
         if (hasNeighbor) {
@@ -1001,7 +1011,7 @@ export function openCharacterCalibrator(
     });
 
     [calGridColsInput, calGridRowsInput].forEach((el) => {
-        el?.addEventListener('input', () => {
+        bind(el, 'input', () => {
             const { cols, rows } = readGridInputsFromUI();
             localGridCols = cols;
             localGridRows = rows;
@@ -1010,19 +1020,19 @@ export function openCharacterCalibrator(
         });
     });
 
-    calMapFrameColInput?.addEventListener('input', applyMapFrameFromInputs);
-    calMapFrameRowInput?.addEventListener('change', applyMapFrameFromInputs);
-    calMapFrameRowInput?.addEventListener('input', applyMapFrameFromInputs);
-    calMapFrameColInput?.addEventListener('change', applyMapFrameFromInputs);
+    bind(calMapFrameColInput, 'input', applyMapFrameFromInputs);
+    bind(calMapFrameRowInput, 'change', applyMapFrameFromInputs);
+    bind(calMapFrameRowInput, 'input', applyMapFrameFromInputs);
+    bind(calMapFrameColInput, 'change', applyMapFrameFromInputs);
 
-    calMapMultiSelectToggle?.addEventListener('change', () => {
+    bind(calMapMultiSelectToggle, 'change', () => {
         mapMultiSelectMode = calMapMultiSelectToggle.checked;
         updateMultiSelectUI();
         updateMapFrameUI();
         renderCalibrator();
     });
 
-    calMapSelectAllBtn?.addEventListener('click', () => {
+    bind(calMapSelectAllBtn, 'click', () => {
         const { cols, rows } = getVisibleGridSize();
         if (cols < 1 || rows < 1) return;
         selectedFramesList.length = 0;
@@ -1038,36 +1048,48 @@ export function openCharacterCalibrator(
         toast.info(`${selectedFramesList.length} frames marcados.`);
     });
 
-    calMapClearSelectionBtn?.addEventListener('click', () => {
+    bind(calMapClearSelectionBtn, 'click', () => {
         selectedFramesList.length = 0;
         updateMultiSelectUI();
         renderCalibrator();
     });
 
-    calSheetLayoutSelect?.addEventListener('change', () => {
+    bind(calSheetLayoutSelect, 'change', () => {
         localSheetLayout = calSheetLayoutSelect.value as 'horizontal' | 'vertical';
         renderCalibrator();
     });
 
     // Mudança de Estado/Direção sincroniza inputs secundários
-    calAnimStateSelect.addEventListener('change', () => {
-        syncUIToAnimation();
-        activeState = calAnimStateSelect.value;
-        syncAnimationToUI();
+    bind(calAnimStateSelect, 'change', () => {
+        animDraft.setActive(activeState, activeDirection);
+        const vals = animDraft.switchSelection(
+            calAnimStateSelect.value,
+            activeDirection,
+            parseCalAnimInputs()
+        );
+        activeState = animDraft.activeState;
+        activeDirection = animDraft.activeDirection;
+        applyAnimInputsToUI(vals);
         renderCalibrator();
     });
 
-    calAnimDirSelect.addEventListener('change', () => {
-        syncUIToAnimation();
-        activeDirection = calAnimDirSelect.value;
-        syncAnimationToUI();
+    bind(calAnimDirSelect, 'change', () => {
+        animDraft.setActive(activeState, activeDirection);
+        const vals = animDraft.switchSelection(
+            activeState,
+            calAnimDirSelect.value,
+            parseCalAnimInputs()
+        );
+        activeState = animDraft.activeState;
+        activeDirection = animDraft.activeDirection;
+        applyAnimInputsToUI(vals);
         renderCalibrator();
     });
 
     // Inputs das configurações de animação salvam em tempo real
     const animInputs = [calAnimRowInput, calAnimStartFrameInput, calAnimFramesInput, calAnimSpeedInput];
     animInputs.forEach(el => {
-        el.addEventListener('input', () => {
+        bind(el, 'input', () => {
             syncUIToAnimation();
             renderCalibrator();
         });
@@ -1075,13 +1097,16 @@ export function openCharacterCalibrator(
 
     function closeModal() {
         abortController.abort();
+        if (activeCalibratorSession === abortController) {
+            activeCalibratorSession = null;
+        }
         modal?.classList.remove('is-open');
     }
 
-    closeBtn?.addEventListener('click', closeModal);
-    cancelBtn?.addEventListener('click', closeModal);
+    bind(closeBtn, 'click', closeModal);
+    bind(cancelBtn, 'click', closeModal);
 
-    calBatchExportBtn?.addEventListener('click', async () => {
+    bind(calBatchExportBtn, 'click', async () => {
         if (!isMapMode || !options?.onBatchExport) return;
         if (localFrameWidth < 1 || localFrameHeight < 1) {
             toast.error('Defina a grade (colunas/linhas + Aplicar divisão) antes de exportar.');
@@ -1104,7 +1129,7 @@ export function openCharacterCalibrator(
         options.onBatchExport(buildCalibrationPayload(), 'all');
     });
 
-    calBatchExportSelectedBtn?.addEventListener('click', () => {
+    bind(calBatchExportSelectedBtn, 'click', () => {
         if (!isMapMode || !options?.onBatchExport) return;
         if (selectedFramesList.length < 1) {
             toast.error('Selecione pelo menos 1 frame (ative seleção múltipla e clique nos tiles).');
@@ -1117,7 +1142,7 @@ export function openCharacterCalibrator(
         options.onBatchExport(buildCalibrationPayload(), 'selected');
     });
 
-    confirmBtn?.addEventListener('click', () => {
+    bind(confirmBtn, 'click', () => {
         if (localFrameWidth < 1 || localFrameHeight < 1) {
             toast.error('Largura e altura do frame devem ser maiores que 0. Use "Aplicar divisão" ou ajuste manualmente.');
             return;
@@ -1143,7 +1168,7 @@ export function openCharacterCalibrator(
             gapY: localGapY,
             anchorX: localAnchorX,
             anchorY: localAnchorY,
-            animations: localAnimations,
+            animations: animDraft.toAnimations(),
             currentState: activeState,
             currentDirection: activeDirection,
             sheetLayout: localSheetLayout,
@@ -1153,7 +1178,7 @@ export function openCharacterCalibrator(
         closeModal();
     });
 
-    borderConfirmBtn?.addEventListener('click', () => {
+    bind(borderConfirmBtn, 'click', () => {
         if (!isBorderSetMode || !borderSetUi) return;
         if (localFrameWidth < 1 || localFrameHeight < 1) {
             toast.error('Defina a grade (Aplicar divisão) antes de confirmar.');
@@ -1170,7 +1195,7 @@ export function openCharacterCalibrator(
             gapY: localGapY,
             anchorX: localAnchorX,
             anchorY: localAnchorY,
-            animations: localAnimations,
+            animations: animDraft.toAnimations(),
             currentState: activeState,
             currentDirection: activeDirection,
             sheetLayout: localSheetLayout,

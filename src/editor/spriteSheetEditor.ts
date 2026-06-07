@@ -4,6 +4,11 @@ import type { CharacterState, Direction } from '../character/spriteAnimation';
 import { resolveAnimationSourceRect } from '../character/sheetFrameLayout';
 import { openCharacterCalibrator } from './characterCalibratorModal';
 import {
+    CharacterAnimationDraft,
+    parseAnimationInputFields,
+    type AnimationInputValues,
+} from './characterAnimationDraft';
+import {
     fillVocationSelect,
     VOCATIONS_UPDATED_EVENT,
     type VocationsMap,
@@ -402,6 +407,37 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
 
     if (!previewCanvas || !previewCtx) return emptyHandle;
 
+    let animDraft: CharacterAnimationDraft | null = null;
+
+    function parsePanelAnimInputs(): AnimationInputValues {
+        return parseAnimationInputFields(
+            {
+                row: animRowEl.value,
+                startFrame: animStartFrameEl.value,
+                frames: animFramesEl.value,
+                speedFps: animSpeedEl.value,
+            },
+            { defaultSpeedFps: 1 }
+        );
+    }
+
+    function applyPanelAnimInputs(values: AnimationInputValues): void {
+        animRowEl.value = String(values.row);
+        animStartFrameEl.value = String(values.startFrame);
+        animFramesEl.value = String(values.frames);
+        animSpeedEl.value = String(values.speedFps);
+    }
+
+    function refreshAnimDraft(): void {
+        const config = getController().config;
+        animDraft = new CharacterAnimationDraft(
+            config.animations,
+            animStateEl.value as CharacterState,
+            animDirEl.value as Direction,
+            { clone: false, defaultSpeedFps: 1 }
+        );
+    }
+
     function syncControllerToUI(): void {
         if (!frameWidthEl || !frameHeightEl) return;
         const ctrl = getController();
@@ -430,15 +466,8 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
         gapYEl.value = String(config.gapY ?? 0);
         anchorXEl.value = String(config.anchorX ?? 0);
         anchorYEl.value = String(config.anchorY ?? 0);
-        const state = animStateEl.value as CharacterState;
-        const dir = animDirEl.value as Direction;
-        const anim = config.animations[`${state}_${dir}`];
-        if (anim) {
-            animRowEl.value = String(anim.row);
-            animStartFrameEl.value = String(anim.startFrame ?? 0);
-            animFramesEl.value = String(anim.frames);
-            animSpeedEl.value = String(anim.speedFps);
-        }
+        refreshAnimDraft();
+        applyPanelAnimInputs(animDraft!.writeInputsForActive());
         if (chromaKeyToggleEl && chromaKeyToleranceRowEl && chromaKeyToleranceEl && chromaKeyToleranceValSpan) {
             chromaKeyToggleEl.checked = !!config.chromaKey;
             chromaKeyToleranceRowEl.style.display = config.chromaKey ? 'flex' : 'none';
@@ -472,15 +501,8 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
         config.gapY = parseInt(gapYEl.value, 10) || 0;
         config.anchorX = parseInt(anchorXEl.value, 10) || 0;
         config.anchorY = parseInt(anchorYEl.value, 10) || 0;
-        const state = animStateEl.value as CharacterState;
-        const dir = animDirEl.value as Direction;
-        const key = `${state}_${dir}`;
-        if (!config.animations[key]) config.animations[key] = { row: 0, startFrame: 0, frames: 1, speedFps: 1, loop: true };
-        const anim = config.animations[key];
-        anim.row = parseInt(animRowEl.value, 10) || 0;
-        anim.startFrame = parseInt(animStartFrameEl.value, 10) || 0;
-        anim.frames = Math.max(1, parseInt(animFramesEl.value, 10) || 1);
-        anim.speedFps = Math.max(1, parseInt(animSpeedEl.value, 10) || 1);
+        if (!animDraft) refreshAnimDraft();
+        animDraft!.flushActive(parsePanelAnimInputs());
         ctrl.setState(ctrl.currentState);
         if (chromaKeyToggleEl) config.chromaKey = chromaKeyToggleEl.checked;
         if (chromaKeyToleranceEl) config.chromaKeyTolerance = parseInt(chromaKeyToleranceEl.value, 10) || 50;
@@ -665,8 +687,34 @@ export function initSpriteSheetEditor(options: InitSpriteSheetEditorOptions): Sp
         offsetXEl, offsetYEl, gapXEl, gapYEl, anchorXEl, anchorYEl].forEach((el) => {
         el?.addEventListener('input', () => { if (templateSelectEl) templateSelectEl.value = 'custom'; syncUIToController(); });
     });
-    animStateEl?.addEventListener('change', () => { syncControllerToUI(); getController().setState(animStateEl.value as CharacterState); });
-    animDirEl?.addEventListener('change', () => { syncControllerToUI(); getController().setDirection(animDirEl.value as Direction); });
+    animStateEl?.addEventListener('focus', () => {
+        if (!animDraft) refreshAnimDraft();
+        else animDraft.setActive(animStateEl.value, animDirEl.value);
+    });
+    animDirEl?.addEventListener('focus', () => {
+        if (!animDraft) refreshAnimDraft();
+        else animDraft.setActive(animStateEl.value, animDirEl.value);
+    });
+    animStateEl?.addEventListener('change', () => {
+        if (!animDraft) refreshAnimDraft();
+        const vals = animDraft!.switchSelection(
+            animStateEl.value,
+            animDirEl.value,
+            parsePanelAnimInputs()
+        );
+        applyPanelAnimInputs(vals);
+        getController().setState(animStateEl.value as CharacterState);
+    });
+    animDirEl?.addEventListener('change', () => {
+        if (!animDraft) refreshAnimDraft();
+        const vals = animDraft!.switchSelection(
+            animStateEl.value,
+            animDirEl.value,
+            parsePanelAnimInputs()
+        );
+        applyPanelAnimInputs(vals);
+        getController().setDirection(animDirEl.value as Direction);
+    });
     chromaKeyToggleEl?.addEventListener('change', () => {
         getController().setChromaKey(chromaKeyToggleEl.checked, parseInt(chromaKeyToleranceEl?.value ?? '50', 10));
         syncUIToController(); syncControllerToUI();

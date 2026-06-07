@@ -8,30 +8,30 @@
     "idle_up": {
       "row": 0,
       "frames": 1,
-      "speedFps": 1,
+      "speedFps": 6,
       "loop": true,
       "startFrame": 6
     },
     "idle_down": {
       "row": 0,
       "frames": 1,
-      "speedFps": 1,
+      "speedFps": 6,
       "loop": true,
       "startFrame": 0
     },
     "idle_left": {
       "row": 0,
       "frames": 1,
-      "speedFps": 1,
+      "speedFps": 6,
       "loop": true,
       "startFrame": 9
     },
     "idle_right": {
       "row": 0,
       "frames": 1,
-      "speedFps": 1,
+      "speedFps": 5,
       "loop": true,
-      "startFrame": 3
+      "startFrame": 4
     },
     "walk_up": {
       "row": 0,
@@ -50,7 +50,7 @@
     "walk_left": {
       "row": 0,
       "frames": 2,
-      "speedFps": 5,
+      "speedFps": 1,
       "loop": true,
       "startFrame": 10
     },
@@ -85,7 +85,7 @@
     "attack_right": {
       "row": 0,
       "frames": 1,
-      "speedFps": 5,
+      "speedFps": 1,
       "loop": false,
       "startFrame": 3
     },
@@ -98,7 +98,7 @@
     },
     "dead_right": {
       "row": 0,
-      "startFrame": 3,
+      "startFrame": 0,
       "frames": 1,
       "speedFps": 5,
       "loop": true
