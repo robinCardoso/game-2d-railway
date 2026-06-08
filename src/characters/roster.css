@@ -1,0 +1,579 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+    --eo-bg: #05070c;
+    --eo-panel: rgba(8, 12, 20, 0.9);
+    --eo-panel-soft: rgba(12, 18, 30, 0.78);
+    --eo-border: rgba(216, 170, 79, 0.38);
+    --eo-border-strong: rgba(245, 209, 125, 0.7);
+    --eo-gold: #d8aa4f;
+    --eo-gold-light: #f5d17d;
+    --eo-blue: #35c8ff;
+    --eo-red: #b83a3a;
+    --eo-text: #f8efd8;
+    --eo-muted: #a9b1c3;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body.roster-page {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--eo-text);
+    background:
+        radial-gradient(circle at 50% 35%, rgba(53, 200, 255, 0.08), transparent 32%),
+        linear-gradient(90deg, rgba(2, 4, 9, 0.86), rgba(2, 4, 9, 0.42), rgba(2, 4, 9, 0.88)),
+        url('/assets/characters/bg-roster.png') center / cover no-repeat;
+    background-attachment: fixed;
+    font-family: Inter, system-ui, sans-serif;
+}
+
+.roster-shell {
+    min-height: 100vh;
+    padding: 16px clamp(12px, 3vw, 32px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 14px;
+}
+
+.roster-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 18px;
+}
+
+.roster-brand {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+}
+
+.roster-brand__logo {
+    width: min(148px, 34vw);
+    max-height: 52px;
+    object-fit: contain;
+    filter: drop-shadow(0 0 12px rgba(216, 170, 79, 0.22));
+}
+
+.roster-account {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: rgba(248, 239, 216, 0.76);
+    font-size: 0.9rem;
+}
+
+.roster-account__email {
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.roster-toplink {
+    color: #8edcff;
+    text-decoration: none;
+    font-size: 0.86rem;
+}
+
+.roster-toplink:hover {
+    color: var(--eo-gold-light);
+}
+
+.roster-toplink--button {
+    border: 1px solid rgba(216, 170, 79, 0.28);
+    border-radius: 8px;
+    background: rgba(7, 10, 16, 0.56);
+    padding: 8px 12px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.roster-panel {
+    position: relative;
+    width: min(880px, 100%);
+    margin: auto;
+    padding: clamp(18px, 2.5vw, 28px);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent),
+        var(--eo-panel);
+    border: 1px solid var(--eo-border);
+    border-radius: 18px;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.07),
+        0 0 0 1px rgba(0, 0, 0, 0.6),
+        0 28px 80px rgba(0, 0, 0, 0.62);
+}
+
+.roster-panel::before,
+.roster-panel::after {
+    content: '';
+    position: absolute;
+    left: 28px;
+    right: 28px;
+    height: 1px;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(245, 209, 125, 0.72),
+        transparent
+    );
+    pointer-events: none;
+}
+
+.roster-panel::before {
+    top: 14px;
+}
+
+.roster-panel::after {
+    bottom: 14px;
+}
+
+.panel-corner {
+    position: absolute;
+    width: 34px;
+    height: 34px;
+    background-image: url('/assets/ui/panel-corner-gold.svg');
+    background-size: contain;
+    background-repeat: no-repeat;
+    pointer-events: none;
+    opacity: 0.92;
+}
+
+.panel-corner--tl {
+    top: -2px;
+    left: -2px;
+}
+
+.panel-corner--tr {
+    top: -2px;
+    right: -2px;
+    transform: rotate(90deg);
+}
+
+.panel-corner--br {
+    right: -2px;
+    bottom: -2px;
+    transform: rotate(180deg);
+}
+
+.panel-corner--bl {
+    left: -2px;
+    bottom: -2px;
+    transform: rotate(270deg);
+}
+
+.roster-heading {
+    text-align: center;
+    margin-bottom: 18px;
+}
+
+.roster-kicker {
+    display: none;
+}
+
+.roster-heading h1 {
+    margin: 0;
+    color: var(--eo-gold-light);
+    font-family: Cinzel, Georgia, serif;
+    font-size: clamp(1.25rem, 2.2vw, 1.65rem);
+    line-height: 1.15;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.roster-heading p {
+    margin: 6px 0 0;
+    color: var(--eo-muted);
+    font-size: 0.84rem;
+}
+
+.roster-error {
+    margin: 0 auto 18px;
+    width: min(720px, 100%);
+    padding: 12px 14px;
+    border: 1px solid rgba(255, 107, 107, 0.42);
+    border-radius: 10px;
+    background: rgba(127, 29, 29, 0.24);
+    color: #fecaca;
+    font-size: 0.9rem;
+}
+
+.roster-loading {
+    margin: 20px auto;
+    width: min(420px, 100%);
+    padding: 18px;
+    text-align: center;
+    color: var(--eo-muted);
+    border: 1px solid rgba(216, 170, 79, 0.22);
+    border-radius: 12px;
+    background: rgba(7, 10, 16, 0.5);
+}
+
+.roster-layout {
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) minmax(280px, 1fr);
+    gap: 14px;
+}
+
+.roster-list-panel,
+.roster-preview-panel {
+    min-height: 0;
+    padding: 14px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.028), transparent),
+        var(--eo-panel-soft);
+    border: 1px solid rgba(216, 170, 79, 0.24);
+    border-radius: 14px;
+    box-shadow: inset 0 0 28px rgba(0, 0, 0, 0.36);
+}
+
+.roster-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.roster-list-header strong {
+    display: block;
+    color: var(--eo-gold-light);
+    font-family: Cinzel, Georgia, serif;
+    font-size: 1rem;
+}
+
+.roster-list-header span {
+    display: block;
+    margin-top: 3px;
+    color: var(--eo-muted);
+    font-size: 0.82rem;
+}
+
+.roster-create-small {
+    padding: 8px 12px;
+    border: 1px solid rgba(216, 170, 79, 0.38);
+    border-radius: 8px;
+    color: var(--eo-gold-light);
+    background: rgba(7, 10, 16, 0.58);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.roster-create-small:hover {
+    border-color: var(--eo-border-strong);
+}
+
+.roster-empty[hidden],
+.roster-create-small[hidden] {
+    display: none !important;
+}
+
+.roster-empty {
+    display: grid;
+    place-items: center;
+    min-height: 200px;
+    padding: 18px;
+    text-align: center;
+    border: 1px dashed rgba(216, 170, 79, 0.32);
+    border-radius: 12px;
+    background: rgba(5, 8, 14, 0.48);
+}
+
+.roster-empty h2 {
+    margin: 0;
+    color: var(--eo-gold-light);
+    font-family: Cinzel, Georgia, serif;
+}
+
+.roster-empty p {
+    margin: 10px 0 20px;
+    color: var(--eo-muted);
+    line-height: 1.6;
+}
+
+.roster-character-list {
+    display: grid;
+    gap: 12px;
+}
+
+.roster-char-card {
+    display: grid;
+    grid-template-columns: 60px 1fr;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px;
+    border: 1px solid rgba(216, 170, 79, 0.22);
+    border-radius: 12px;
+    background:
+        linear-gradient(90deg, rgba(216, 170, 79, 0.08), transparent),
+        rgba(5, 8, 14, 0.68);
+    color: var(--eo-text);
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+    transition:
+        border-color 150ms ease,
+        transform 150ms ease,
+        background 150ms ease,
+        box-shadow 150ms ease;
+}
+
+.roster-char-card:hover,
+.roster-char-card.is-selected {
+    transform: translateY(-1px);
+    border-color: var(--eo-border-strong);
+    background:
+        linear-gradient(90deg, rgba(216, 170, 79, 0.16), transparent),
+        rgba(5, 8, 14, 0.84);
+    box-shadow: 0 0 26px rgba(216, 170, 79, 0.16);
+}
+
+.roster-char-card__canvas-wrap {
+    width: 56px;
+    height: 56px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(53, 200, 255, 0.22);
+    border-radius: 10px;
+    background:
+        radial-gradient(circle, rgba(53, 200, 255, 0.12), transparent 62%),
+        rgba(1, 5, 12, 0.78);
+}
+
+.roster-char-card canvas {
+    width: 52px;
+    height: 52px;
+    image-rendering: pixelated;
+}
+
+.roster-char-card h3 {
+    margin: 0;
+    color: var(--eo-gold-light);
+    font-family: Cinzel, Georgia, serif;
+    font-size: 0.98rem;
+}
+
+.roster-char-card p {
+    margin: 4px 0 0;
+    color: var(--eo-muted);
+    font-size: 0.82rem;
+}
+
+.roster-char-card small {
+    display: block;
+    margin-top: 4px;
+    color: rgba(248, 239, 216, 0.56);
+}
+
+.roster-preview-panel {
+    display: grid;
+}
+
+.roster-no-selection {
+    place-self: center;
+    text-align: center;
+    width: min(360px, 100%);
+}
+
+.roster-no-selection h2 {
+    margin: 0;
+    color: var(--eo-gold-light);
+    font-family: Cinzel, Georgia, serif;
+}
+
+.roster-no-selection p {
+    margin: 10px 0 0;
+    color: var(--eo-muted);
+}
+
+.roster-selected {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.roster-preview-frame {
+    width: 140px;
+    height: 140px;
+    display: grid;
+    place-items: center;
+    margin-bottom: 12px;
+    border: 1px solid rgba(216, 170, 79, 0.34);
+    border-radius: 14px;
+    background:
+        radial-gradient(circle, rgba(53, 200, 255, 0.14), transparent 56%),
+        rgba(2, 6, 12, 0.72);
+    box-shadow:
+        inset 0 0 26px rgba(0, 0, 0, 0.46),
+        0 0 30px rgba(53, 200, 255, 0.08);
+}
+
+.roster-preview-canvas {
+    width: 120px;
+    height: 120px;
+    image-rendering: pixelated;
+}
+
+.roster-selected h2 {
+    margin: 0 0 12px;
+    color: var(--eo-gold-light);
+    font-family: Cinzel, Georgia, serif;
+    font-size: 1.35rem;
+}
+
+.roster-info-grid {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.roster-info-grid div {
+    padding: 8px 10px;
+    border: 1px solid rgba(216, 170, 79, 0.18);
+    border-radius: 10px;
+    background: rgba(5, 8, 14, 0.52);
+}
+
+.roster-info-grid__wide {
+    grid-column: 1 / -1;
+}
+
+.roster-info-grid span {
+    display: block;
+    margin-bottom: 5px;
+    color: var(--eo-muted);
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.roster-info-grid strong {
+    color: var(--eo-text);
+    font-size: 0.95rem;
+}
+
+.roster-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.game-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0 18px;
+    border: 1px solid rgba(255, 220, 130, 0.76);
+    border-radius: 8px;
+    background:
+        linear-gradient(180deg, rgba(255, 220, 126, 0.22), rgba(0, 0, 0, 0)),
+        linear-gradient(180deg, #b97d2e 0%, #7a4b18 52%, #4a2a10 100%);
+    color: #fff5d2;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.26),
+        0 0 24px rgba(216, 170, 79, 0.18),
+        0 8px 24px rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+    font-family: Cinzel, Georgia, serif;
+    font-size: 0.84rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-decoration: none;
+    transition:
+        transform 140ms ease,
+        filter 140ms ease,
+        box-shadow 140ms ease,
+        opacity 140ms ease;
+}
+
+.game-button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(1.12);
+}
+
+.game-button:disabled {
+    opacity: 0.56;
+    cursor: not-allowed;
+}
+
+.game-button--danger {
+    background:
+        linear-gradient(180deg, rgba(255, 160, 160, 0.16), rgba(0, 0, 0, 0)),
+        linear-gradient(180deg, #9f3434 0%, #6d2020 52%, #3c1111 100%);
+    border-color: rgba(255, 160, 160, 0.46);
+}
+
+@media (max-width: 940px) {
+    .roster-topbar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .roster-account {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .roster-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .roster-list-panel,
+    .roster-preview-panel {
+        min-height: auto;
+    }
+}
+
+@media (max-width: 560px) {
+    body.roster-page {
+        background-attachment: scroll;
+    }
+
+    .roster-shell {
+        padding: 16px;
+    }
+
+    .roster-panel {
+        padding: 22px 16px;
+    }
+
+    .roster-heading h1 {
+        font-size: 2rem;
+    }
+
+    .roster-char-card {
+        grid-template-columns: 64px 1fr;
+        padding: 10px;
+    }
+
+    .roster-char-card__canvas-wrap {
+        width: 58px;
+        height: 58px;
+    }
+
+    .roster-char-card canvas {
+        width: 54px;
+        height: 54px;
+    }
+
+    .roster-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .roster-account__email {
+        max-width: 100%;
+    }
+}

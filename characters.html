@@ -3,30 +3,137 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Personagens — Elarion Online</title>
+    <title>Selecionar personagem — Elarion Online</title>
+    <meta
+      name="description"
+      content="Selecione seu personagem e entre no mundo de Elarion Online."
+    />
     <link rel="icon" type="image/png" href="/brand/icon-elarion.png" />
-    <link rel="stylesheet" href="/src/shared/shell.css" />
   </head>
-  <body class="shell-page">
-    <div class="shell-card shell-card--wide">
-      <div class="shell-logo">
-        <img src="/brand/icon-elarion.png" alt="Elarion Online" class="shell-brand-img" width="48" height="48" />
-        <h1>Seus personagens</h1>
-        <p id="accountEmail" style="color: #94a3b8"></p>
-      </div>
-      <p id="rosterError" class="shell-error" hidden></p>
-      <div id="charGrid" class="char-grid"></div>
-      <p id="emptyState" hidden style="text-align: center; color: #94a3b8">
-        Nenhum personagem ainda. Crie o primeiro aventureiro!
-      </p>
-      <div class="shell-actions">
-        <button type="button" id="enterWorldBtn" class="shell-btn" disabled>Entrar no mundo</button>
-        <a href="characters-new.html" class="shell-btn shell-btn--ghost" style="text-align: center; text-decoration: none; line-height: 1.2; display: flex; align-items: center; justify-content: center">Criar personagem</a>
-        <button type="button" id="deleteCharBtn" class="shell-btn shell-btn--danger" disabled>Excluir</button>
-        <button type="button" id="logoutBtn" class="shell-btn shell-btn--ghost">Sair da conta</button>
-      </div>
-      <p class="shell-links"><a href="studio.html" id="studioLink">GM Studio</a> · <a href="index.html">Início</a></p>
-    </div>
+  <body class="roster-page">
+    <main class="roster-shell">
+      <header class="roster-topbar">
+        <a class="roster-brand" href="index.html" aria-label="Elarion Online">
+          <img
+            src="/assets/brand/elarion-logo.png"
+            alt="Elarion Online"
+            class="roster-brand__logo"
+            width="220"
+            height="82"
+          />
+        </a>
+
+        <div class="roster-account">
+          <span class="roster-account__email" id="accountEmail"></span>
+
+          <a id="studioLink" class="roster-toplink" href="studio.html">GM Studio</a>
+
+          <button id="logoutBtn" class="roster-toplink roster-toplink--button" type="button">
+            Sair
+          </button>
+        </div>
+      </header>
+
+      <section class="roster-panel">
+        <span class="panel-corner panel-corner--tl" aria-hidden="true"></span>
+        <span class="panel-corner panel-corner--tr" aria-hidden="true"></span>
+        <span class="panel-corner panel-corner--br" aria-hidden="true"></span>
+        <span class="panel-corner panel-corner--bl" aria-hidden="true"></span>
+
+        <div class="roster-heading">
+          <p class="roster-kicker">Elarion Online</p>
+          <h1>Selecione seu personagem</h1>
+          <p>Escolha um herói para entrar no mundo de Elarion.</p>
+        </div>
+
+        <p id="rosterError" class="roster-error" hidden></p>
+
+        <div id="rosterLoading" class="roster-loading">Carregando seus personagens...</div>
+
+        <div class="roster-layout">
+          <section class="roster-list-panel" aria-label="Lista de personagens">
+            <div class="roster-list-header">
+              <div>
+                <strong>Personagens</strong>
+                <span>Selecione um personagem</span>
+              </div>
+
+              <a id="rosterCreateBtn" class="roster-create-small" href="characters-new.html" hidden>+ Novo</a>
+            </div>
+
+            <div id="emptyState" class="roster-empty" hidden>
+              <h2>Sua jornada ainda não começou.</h2>
+              <p>Crie seu primeiro personagem e descubra os reinos de Elarion.</p>
+              <a class="game-button" href="characters-new.html">Criar personagem</a>
+            </div>
+
+            <div id="charGrid" class="roster-character-list"></div>
+          </section>
+
+          <aside class="roster-preview-panel" aria-label="Personagem selecionado">
+            <div id="noSelectionState" class="roster-no-selection">
+              <h2>Nenhum personagem selecionado</h2>
+              <p>Escolha um personagem na lista para visualizar detalhes.</p>
+            </div>
+
+            <div id="selectedDetails" class="roster-selected" hidden>
+              <div class="roster-preview-frame">
+                <canvas
+                  id="selectedPreviewCanvas"
+                  class="roster-preview-canvas"
+                  width="120"
+                  height="120"
+                ></canvas>
+              </div>
+
+              <h2 id="selectedName">-</h2>
+
+              <div class="roster-info-grid">
+                <div>
+                  <span>Vocação</span>
+                  <strong id="selectedVocation">-</strong>
+                </div>
+
+                <div>
+                  <span>Level</span>
+                  <strong id="selectedLevel">-</strong>
+                </div>
+
+                <div>
+                  <span>Gênero</span>
+                  <strong id="selectedGender">-</strong>
+                </div>
+
+                <div>
+                  <span>Mapa</span>
+                  <strong id="selectedMap">-</strong>
+                </div>
+
+                <div class="roster-info-grid__wide">
+                  <span>Último acesso</span>
+                  <strong id="selectedLastPlayed">-</strong>
+                </div>
+              </div>
+
+              <div class="roster-actions">
+                <button id="enterWorldBtn" class="game-button" type="button" disabled>
+                  Entrar no mundo
+                </button>
+
+                <button
+                  id="deleteCharBtn"
+                  class="game-button game-button--danger"
+                  type="button"
+                  disabled
+                >
+                  Excluir
+                </button>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </main>
     <script type="module" src="/src/characters/roster.ts"></script>
   </body>
 </html>
