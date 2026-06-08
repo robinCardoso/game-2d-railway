@@ -10,6 +10,13 @@ import type { CharacterRow } from '../shared/types';
 import { track } from '../shared/analytics';
 import { resolveAnimationSourceRect } from '../character/sheetFrameLayout';
 import { resolveApiUrl } from '../shared/apiUrl';
+import {
+    hideWorldEntryOverlay,
+    markWorldEntryPending,
+    resetWorldEntryOverlay,
+    setWorldEntryStage,
+    showWorldEntryOverlay,
+} from '../world-entry/worldEntryOverlay';
 
 initDesktopClientShell();
 
@@ -313,25 +320,48 @@ async function drawCharacterPreview(canvas: HTMLCanvasElement, spriteSheetUrl: s
 enterBtn.addEventListener('click', async () => {
     if (!selectedId) return;
 
+    const selected = getSelectedCharacter();
     const originalText = enterBtn.textContent ?? 'Entrar no mundo';
 
     try {
         enterBtn.disabled = true;
         enterBtn.textContent = 'Entrando...';
 
+        resetWorldEntryOverlay();
+        showWorldEntryOverlay(
+            selected
+                ? `Preparando ${selected.name} para entrar em Elarion...`
+                : 'Preparando entrada...'
+        );
+
+        setWorldEntryStage('version', 'active', 'Validando versão do cliente...');
+
         const versionOk = await enforceDesktopVersionGate();
         if (!versionOk) {
+            setWorldEntryStage('version', 'error', 'Atualização necessária.');
+            hideWorldEntryOverlay();
             enterBtn.disabled = false;
             enterBtn.textContent = originalText;
             return;
         }
 
+        setWorldEntryStage('version', 'done');
+
+        setWorldEntryStage('character', 'active', 'Salvando último personagem jogado...');
         await markCharacterPlayed(selectedId, session.userId);
         sessionStorage.setItem('activeCharacterId', selectedId);
+        setWorldEntryStage('character', 'done');
+
+        setWorldEntryStage('map', 'active', 'Abrindo passagem para o mundo...');
         track('first_world_enter', { characterId: selectedId });
 
-        location.href = `play.html?characterId=${encodeURIComponent(selectedId)}`;
+        markWorldEntryPending(selected?.name);
+        const characterId = selectedId;
+        location.href = `play.html?characterId=${encodeURIComponent(characterId)}`;
     } catch (err) {
+        setWorldEntryStage('character', 'error');
+        hideWorldEntryOverlay();
+
         errEl.textContent = err instanceof Error ? err.message : 'Erro ao entrar.';
         errEl.hidden = false;
         enterBtn.disabled = false;

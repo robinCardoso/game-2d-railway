@@ -1,6 +1,7 @@
 import './auth-pages.css';
 import { resolveAuthNextRedirect } from '../shared/authNavigation';
 import { redirectIfAuthenticated, signIn } from '../shared/authGuard';
+import { isMockAuthEnabled } from '../shared/mockAuth';
 import { initDesktopClientShell } from '../ui/initDesktopClient';
 import { bindPasswordToggles, createAuthFormHelpers } from './authFormUi';
 
@@ -21,6 +22,11 @@ const { showError, hideError, setLoading } = createAuthFormHelpers(form, errEl, 
 });
 
 bindPasswordToggles();
+
+const mockHintEl = document.getElementById('authMockHint');
+if (mockHintEl) {
+    mockHintEl.hidden = !isMockAuthEnabled();
+}
 
 form.addEventListener('submit', async (event) => {
     event.preventDefault();

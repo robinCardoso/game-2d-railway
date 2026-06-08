@@ -2,7 +2,10 @@ import { requireAuth, signOut } from '../shared/authGuard';
 import { getCharacter } from '../shared/characterStore';
 import { track } from '../shared/analytics';
 import { enforceDesktopVersionGate, initDesktopClientShell } from '../ui/initDesktopClient';
+import { resumeWorldEntryOverlayIfPending } from '../world-entry/worldEntryOverlay';
 import { startPlay, stopLocationAutosave } from './playApp';
+
+resumeWorldEntryOverlayIfPending();
 
 initDesktopClientShell();
 

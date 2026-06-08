@@ -126,6 +126,25 @@
         user-select: none;
       }
     </style>
+    <script>
+      try {
+        if (sessionStorage.getItem('worldEntryPending') === '1') {
+          document.documentElement.classList.add('world-entry-pending');
+        }
+      } catch (_) {}
+    </script>
+    <style>
+      html.world-entry-pending,
+      html.world-entry-pending body {
+        background: #05070c;
+        overflow: hidden;
+      }
+
+      html.world-entry-pending .play-layout,
+      html.world-entry-pending #loadingScreen {
+        visibility: hidden;
+      }
+    </style>
   </head>
   <body>
     <div class="play-layout">

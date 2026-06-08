@@ -1,6 +1,14 @@
 import '../style.css';
 import { resolveApiUrl } from '../shared/apiUrl';
 import {
+    finishWorldEntryOverlay,
+    isWorldEntryOverlayVisible,
+    isWorldEntryPending,
+    resetWorldEntryOverlay,
+    setWorldEntryStage,
+    showWorldEntryOverlay,
+} from '../world-entry/worldEntryOverlay';
+import {
     resolveSpriteDirectionForState,
     type Direction,
 } from '../character/spriteAnimation';
@@ -193,12 +201,15 @@ function releaseCreatureSyncLoading(): void {
         clearTimeout(creatureSyncLoadingTimer);
         creatureSyncLoadingTimer = null;
     }
+    setWorldEntryStage('sync', 'done');
+    finishWorldEntryOverlay();
     hideLoading();
     logPlayJoinTimeline('hideLoading (creature sync ready)');
 }
 
 function beginCreatureSyncLoadingGate(): void {
     pendingCreatureSyncLoading = true;
+    setWorldEntryStage('sync', 'active', 'Sincronizando criaturas do mundo...');
     showLoading('Sincronizando criaturas…');
     creatureSyncLoadingTimer = setTimeout(() => {
         logPlayJoinTimeline('creature sync timeout — releasing loading');
@@ -756,6 +767,11 @@ async function transitionToMap(
 }
 
 function showLoading(msg: string): void {
+    if (isWorldEntryOverlayVisible()) {
+        setWorldEntryStage('map', 'active', msg);
+        return;
+    }
+
     const el = document.getElementById('loadingScreen');
     const m = document.getElementById('loadingMsg');
     if (m) m.textContent = msg;
@@ -763,6 +779,8 @@ function showLoading(msg: string): void {
 }
 
 function hideLoading(): void {
+    if (isWorldEntryOverlayVisible()) return;
+
     const el = document.getElementById('loadingScreen');
     if (el) {
         el.classList.add('fade-out');
@@ -1298,6 +1316,7 @@ function setupNetwork(
         },
         onStatusChange: (status) => {
             if (status === 'connected') {
+                setWorldEntryStage('network', 'done');
                 logPlayJoinTimeline('ws connected — stripLocalMonsters');
                 stripLocalMonsters();
             } else if (status === 'disconnected') {
@@ -1442,6 +1461,16 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
     resetPlayCombatInput();
     ensureCombatTargetRingLoaded();
 
+    if (isWorldEntryPending()) {
+        showWorldEntryOverlay(`Carregando ${character.name}...`, { immediate: true });
+        setWorldEntryStage('character', 'active', `Carregando ${character.name}...`);
+    } else {
+        resetWorldEntryOverlay();
+        showWorldEntryOverlay(`Carregando ${character.name}...`);
+        setWorldEntryStage('version', 'done');
+        setWorldEntryStage('character', 'active', 'Carregando personagem...');
+    }
+
     await loadRuntimeVocations();
 
     const progress = normalizeCharacterProgress(character.experience, character.level);
@@ -1477,6 +1506,7 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
     }
 
     activeCharacterController = new SpriteAnimationController(outfit);
+    setWorldEntryStage('character', 'done');
 
     await prepareMapRegistry();
 
@@ -1495,6 +1525,7 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
           }
         : undefined;
 
+    setWorldEntryStage('map', 'active', 'Carregando mapa inicial...');
     showLoading('Carregando mundo…');
     playBootStartedAt = performance.now();
     logPlayJoinTimeline('boot start');
@@ -1523,6 +1554,7 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
         spawn,
     });
     invalidateBorderDrawCache();
+    setWorldEntryStage('map', 'done');
 
     window.addEventListener('keydown', (e) => {
         keys[e.key.toLowerCase()] = true;
@@ -1540,8 +1572,12 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
     logPlayJoinTimeline('prefetch ticket ready', { hasTicket: Boolean(prefetchedTicket) });
 
     if (isMultiplayerConfigured()) {
+        setWorldEntryStage('network', 'active', 'Conectando ao servidor...');
         beginCreatureSyncLoadingGate();
     } else {
+        setWorldEntryStage('network', 'done');
+        setWorldEntryStage('sync', 'done');
+        finishWorldEntryOverlay();
         hideLoading();
         logPlayJoinTimeline('hideLoading (offline)');
     }
