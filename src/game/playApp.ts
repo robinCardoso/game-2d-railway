@@ -8,6 +8,8 @@ import {
     setWorldEntryStage,
     showWorldEntryOverlay,
 } from '../world-entry/worldEntryOverlay';
+
+const WORLD_ENTRY_FAILSAFE_MS = 15000;
 import {
     resolveSpriteDirectionForState,
     type Direction,
@@ -1462,11 +1464,16 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
     ensureCombatTargetRingLoaded();
 
     if (isWorldEntryPending()) {
-        showWorldEntryOverlay(`Carregando ${character.name}...`, { immediate: true });
+        showWorldEntryOverlay(`Carregando ${character.name}...`, {
+            immediate: true,
+            failsafeMs: WORLD_ENTRY_FAILSAFE_MS,
+        });
         setWorldEntryStage('character', 'active', `Carregando ${character.name}...`);
     } else {
         resetWorldEntryOverlay();
-        showWorldEntryOverlay(`Carregando ${character.name}...`);
+        showWorldEntryOverlay(`Carregando ${character.name}...`, {
+            failsafeMs: WORLD_ENTRY_FAILSAFE_MS,
+        });
         setWorldEntryStage('version', 'done');
         setWorldEntryStage('character', 'active', 'Carregando personagem...');
     }

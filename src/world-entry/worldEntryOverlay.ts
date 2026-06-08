@@ -19,6 +19,7 @@ const STAGE_LABELS: Record<WorldEntryStage, string> = {
 
 const WORLD_ENTRY_PENDING_KEY = 'worldEntryPending';
 const WORLD_ENTRY_CHARACTER_KEY = 'worldEntryCharacterName';
+const DEFAULT_WORLD_ENTRY_FAILSAFE_MS = 15000;
 
 const TIPS = [
     'Explore Rookgaard e treine suas habilidades antes de se aventurar em terras perigosas.',
@@ -30,6 +31,24 @@ const TIPS = [
 let overlayEl: HTMLElement | null = null;
 let tipIndex = 0;
 let tipTimer: number | null = null;
+let failsafeTimer: number | null = null;
+
+function clearWorldEntryFailsafe(): void {
+    if (failsafeTimer !== null) {
+        window.clearTimeout(failsafeTimer);
+        failsafeTimer = null;
+    }
+}
+
+function scheduleWorldEntryFailsafe(ms: number): void {
+    clearWorldEntryFailsafe();
+    failsafeTimer = window.setTimeout(() => {
+        failsafeTimer = null;
+        if (!isWorldEntryOverlayVisible()) return;
+        console.warn('[world-entry] Failsafe liberando overlay após timeout.');
+        finishWorldEntryOverlay();
+    }, ms);
+}
 
 function createOverlay(): HTMLElement {
     const overlay = document.createElement('div');
@@ -170,7 +189,7 @@ export function resumeWorldEntryOverlayIfPending(): boolean {
     const name = sessionStorage.getItem(WORLD_ENTRY_CHARACTER_KEY);
     const message = name ? `Carregando ${name}...` : 'Carregando Elarion...';
 
-    showWorldEntryOverlay(message, { immediate: true });
+    showWorldEntryOverlay(message, { immediate: true, failsafeMs: DEFAULT_WORLD_ENTRY_FAILSAFE_MS });
     setWorldEntryStage('version', 'done');
     setWorldEntryStage('character', 'done');
     setWorldEntryStage('map', 'active', 'Carregando mapa inicial...');
@@ -179,7 +198,7 @@ export function resumeWorldEntryOverlayIfPending(): boolean {
 
 export function showWorldEntryOverlay(
     message = 'Preparando entrada...',
-    options?: { immediate?: boolean }
+    options?: { immediate?: boolean; failsafeMs?: number }
 ): void {
     const overlay = ensureOverlay();
 
@@ -194,6 +213,10 @@ export function showWorldEntryOverlay(
     const messageEl = overlay.querySelector<HTMLElement>('#worldEntryMessage');
     if (messageEl) messageEl.textContent = message;
 
+    if (options?.failsafeMs && options.failsafeMs > 0) {
+        scheduleWorldEntryFailsafe(options.failsafeMs);
+    }
+
     if (tipTimer === null) {
         tipTimer = window.setInterval(() => {
             tipIndex = (tipIndex + 1) % TIPS.length;
@@ -206,6 +229,7 @@ export function showWorldEntryOverlay(
 export function hideWorldEntryOverlay(): void {
     if (!overlayEl) return;
 
+    clearWorldEntryFailsafe();
     overlayEl.classList.remove('is-visible', 'is-resuming');
 
     if (tipTimer !== null) {
@@ -292,6 +316,7 @@ export function setWorldEntryError(message: string): void {
 }
 
 export function finishWorldEntryOverlay(): void {
+    clearWorldEntryFailsafe();
     setWorldEntryStage('ready', 'active', 'Preparando Elarion...');
     setWorldEntryStage('ready', 'done');
     window.setTimeout(() => hideWorldEntryOverlay(), 350);

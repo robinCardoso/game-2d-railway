@@ -339,9 +339,11 @@ enterBtn.addEventListener('click', async () => {
         const versionOk = await enforceDesktopVersionGate();
         if (!versionOk) {
             setWorldEntryStage('version', 'error', 'Atualização necessária.');
-            hideWorldEntryOverlay();
-            enterBtn.disabled = false;
-            enterBtn.textContent = originalText;
+            window.setTimeout(() => {
+                hideWorldEntryOverlay();
+                enterBtn.disabled = false;
+                enterBtn.textContent = originalText;
+            }, 900);
             return;
         }
 
