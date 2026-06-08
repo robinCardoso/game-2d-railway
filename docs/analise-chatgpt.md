@@ -1,290 +1,449 @@
-Sim. Agora a página de selecionar personagem precisa ser feita com muito cuidado, porque ela já tem uma lógica importante: ela não mostra uma imagem fixa qualquer. Ela carrega os personagens reais da conta, pega o outfitConfig.spriteSheetUrl salvo no personagem e desenha o preview no canvas usando o JSON real da sprite. Isso precisa ser preservado. O arquivo atual src/characters/roster.ts já usa requireAuth, listCharacters, markCharacterPlayed, softDeleteCharacter, getProfile, enforceDesktopVersionGate e drawCharacterPreview para renderizar o personagem e entrar no play.html?characterId=....
+Sim. A página Criar Personagem precisa ser feita com ainda mais cuidado que a seleção, porque ela é responsável por gravar exatamente os dados que depois aparecem na tela de seleção e dentro do jogo.
 
-A implementação ideal aqui é: trocar o layout e o CSS, mas preservar o fluxo de dados e entrada no jogo.
+Hoje ela já tem uma estrutura funcional de wizard em 3 passos: Nome, Classe/Vocação + Gênero + Outfit, e Confirmar. O HTML atual já mostra “Passo 1 de 3 — Nome”, opções de vocação, gênero, visual/outfit, resumo “Nascerá em Rookgaard” e botão “Criar e voltar”.
 
-1. O que não pode mudar
+O ponto mais importante: não podemos quebrar a forma como o sistema cria o personagem real.
 
-Esses pontos são sensíveis e eu não mexeria:
+1. Como funciona hoje
+
+Hoje o arquivo principal é:
+
+src/characters/create.ts
+
+Ele já faz muita coisa importante:
 
 requireAuth()
-listCharacters(session.userId)
-markCharacterPlayed(selectedId, session.userId)
-sessionStorage.setItem('activeCharacterId', selectedId)
-location.href = `play.html?characterId=${encodeURIComponent(selectedId)}`
-softDeleteCharacter(selectedId, session.userId)
-getProfile() para esconder/mostrar GM Studio
-enforceDesktopVersionGate() antes de entrar no mundo
-drawCharacterPreview()
+validateCharacterName()
+createCharacter()
+loadOutfitPresets()
+filterOutfitsByVocationAndGender()
+findOutfitPreset()
+loadRuntimeVocations()
+fillVocationSelect()
+preview animado no canvas
+chroma key do magenta
+leitura do JSON real da sprite
+resolveAnimationSourceRect()
 
-O tipo CharacterRow também já carrega dados importantes para essa tela: id, name, outfitConfig, spawnMapId, lastPlayedAt, vocation, level, experience, gender, appearance, gameId, mapId, position e direction. Então a tela nova deve usar esses campos, não inventar uma estrutura paralela.
+O fluxo atual é este:
 
-Principalmente este trecho conceitual precisa continuar existindo:
+1. Usuário abre characters-new.html
+2. requireAuth() garante que está logado
+3. Carrega vocações runtime
+4. Carrega outfit_presets.json
+5. Preenche vocações
+6. Filtra outfits por vocation + gender
+7. Mostra preview animado no canvas
+8. Passo 1 valida nome
+9. Passo 2 salva vocation/gender/outfit
+10. Passo 3 chama createCharacter()
+11. Redireciona para characters.html
 
-c.outfitConfig?.spriteSheetUrl ||
-`tiles/characters/vocations/${c.gender || 'male'}/${c.vocation || 'knight'}.png`
+Esse fluxo está todo concentrado em create.ts. Ele importa createCharacter, validateCharacterName, loadOutfitPresets, filterOutfitsByVocationAndGender, findOutfitPreset, loadRuntimeVocations, fillVocationSelect, resolveAnimationSourceRect e resolveApiUrl.
 
-Porque isso garante que o sistema use o outfit real salvo no personagem, mas ainda tenha fallback caso algum personagem antigo não tenha outfitConfig completo.
+2. O que não pode mudar
 
-2. O que vamos mudar
+Esses pontos precisam ser preservados:
 
-Vamos mudar:
+requireAuth()
+validateCharacterName(name)
+loadRuntimeVocations()
+fillVocationSelect()
+loadOutfitPresets()
+filterOutfitsByVocationAndGender()
+findOutfitPreset()
+startAnimatedPreview()
+createCharacter()
+track('character_created')
+location.href = 'characters.html'
 
-visual da página
-HTML de characters.html
-CSS próprio da página
-cards dos personagens
-preview grande do personagem selecionado
-estado vazio
-estado loading
-estado erro
-botões no padrão RPG
+Principalmente, não troque o preview por uma imagem fixa. O sistema atual carrega o spriteSheetUrl, procura o .json correspondente, usa frameWidth, frameHeight, offsetX, offsetY, gapX, gapY, sheetLayout, animations, aplica chroma key se necessário e desenha no canvas. Isso é correto e precisa continuar.
 
-Mas vamos preservar:
+3. O que o createCharacter() salva hoje
 
-IDs usados pelo roster.ts
-funções de autenticação
-carregamento real dos personagens
-desenho real da sprite
-entrada no mundo
-exclusão
-logout
-GM Studio
-3. Assets necessários
+O createCharacter() é muito importante. Ele recebe:
 
-Eu criaria estes arquivos:
+accountId
+name
+vocationId
+gender
+outfitId
+spriteSheetUrl
+spawnMapId
 
-public/assets/characters/bg-roster.webp
-public/assets/ui/panel-corner-gold.svg
-public/assets/ui/icon-play.svg
-public/assets/ui/icon-plus.svg
-public/assets/ui/icon-trash.svg
-public/assets/ui/icon-logout.svg
-public/assets/ui/icon-user.svg
-public/assets/brand/elarion-logo.png
+Depois, quando a API está ativa, ele:
 
-Você já tem o padrão de borda/canto das páginas de login e registro, então deve reaproveitar o mesmo panel-corner-gold.svg se ele já existe. Não gere tudo de novo se o asset já está bom.
+verifica limite máximo de personagens
+carrega o JSON da sprite
+cria outfitConfig
+grava name
+grava spriteSheetUrl
+grava vocation
+grava level 1
+grava experience 0
+grava gender
+grava appearance
+grava gameId
+grava mapId
+grava posição inicial
+grava direction inicial
+envia POST /api/characters
 
-A imagem de fundo da seleção deve ser algo como:
+Isso quer dizer que a tela de criação não pode simplesmente mandar nome/vocação. Ela precisa mandar também:
 
-salão medieval escuro
-paredes de pedra
-tochas
-banners azuis/dourados
-área central vazia para o painel
+gender
+outfitId
+spriteSheetUrl
+
+Porque é isso que garante que o personagem criado apareça corretamente depois no roster e no jogo.
+
+A posição inicial vem de DEFAULT_GAME_CONFIG: mapId: rookgaard, posição { x: 50, y: 50, z: 0 }, direção inicial south, limite de 4 personagens e sem troca de gênero/vocação pelas regras padrão.
+
+4. Atenção importante sobre vocações
+
+Hoje o sistema não deve hardcodar visualmente todas as vocações direto no HTML.
+
+O arquivo vocationRegistry.ts carrega vocações de /vocations.json, com fallback para vocações bundled.
+
+E o fillVocationSelect() preenche o select baseado no mapa de vocações carregado.
+
+Então a tela nova deve continuar obedecendo isso:
+
+não hardcodar somente Knight/Mage/Archer no TS
+não quebrar vocations.json
+não ignorar vocações runtime
+não criar cards fixos que não sincronizam com o select real
+
+Você pode ter cards bonitos, mas eles devem ser gerados a partir das vocações carregadas.
+
+Observação: no código base, as vocações default citadas são knight, mage e archer. Se você quiser druid, ele precisa existir em /vocations.json ou no bundle de vocações.
+
+5. Arquivos que vamos mexer
+
+Eu faria este commit com este escopo:
+
+characters-new.html
+src/characters/create.ts
+src/characters/create-character.css
+public/assets/characters/bg-create-character.webp
+
+Opcional, se quiser organizar melhor:
+
+src/characters/createCharacterUi.ts
+
+Mas para não complicar agora, pode deixar tudo no create.ts e só criar o CSS.
+
+6. Assets necessários
+
+Crie esta estrutura:
+
+public/
+  assets/
+    characters/
+      bg-create-character.webp
+
+    ui/
+      panel-corner-gold.svg
+      icon-sword.svg
+      icon-staff.svg
+      icon-bow.svg
+      icon-user.svg
+      icon-male.svg
+      icon-female.svg
+
+    brand/
+      elarion-logo.png
+
+Se panel-corner-gold.svg e elarion-logo.png já existem por causa do login/registro/seleção, reaproveite.
+
+Imagem de fundo recomendada para criação de personagem:
+
+arsenal medieval escuro
+escudos
+armas
+banners
+névoa leve
+luz azul/dourada
 sem texto
 sem logo
 sem botão
+espaço central livre para painel
 
-Nome sugerido:
+Nome:
 
-public/assets/characters/bg-roster.webp
-4. Estrutura final da página
+public/assets/characters/bg-create-character.webp
+7. Estrutura ideal da tela
 
-Visualmente, a tela deve ficar assim:
+A nova tela deve parecer um ritual de criação do herói.
 
-┌─────────────────────────────────────────────────────────┐
-│ Logo Elarion Online                 Conta | Studio | Sair │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  Selecione seu personagem                               │
-│  Escolha um herói para entrar no mundo de Elarion.       │
-│                                                         │
-│  ┌──────────────────────────┐ ┌───────────────────────┐ │
-│  │ Lista de personagens     │ │ Preview selecionado   │ │
-│  │                          │ │                       │ │
-│  │ [sprite] Arthan          │ │      [canvas grande]  │ │
-│  │ Knight · Level 12        │ │                       │ │
-│  │ Último acesso: Hoje      │ │ Nome: Arthan          │ │
-│  │                          │ │ Vocação: Knight       │ │
-│  │ [sprite] Lyra            │ │ Level: 8              │ │
-│  │ Mage · Level 8           │ │ Localização: mapa     │ │
-│  │                          │ │                       │ │
-│  │ + Criar personagem       │ │ [Entrar no Mundo]     │ │
-│  └──────────────────────────┘ │ [Excluir]             │ │
-│                               └───────────────────────┘ │
-└─────────────────────────────────────────────────────────┘
+Visual:
 
-No mobile, vira:
+┌─────────────────────────────────────────────────────────────┐
+│ Logo Elarion Online                         Voltar          │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│                Criar Personagem                             │
+│           Escolha o início da sua jornada                    │
+│                                                             │
+│  Passos:  1 Nome  →  2 Vocação/Aparência  →  3 Confirmar    │
+│                                                             │
+│  ┌─────────────────────────────┐ ┌───────────────────────┐  │
+│  │ Conteúdo do passo atual     │ │ Preview do personagem │  │
+│  │                             │ │ [canvas animado]      │  │
+│  │ Nome/Gênero/Vocação/Outfit  │ │ Nome                  │  │
+│  │                             │ │ Vocação               │  │
+│  │ [Voltar] [Próximo]          │ │ Outfit                │  │
+│  └─────────────────────────────┘ └───────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+
+No mobile:
 
 Logo
-Selecione seu personagem
+Criar personagem
+Passos
+Preview
+Campos
+Botões
+8. IDs que precisam continuar existindo
 
-[Card personagem]
-[Card personagem]
-[Card criar novo]
+O create.ts atual depende desses IDs. Então mantenha todos:
 
-[Preview selecionado]
-[Entrar no Mundo]
-5. IDs que precisam existir no HTML
+createError
+wizardStep
+preset
+gender
+outfit
+presetPreviewCanvas
+step1
+step2
+step3
+next1
+next2
+confirmCreate
+charName
+summaryName
 
-O roster.ts atual procura elementos por ID. Então o novo characters.html precisa manter estes IDs:
+Você pode adicionar novos IDs, mas não remova esses.
 
-rosterError
-charGrid
-emptyState
-enterWorldBtn
-deleteCharBtn
-accountEmail
-studioLink
-logoutBtn
+IDs novos recomendados:
 
-Eu recomendo adicionar novos IDs para melhorar o preview sem quebrar nada:
+backToStep1
+backToStep2
+createLoading
+previewName
+previewVocation
+previewGender
+previewOutfit
+vocationCards
+genderCards
+outfitCards
+9. Novo characters-new.html
 
-selectedName
-selectedVocation
-selectedLevel
-selectedGender
-selectedMap
-selectedLastPlayed
-selectedPreviewCanvas
-selectedDetails
-noSelectionState
-rosterLoading
-
-Esses novos IDs são opcionais, mas ajudam muito a deixar a página profissional.
-
-6. Novo characters.html
-
-Substitua o HTML atual por algo nessa linha:
+Use esta base:
 
 <!doctype html>
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Selecionar personagem — Elarion Online</title>
+    <title>Criar personagem — Elarion Online</title>
     <meta
       name="description"
-      content="Selecione seu personagem e entre no mundo de Elarion Online."
+      content="Crie seu personagem em Elarion Online."
     />
   </head>
 
-  <body class="roster-page">
-    <main class="roster-shell">
-      <header class="roster-topbar">
-        <a class="roster-brand" href="index.html" aria-label="Elarion Online">
+  <body class="create-character-page">
+    <main class="create-shell">
+      <header class="create-topbar">
+        <a href="index.html" class="create-brand" aria-label="Elarion Online">
           <img
             src="assets/brand/elarion-logo.png"
             alt="Elarion Online"
-            class="roster-brand__logo"
+            class="create-brand__logo"
           />
         </a>
 
-        <div class="roster-account">
-          <span class="roster-account__email" id="accountEmail"></span>
-
-          <a id="studioLink" class="roster-toplink" href="studio.html">
-            GM Studio
-          </a>
-
-          <button id="logoutBtn" class="roster-toplink roster-toplink--button" type="button">
-            Sair
-          </button>
-        </div>
+        <a href="characters.html" class="create-toplink">
+          Cancelar
+        </a>
       </header>
 
-      <section class="roster-panel">
+      <section class="create-panel">
         <span class="panel-corner panel-corner--tl"></span>
         <span class="panel-corner panel-corner--tr"></span>
         <span class="panel-corner panel-corner--br"></span>
         <span class="panel-corner panel-corner--bl"></span>
 
-        <div class="roster-heading">
-          <p class="roster-kicker">Elarion Online</p>
-          <h1>Selecione seu personagem</h1>
-          <p>Escolha um herói para entrar no mundo de Elarion.</p>
+        <div class="create-heading">
+          <p class="create-kicker">Elarion Online</p>
+          <h1>Criar personagem</h1>
+          <p>Escolha o início da sua jornada.</p>
         </div>
 
-        <p id="rosterError" class="roster-error" hidden></p>
+        <div class="create-stepper" aria-label="Etapas de criação">
+          <span class="create-stepper__item is-active" data-step-indicator="1">
+            <strong>1</strong>
+            Nome
+          </span>
 
-        <div id="rosterLoading" class="roster-loading">
-          Carregando seus personagens...
+          <span class="create-stepper__line"></span>
+
+          <span class="create-stepper__item" data-step-indicator="2">
+            <strong>2</strong>
+            Vocação
+          </span>
+
+          <span class="create-stepper__line"></span>
+
+          <span class="create-stepper__item" data-step-indicator="3">
+            <strong>3</strong>
+            Confirmar
+          </span>
         </div>
 
-        <div class="roster-layout">
-          <section class="roster-list-panel" aria-label="Lista de personagens">
-            <div class="roster-list-header">
-              <div>
-                <strong>Personagens</strong>
-                <span>Selecione um personagem</span>
+        <p id="wizardStep" class="create-wizard-label">
+          Passo 1 de 3 — Nome
+        </p>
+
+        <p id="createError" class="create-error" hidden></p>
+
+        <div class="create-layout">
+          <section class="create-form-panel">
+            <section id="step1" class="create-step">
+              <h2>Nome do personagem</h2>
+              <p>
+                Escolha o nome do seu herói. Ele será visto por outros jogadores.
+              </p>
+
+              <div class="create-field">
+                <label for="charName">Nome</label>
+                <input
+                  id="charName"
+                  name="charName"
+                  type="text"
+                  maxlength="20"
+                  placeholder="Ex: Arthan"
+                  autocomplete="off"
+                  required
+                />
+                <small>Entre 3 e 20 caracteres. Letras, números e espaços.</small>
               </div>
 
-              <a class="roster-create-small" href="characters-new.html">
-                + Novo
-              </a>
-            </div>
+              <div class="create-actions">
+                <a class="game-button game-button--secondary" href="characters.html">
+                  Voltar
+                </a>
 
-            <div id="emptyState" class="roster-empty" hidden>
-              <h2>Sua jornada ainda não começou.</h2>
+                <button id="next1" class="game-button" type="button">
+                  Próximo
+                </button>
+              </div>
+            </section>
+
+            <section id="step2" class="create-step" hidden>
+              <h2>Vocação e aparência</h2>
               <p>
-                Crie seu primeiro personagem e descubra os reinos de Elarion.
+                Escolha sua vocação, gênero e visual inicial.
               </p>
-              <a class="game-button" href="characters-new.html">
-                Criar personagem
-              </a>
-            </div>
 
-            <div id="charGrid" class="roster-character-list"></div>
+              <div class="create-field">
+                <label for="preset">Vocação</label>
+                <select id="preset" name="preset"></select>
+              </div>
+
+              <div id="vocationCards" class="create-option-grid"></div>
+
+              <div class="create-field">
+                <label for="gender">Gênero</label>
+                <select id="gender" name="gender">
+                  <option value="male">Masculino</option>
+                  <option value="female">Feminino</option>
+                </select>
+              </div>
+
+              <div id="genderCards" class="create-choice-row">
+                <button class="create-choice-card is-selected" type="button" data-gender-card="male">
+                  Masculino
+                </button>
+
+                <button class="create-choice-card" type="button" data-gender-card="female">
+                  Feminino
+                </button>
+              </div>
+
+              <div class="create-field">
+                <label for="outfit">Visual/Outfit</label>
+                <select id="outfit" name="outfit"></select>
+              </div>
+
+              <div id="outfitCards" class="create-outfit-list"></div>
+
+              <div class="create-actions">
+                <button id="backToStep1" class="game-button game-button--secondary" type="button">
+                  Voltar
+                </button>
+
+                <button id="next2" class="game-button" type="button">
+                  Próximo
+                </button>
+              </div>
+            </section>
+
+            <section id="step3" class="create-step" hidden>
+              <h2>Confirmar personagem</h2>
+              <p>
+                Confira os dados antes de iniciar sua jornada.
+              </p>
+
+              <div class="create-summary">
+                <strong id="summaryName">-</strong>
+                <span>Nascerá em Rookgaard.</span>
+              </div>
+
+              <div class="create-actions">
+                <button id="backToStep2" class="game-button game-button--secondary" type="button">
+                  Voltar
+                </button>
+
+                <button id="confirmCreate" class="game-button" type="button">
+                  Criar e voltar
+                </button>
+              </div>
+            </section>
           </section>
 
-          <aside class="roster-preview-panel" aria-label="Personagem selecionado">
-            <div id="noSelectionState" class="roster-no-selection">
-              <h2>Nenhum personagem selecionado</h2>
-              <p>Escolha um personagem na lista para visualizar detalhes.</p>
+          <aside class="create-preview-panel">
+            <div class="create-preview-frame">
+              <canvas
+                id="presetPreviewCanvas"
+                class="create-preview-canvas"
+                width="160"
+                height="160"
+              ></canvas>
             </div>
 
-            <div id="selectedDetails" class="roster-selected" hidden>
-              <div class="roster-preview-frame">
-                <canvas
-                  id="selectedPreviewCanvas"
-                  class="roster-preview-canvas"
-                  width="160"
-                  height="160"
-                ></canvas>
+            <div class="create-preview-info">
+              <h2 id="previewName">Novo herói</h2>
+
+              <div>
+                <span>Vocação</span>
+                <strong id="previewVocation">-</strong>
               </div>
 
-              <h2 id="selectedName">-</h2>
-
-              <div class="roster-info-grid">
-                <div>
-                  <span>Vocação</span>
-                  <strong id="selectedVocation">-</strong>
-                </div>
-
-                <div>
-                  <span>Level</span>
-                  <strong id="selectedLevel">-</strong>
-                </div>
-
-                <div>
-                  <span>Gênero</span>
-                  <strong id="selectedGender">-</strong>
-                </div>
-
-                <div>
-                  <span>Mapa</span>
-                  <strong id="selectedMap">-</strong>
-                </div>
-
-                <div class="roster-info-grid__wide">
-                  <span>Último acesso</span>
-                  <strong id="selectedLastPlayed">-</strong>
-                </div>
+              <div>
+                <span>Gênero</span>
+                <strong id="previewGender">-</strong>
               </div>
 
-              <div class="roster-actions">
-                <button id="enterWorldBtn" class="game-button" type="button" disabled>
-                  Entrar no mundo
-                </button>
+              <div>
+                <span>Visual</span>
+                <strong id="previewOutfit">-</strong>
+              </div>
 
-                <button
-                  id="deleteCharBtn"
-                  class="game-button game-button--danger"
-                  type="button"
-                  disabled
-                >
-                  Excluir
-                </button>
+              <div>
+                <span>Mundo inicial</span>
+                <strong>Rookgaard</strong>
               </div>
             </div>
           </aside>
@@ -292,40 +451,23 @@ Substitua o HTML atual por algo nessa linha:
       </section>
     </main>
 
-    <script type="module" src="/src/characters/roster.ts"></script>
+    <script type="module" src="/src/characters/create.ts"></script>
   </body>
 </html>
 
-Observação importante: eu mantive o script atual:
+Ponto importante: os select continuam existindo. Mesmo que depois você use cards bonitos, os cards apenas sincronizam com os selects. Isso evita quebrar o fluxo atual.
 
-<script type="module" src="/src/characters/roster.ts"></script>
+10. Criar src/characters/create-character.css
 
-Se no Electron algum asset não carregar, você pode trocar imagens para caminho relativo, como já fez nas outras telas:
-
-src="assets/brand/elarion-logo.png"
-7. Criar CSS próprio da tela
-
-Crie:
-
-src/characters/roster.css
-
-E no topo do roster.ts, troque:
+No create.ts, troque:
 
 import '../shared/shell.css';
 
 por:
 
-import './roster.css';
+import './create-character.css';
 
-Se quiser manter alguma base global, no CSS você pode importar o estilo compartilhado:
-
-@import '../style.css';
-
-Eu não importaria shell.css aqui, porque ele ainda tem estilos simples de .shell-page, .shell-card, .char-card etc. Melhor a seleção de personagem ter seu próprio CSS, igual fizemos com login/registro.
-
-8. src/characters/roster.css
-
-Use algo assim como base:
+CSS base:
 
 @import '../style.css';
 
@@ -347,14 +489,14 @@ Use algo assim como base:
   box-sizing: border-box;
 }
 
-body.roster-page {
+body.create-character-page {
   margin: 0;
   min-height: 100vh;
   color: var(--eo-text);
   background:
-    radial-gradient(circle at 50% 35%, rgba(53, 200, 255, 0.08), transparent 32%),
-    linear-gradient(90deg, rgba(2, 4, 9, 0.86), rgba(2, 4, 9, 0.42), rgba(2, 4, 9, 0.88)),
-    url("/assets/characters/bg-roster.webp");
+    radial-gradient(circle at 50% 38%, rgba(53, 200, 255, 0.08), transparent 34%),
+    linear-gradient(90deg, rgba(2, 4, 9, 0.88), rgba(2, 4, 9, 0.46), rgba(2, 4, 9, 0.9)),
+    url("/assets/characters/bg-create-character.webp");
   background-size: cover;
   background-position: center;
   background-attachment: fixed;
@@ -367,7 +509,7 @@ body.roster-page {
     sans-serif;
 }
 
-.roster-shell {
+.create-shell {
   min-height: 100vh;
   padding: 24px clamp(16px, 4vw, 56px);
   display: flex;
@@ -375,59 +517,31 @@ body.roster-page {
   gap: 24px;
 }
 
-.roster-topbar {
+.create-topbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 18px;
 }
 
-.roster-brand {
-  display: inline-flex;
-  align-items: center;
-}
-
-.roster-brand__logo {
+.create-brand__logo {
   width: min(220px, 48vw);
   max-height: 82px;
   object-fit: contain;
   filter: drop-shadow(0 0 18px rgba(216, 170, 79, 0.28));
 }
 
-.roster-account {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: rgba(248, 239, 216, 0.76);
+.create-toplink {
+  color: #8edcff;
+  text-decoration: none;
   font-size: 0.9rem;
 }
 
-.roster-account__email {
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.roster-toplink {
-  color: #8edcff;
-  text-decoration: none;
-  font-size: 0.86rem;
-}
-
-.roster-toplink:hover {
+.create-toplink:hover {
   color: var(--eo-gold-light);
 }
 
-.roster-toplink--button {
-  border: 1px solid rgba(216, 170, 79, 0.28);
-  border-radius: 8px;
-  background: rgba(7, 10, 16, 0.56);
-  padding: 8px 12px;
-  cursor: pointer;
-}
-
-.roster-panel {
+.create-panel {
   position: relative;
   width: min(1180px, 100%);
   margin: auto;
@@ -443,8 +557,8 @@ body.roster-page {
     0 28px 80px rgba(0, 0, 0, 0.62);
 }
 
-.roster-panel::before,
-.roster-panel::after {
+.create-panel::before,
+.create-panel::after {
   content: "";
   position: absolute;
   left: 28px;
@@ -459,11 +573,11 @@ body.roster-page {
   pointer-events: none;
 }
 
-.roster-panel::before {
+.create-panel::before {
   top: 14px;
 }
 
-.roster-panel::after {
+.create-panel::after {
   bottom: 14px;
 }
 
@@ -501,12 +615,12 @@ body.roster-page {
   transform: rotate(270deg);
 }
 
-.roster-heading {
+.create-heading {
   text-align: center;
-  margin-bottom: 26px;
+  margin-bottom: 22px;
 }
 
-.roster-kicker {
+.create-kicker {
   margin: 0 0 8px;
   color: var(--eo-gold-light);
   font-size: 0.78rem;
@@ -515,7 +629,7 @@ body.roster-page {
   text-transform: uppercase;
 }
 
-.roster-heading h1 {
+.create-heading h1 {
   margin: 0;
   color: var(--eo-gold-light);
   font-family: Georgia, "Times New Roman", serif;
@@ -524,12 +638,70 @@ body.roster-page {
   text-transform: uppercase;
 }
 
-.roster-heading p {
+.create-heading p {
   margin: 10px 0 0;
   color: var(--eo-muted);
 }
 
-.roster-error {
+.create-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.create-stepper__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(248, 239, 216, 0.55);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.create-stepper__item strong {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(216, 170, 79, 0.28);
+  border-radius: 999px;
+  background: rgba(5, 8, 14, 0.7);
+  color: var(--eo-muted);
+}
+
+.create-stepper__item.is-active {
+  color: var(--eo-gold-light);
+}
+
+.create-stepper__item.is-active strong {
+  border-color: var(--eo-border-strong);
+  background: linear-gradient(180deg, #b97d2e, #6f4317);
+  color: #fff5d2;
+}
+
+.create-stepper__line {
+  width: min(90px, 8vw);
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(216, 170, 79, 0.15),
+    rgba(216, 170, 79, 0.5),
+    rgba(216, 170, 79, 0.15)
+  );
+}
+
+.create-wizard-label {
+  margin: 0 0 20px;
+  color: var(--eo-muted);
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.create-error {
   margin: 0 auto 18px;
   width: min(720px, 100%);
   padding: 12px 14px;
@@ -540,27 +712,16 @@ body.roster-page {
   font-size: 0.9rem;
 }
 
-.roster-loading {
-  margin: 20px auto;
-  width: min(420px, 100%);
-  padding: 18px;
-  text-align: center;
-  color: var(--eo-muted);
-  border: 1px solid rgba(216, 170, 79, 0.22);
-  border-radius: 12px;
-  background: rgba(7, 10, 16, 0.5);
-}
-
-.roster-layout {
+.create-layout {
   display: grid;
-  grid-template-columns: minmax(320px, 0.95fr) minmax(360px, 1.05fr);
+  grid-template-columns: minmax(360px, 1.1fr) minmax(320px, 0.9fr);
   gap: 22px;
 }
 
-.roster-list-panel,
-.roster-preview-panel {
-  min-height: 520px;
-  padding: 20px;
+.create-form-panel,
+.create-preview-panel {
+  min-height: 500px;
+  padding: 22px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.028), transparent),
     var(--eo-panel-soft);
@@ -569,173 +730,151 @@ body.roster-page {
   box-shadow: inset 0 0 28px rgba(0, 0, 0, 0.36);
 }
 
-.roster-list-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  margin-bottom: 16px;
-}
-
-.roster-list-header strong {
-  display: block;
-  color: var(--eo-gold-light);
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.25rem;
-}
-
-.roster-list-header span {
-  display: block;
-  margin-top: 3px;
-  color: var(--eo-muted);
-  font-size: 0.82rem;
-}
-
-.roster-create-small {
-  padding: 8px 12px;
-  border: 1px solid rgba(216, 170, 79, 0.38);
-  border-radius: 8px;
-  color: var(--eo-gold-light);
-  background: rgba(7, 10, 16, 0.58);
-  text-decoration: none;
-  font-size: 0.85rem;
-  font-weight: 800;
-}
-
-.roster-create-small:hover {
-  border-color: var(--eo-border-strong);
-}
-
-.roster-empty {
-  display: grid;
-  place-items: center;
-  min-height: 360px;
-  padding: 24px;
-  text-align: center;
-  border: 1px dashed rgba(216, 170, 79, 0.32);
-  border-radius: 12px;
-  background: rgba(5, 8, 14, 0.48);
-}
-
-.roster-empty h2 {
+.create-step h2,
+.create-preview-info h2 {
   margin: 0;
   color: var(--eo-gold-light);
   font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.55rem;
 }
 
-.roster-empty p {
-  margin: 10px 0 20px;
+.create-step p {
+  margin: 8px 0 20px;
   color: var(--eo-muted);
-  line-height: 1.6;
+  line-height: 1.65;
 }
 
-.roster-character-list {
-  display: grid;
-  gap: 12px;
+.create-field {
+  margin-bottom: 18px;
 }
 
-.roster-char-card {
-  display: grid;
-  grid-template-columns: 76px 1fr;
-  align-items: center;
-  gap: 14px;
+.create-field label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--eo-gold-light);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.create-field input,
+.create-field select {
   width: 100%;
-  padding: 12px;
-  border: 1px solid rgba(216, 170, 79, 0.22);
-  border-radius: 12px;
+  min-height: 46px;
+  padding: 0 13px;
+  border: 1px solid rgba(169, 177, 195, 0.28);
+  border-radius: 8px;
+  background: rgba(3, 6, 12, 0.78);
+  color: var(--eo-text);
+  outline: none;
+  font-size: 0.95rem;
+}
+
+.create-field small {
+  display: block;
+  margin-top: 8px;
+  color: rgba(169, 177, 195, 0.72);
+  line-height: 1.45;
+}
+
+.create-field input:focus,
+.create-field select:focus {
+  border-color: rgba(53, 200, 255, 0.72);
+  box-shadow: 0 0 0 3px rgba(53, 200, 255, 0.12);
+}
+
+.create-option-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: -4px 0 18px;
+}
+
+.create-choice-row,
+.create-outfit-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: -4px 0 18px;
+}
+
+.create-choice-card,
+.create-vocation-card,
+.create-outfit-card {
+  border: 1px solid rgba(216, 170, 79, 0.24);
+  border-radius: 10px;
   background:
-    linear-gradient(90deg, rgba(216, 170, 79, 0.08), transparent),
+    linear-gradient(180deg, rgba(216, 170, 79, 0.08), transparent),
     rgba(5, 8, 14, 0.68);
   color: var(--eo-text);
-  text-align: left;
   cursor: pointer;
   transition:
     border-color 150ms ease,
     transform 150ms ease,
-    background 150ms ease,
     box-shadow 150ms ease;
 }
 
-.roster-char-card:hover,
-.roster-char-card.is-selected {
-  transform: translateY(-1px);
-  border-color: var(--eo-border-strong);
-  background:
-    linear-gradient(90deg, rgba(216, 170, 79, 0.16), transparent),
-    rgba(5, 8, 14, 0.84);
-  box-shadow: 0 0 26px rgba(216, 170, 79, 0.16);
+.create-choice-card {
+  min-height: 42px;
+  padding: 0 16px;
+  font-weight: 800;
 }
 
-.roster-char-card__canvas-wrap {
-  width: 68px;
-  height: 68px;
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(53, 200, 255, 0.22);
-  border-radius: 10px;
-  background:
-    radial-gradient(circle, rgba(53, 200, 255, 0.12), transparent 62%),
-    rgba(1, 5, 12, 0.78);
+.create-vocation-card {
+  min-height: 86px;
+  padding: 12px;
+  text-align: left;
 }
 
-.roster-char-card canvas {
-  width: 64px;
-  height: 64px;
-  image-rendering: pixelated;
-}
-
-.roster-char-card h3 {
-  margin: 0;
+.create-vocation-card strong,
+.create-outfit-card strong {
+  display: block;
   color: var(--eo-gold-light);
   font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.15rem;
 }
 
-.roster-char-card p {
-  margin: 4px 0 0;
-  color: var(--eo-muted);
-  font-size: 0.82rem;
-}
-
-.roster-char-card small {
+.create-vocation-card small,
+.create-outfit-card small {
   display: block;
   margin-top: 4px;
-  color: rgba(248, 239, 216, 0.56);
-}
-
-.roster-preview-panel {
-  display: grid;
-}
-
-.roster-no-selection {
-  place-self: center;
-  text-align: center;
-  width: min(360px, 100%);
-}
-
-.roster-no-selection h2 {
-  margin: 0;
-  color: var(--eo-gold-light);
-  font-family: Georgia, "Times New Roman", serif;
-}
-
-.roster-no-selection p {
-  margin: 10px 0 0;
   color: var(--eo-muted);
 }
 
-.roster-selected {
+.create-outfit-card {
+  padding: 10px 12px;
+}
+
+.create-choice-card.is-selected,
+.create-vocation-card.is-selected,
+.create-outfit-card.is-selected,
+.create-choice-card:hover,
+.create-vocation-card:hover,
+.create-outfit-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--eo-border-strong);
+  box-shadow: 0 0 22px rgba(216, 170, 79, 0.16);
+}
+
+.create-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.create-preview-panel {
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
-.roster-preview-frame {
-  width: 190px;
-  height: 190px;
+.create-preview-frame {
+  width: 210px;
+  height: 210px;
   display: grid;
   place-items: center;
-  margin-bottom: 18px;
+  margin-bottom: 20px;
   border: 1px solid rgba(216, 170, 79, 0.34);
   border-radius: 18px;
   background:
@@ -746,38 +885,31 @@ body.roster-page {
     0 0 30px rgba(53, 200, 255, 0.08);
 }
 
-.roster-preview-canvas {
+.create-preview-canvas {
   width: 160px;
   height: 160px;
   image-rendering: pixelated;
 }
 
-.roster-selected h2 {
-  margin: 0 0 18px;
-  color: var(--eo-gold-light);
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 2rem;
-}
-
-.roster-info-grid {
+.create-preview-info {
   width: 100%;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
-.roster-info-grid div {
+.create-preview-info h2 {
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.create-preview-info div {
   padding: 12px;
   border: 1px solid rgba(216, 170, 79, 0.18);
   border-radius: 10px;
   background: rgba(5, 8, 14, 0.52);
 }
 
-.roster-info-grid__wide {
-  grid-column: 1 / -1;
-}
-
-.roster-info-grid span {
+.create-preview-info span {
   display: block;
   margin-bottom: 5px;
   color: var(--eo-muted);
@@ -786,17 +918,26 @@ body.roster-page {
   text-transform: uppercase;
 }
 
-.roster-info-grid strong {
+.create-preview-info strong {
   color: var(--eo-text);
-  font-size: 0.95rem;
 }
 
-.roster-actions {
-  width: 100%;
+.create-summary {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
-  margin-top: 18px;
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid rgba(216, 170, 79, 0.24);
+  border-radius: 12px;
+  background: rgba(5, 8, 14, 0.58);
+}
+
+.create-summary strong {
+  color: var(--eo-gold-light);
+  font-size: 1.15rem;
+}
+
+.create-summary span {
+  color: var(--eo-muted);
 }
 
 .game-button {
@@ -821,633 +962,717 @@ body.roster-page {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   text-decoration: none;
-  transition:
-    transform 140ms ease,
-    filter 140ms ease,
-    box-shadow 140ms ease,
-    opacity 140ms ease;
 }
 
 .game-button:hover:not(:disabled) {
-  transform: translateY(-1px);
   filter: brightness(1.12);
+  transform: translateY(-1px);
 }
 
 .game-button:disabled {
-  opacity: 0.56;
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
-.game-button--danger {
+.game-button--secondary {
   background:
-    linear-gradient(180deg, rgba(255, 160, 160, 0.16), rgba(0, 0, 0, 0)),
-    linear-gradient(180deg, #9f3434 0%, #6d2020 52%, #3c1111 100%);
-  border-color: rgba(255, 160, 160, 0.46);
+    linear-gradient(180deg, rgba(89, 166, 255, 0.12), rgba(0, 0, 0, 0)),
+    rgba(7, 12, 22, 0.76);
+  border-color: rgba(87, 178, 255, 0.48);
+  color: #d8efff;
 }
 
 @media (max-width: 940px) {
-  .roster-topbar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .roster-account {
-    width: 100%;
-    flex-wrap: wrap;
-  }
-
-  .roster-layout {
+  .create-layout {
     grid-template-columns: 1fr;
   }
 
-  .roster-list-panel,
-  .roster-preview-panel {
+  .create-form-panel,
+  .create-preview-panel {
     min-height: auto;
   }
 }
 
-@media (max-width: 560px) {
-  body.roster-page {
+@media (max-width: 620px) {
+  body.create-character-page {
     background-attachment: scroll;
   }
 
-  .roster-shell {
+  .create-shell {
     padding: 16px;
   }
 
-  .roster-panel {
+  .create-panel {
     padding: 22px 16px;
   }
 
-  .roster-heading h1 {
-    font-size: 2rem;
+  .create-stepper {
+    gap: 6px;
   }
 
-  .roster-char-card {
-    grid-template-columns: 64px 1fr;
-    padding: 10px;
+  .create-stepper__line {
+    width: 22px;
   }
 
-  .roster-char-card__canvas-wrap {
-    width: 58px;
-    height: 58px;
+  .create-stepper__item {
+    font-size: 0.7rem;
   }
 
-  .roster-char-card canvas {
-    width: 54px;
-    height: 54px;
-  }
-
-  .roster-actions {
+  .create-option-grid {
     grid-template-columns: 1fr;
   }
 
-  .roster-account__email {
-    max-width: 100%;
+  .create-actions {
+    flex-direction: column-reverse;
+  }
+
+  .game-button {
+    width: 100%;
   }
 }
-9. Ajustar roster.ts sem quebrar a lógica
+11. Ajustes no create.ts
 
-Aqui é onde precisa mais atenção.
+Agora vem a parte sensível.
 
-Hoje o roster.ts renderiza cards simples e desenha o canvas real. Vamos manter isso, mas trocar o HTML dos cards e adicionar preview grande.
+Não precisa reescrever tudo. Você vai preservar a lógica atual e adicionar:
 
-9.1. Trocar import
+CSS novo
+cards visuais sincronizados com selects
+preview lateral com textos
+botões voltar
+stepper ativo
+loading no botão confirmar
+mensagens melhores
+11.1. Trocar import do CSS
 
-No começo:
+No topo:
 
-import './roster.css';
+import './create-character.css';
 
 No lugar de:
 
 import '../shared/shell.css';
-9.2. Adicionar novos elementos
+11.2. Pegar os novos elementos
 
-Depois dos elementos atuais:
+Adicione após os elementos atuais:
 
-const loadingEl = document.getElementById('rosterLoading') as HTMLElement | null;
-const selectedDetailsEl = document.getElementById('selectedDetails') as HTMLElement | null;
-const noSelectionStateEl = document.getElementById('noSelectionState') as HTMLElement | null;
+const previewNameEl = document.getElementById('previewName') as HTMLElement | null;
+const previewVocationEl = document.getElementById('previewVocation') as HTMLElement | null;
+const previewGenderEl = document.getElementById('previewGender') as HTMLElement | null;
+const previewOutfitEl = document.getElementById('previewOutfit') as HTMLElement | null;
 
-const selectedNameEl = document.getElementById('selectedName') as HTMLElement | null;
-const selectedVocationEl = document.getElementById('selectedVocation') as HTMLElement | null;
-const selectedLevelEl = document.getElementById('selectedLevel') as HTMLElement | null;
-const selectedGenderEl = document.getElementById('selectedGender') as HTMLElement | null;
-const selectedMapEl = document.getElementById('selectedMap') as HTMLElement | null;
-const selectedLastPlayedEl = document.getElementById('selectedLastPlayed') as HTMLElement | null;
-const selectedPreviewCanvas = document.getElementById('selectedPreviewCanvas') as HTMLCanvasElement | null;
-9.3. Criar helpers
+const vocationCardsEl = document.getElementById('vocationCards') as HTMLElement | null;
+const genderCardsEl = document.getElementById('genderCards') as HTMLElement | null;
+const outfitCardsEl = document.getElementById('outfitCards') as HTMLElement | null;
 
-Adicione estas funções:
-
-function getCharacterSpriteUrl(c: CharacterRow): string {
-  return (
-    c.outfitConfig?.spriteSheetUrl ||
-    c.appearance?.spriteSheetUrl ||
-    `tiles/characters/vocations/${c.gender || 'male'}/${c.vocation || 'knight'}.png`
-  );
-}
-
-function formatVocation(c: CharacterRow): string {
-  const value = c.vocation || c.outfitConfig?.vocation || 'knight';
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function formatGender(c: CharacterRow): string {
-  const value = c.gender || c.appearance?.gender;
-
-  if (value === 'female') return 'Feminino';
-  if (value === 'male') return 'Masculino';
-
-  return '-';
-}
-
-function formatLastPlayed(value: string | null): string {
-  if (!value) return 'Nunca jogou';
-
-  return new Date(value).toLocaleString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function formatMap(c: CharacterRow): string {
-  return c.mapId || c.spawnMapId || 'Elarion';
-}
-
-Importante: esse helper getCharacterSpriteUrl mantém o outfit real e adiciona appearance?.spriteSheetUrl como fallback extra, porque o tipo CharacterAppearance também possui spriteSheetUrl.
-
-9.4. Melhorar loadRoster
-
-Hoje ele carrega e renderiza. Só adicione loading:
-
-async function loadRoster(): Promise<void> {
-  try {
-    errEl.hidden = true;
-    if (loadingEl) loadingEl.hidden = false;
-
-    characters = await listCharacters(session.userId);
-
-    if (!selectedId && characters.length > 0) {
-      selectedId = characters[0].id;
-      enterBtn.disabled = false;
-      deleteBtn.disabled = false;
-    }
-
-    renderGrid();
-    renderSelectedCharacter();
-  } catch (err) {
-    errEl.textContent = err instanceof Error ? err.message : 'Erro ao carregar personagens.';
-    errEl.hidden = false;
-  } finally {
-    if (loadingEl) loadingEl.hidden = true;
-  }
-}
-
-Eu recomendo selecionar automaticamente o primeiro personagem. Isso deixa a tela mais bonita e pronta para “Entrar no Mundo”.
-
-9.5. Atualizar renderGrid
-
-Troque a função renderGrid() por uma versão parecida com esta:
-
-function renderGrid(): void {
-  grid.innerHTML = '';
-
-  const hasCharacters = characters.length > 0;
-  empty.hidden = hasCharacters;
-
-  if (!hasCharacters) {
-    enterBtn.disabled = true;
-    deleteBtn.disabled = true;
-    renderSelectedCharacter();
-    return;
-  }
-
-  for (const c of characters) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'roster-char-card' + (c.id === selectedId ? ' is-selected' : '');
-    button.dataset.id = c.id;
-
-    const vocation = formatVocation(c);
-    const level = c.level ?? 1;
-    const lastPlayed = c.lastPlayedAt
-      ? `Último acesso: ${new Date(c.lastPlayedAt).toLocaleDateString('pt-BR')}`
-      : 'Nunca jogou';
-
-    button.innerHTML = `
-      <span class="roster-char-card__canvas-wrap">
-        <canvas class="char-card-canvas" width="64" height="64"></canvas>
-      </span>
-
-      <span>
-        <h3>${escapeHtml(c.name)}</h3>
-        <p>${escapeHtml(vocation)} · Level ${level}</p>
-        <small>${escapeHtml(lastPlayed)}</small>
-      </span>
-    `;
-
-    button.addEventListener('click', () => {
-      selectedId = c.id;
-      enterBtn.disabled = false;
-      deleteBtn.disabled = false;
-      renderGrid();
-      renderSelectedCharacter();
-    });
-
-    grid.appendChild(button);
-
-    const canvas = button.querySelector('.char-card-canvas') as HTMLCanvasElement | null;
-
-    if (canvas) {
-      void drawCharacterPreview(canvas, getCharacterSpriteUrl(c));
-    }
-  }
-}
-
-Aqui mantemos o mesmo preview real em canvas. Só mudamos o card para ficar mais bonito.
-
-9.6. Criar renderSelectedCharacter
+const backToStep1Btn = document.getElementById('backToStep1') as HTMLButtonElement | null;
+const backToStep2Btn = document.getElementById('backToStep2') as HTMLButtonElement | null;
+const confirmCreateBtn = document.getElementById('confirmCreate') as HTMLButtonElement | null;
+11.3. Criar helpers de UI
 
 Adicione:
 
-function getSelectedCharacter(): CharacterRow | null {
-  if (!selectedId) return null;
-  return characters.find((c) => c.id === selectedId) ?? null;
-}
+function setError(message: string | null): void {
+  if (!errEl) return;
 
-function renderSelectedCharacter(): void {
-  const selected = getSelectedCharacter();
-
-  const hasSelected = Boolean(selected);
-
-  if (selectedDetailsEl) selectedDetailsEl.hidden = !hasSelected;
-  if (noSelectionStateEl) noSelectionStateEl.hidden = hasSelected;
-
-  if (!selected) {
-    enterBtn.disabled = true;
-    deleteBtn.disabled = true;
+  if (!message) {
+    errEl.textContent = '';
+    errEl.hidden = true;
     return;
   }
 
-  if (selectedNameEl) selectedNameEl.textContent = selected.name;
-  if (selectedVocationEl) selectedVocationEl.textContent = formatVocation(selected);
-  if (selectedLevelEl) selectedLevelEl.textContent = String(selected.level ?? 1);
-  if (selectedGenderEl) selectedGenderEl.textContent = formatGender(selected);
-  if (selectedMapEl) selectedMapEl.textContent = formatMap(selected);
-  if (selectedLastPlayedEl) selectedLastPlayedEl.textContent = formatLastPlayed(selected.lastPlayedAt);
-
-  if (selectedPreviewCanvas) {
-    void drawCharacterPreview(selectedPreviewCanvas, getCharacterSpriteUrl(selected));
-  }
+  errEl.textContent = message;
+  errEl.hidden = false;
 }
 
-Isso permite que a tela tenha o card pequeno e o preview grande usando o mesmo sistema de sprite real.
+function formatLabel(value: string | undefined | null): string {
+  if (!value) return '-';
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
 
-10. Cuidado com drawCharacterPreview
+function formatGenderLabel(value: Gender | string | undefined): string {
+  if (value === 'female') return 'Feminino';
+  if (value === 'male') return 'Masculino';
+  return '-';
+}
 
-A função atual já faz coisas importantes:
+function setStepperActive(step: number): void {
+  document.querySelectorAll<HTMLElement>('[data-step-indicator]').forEach((el) => {
+    el.classList.toggle('is-active', el.dataset.stepIndicator === String(step));
+  });
+}
 
-carrega o JSON da sprite
-resolve frameWidth/frameHeight
-respeita offsetX/offsetY
-respeita gapX/gapY
-respeita sheetLayout
-usa idle_down ou walk_down
-usa resolveAnimationSourceRect
-remove magenta quando chromaKey está ativo
-desenha no canvas com imageSmoothingEnabled = false
+function updatePreviewInfo(): void {
+  const currentName = (document.getElementById('charName') as HTMLInputElement | null)?.value.trim();
 
-Essa função é exatamente o que você precisa preservar, porque ela respeita a estrutura real das sprites do seu sistema. Ela usa resolveAnimationSourceRect e resolveApiUrl para montar o caminho correto da imagem/JSON.
+  const selectedVocationId = presetSelect?.value || selectedVocation;
+  const selectedGenderValue = genderSelect?.value as Gender;
+  const outfit = findOutfitPreset(outfitPresets, outfitSelect?.value || '');
 
-Então a regra é:
+  if (previewNameEl) previewNameEl.textContent = currentName || charName || 'Novo herói';
+  if (previewVocationEl) previewVocationEl.textContent = formatLabel(selectedVocationId);
+  if (previewGenderEl) previewGenderEl.textContent = formatGenderLabel(selectedGenderValue);
+  if (previewOutfitEl) previewOutfitEl.textContent = outfit?.name ?? '-';
+}
+11.4. Melhorar showStep
 
-Não troque canvas por <img>.
-Não use imagem fixa da vocação.
-Não desenhe sempre knight.png.
-Não ignore outfitConfig.
+Troque sua função showStep por:
 
-O certo é:
+function showStep(n: number): void {
+  (document.getElementById('step1') as HTMLElement).hidden = n !== 1;
+  (document.getElementById('step2') as HTMLElement).hidden = n !== 2;
+  (document.getElementById('step3') as HTMLElement).hidden = n !== 3;
 
-usar drawCharacterPreview(canvas, getCharacterSpriteUrl(character))
-11. Melhorar botão de entrar
+  stepLabel.textContent = `Passo ${n} de 3 — ${
+    n === 1 ? 'Nome' : n === 2 ? 'Vocação e aparência' : 'Confirmar'
+  }`;
 
-Hoje o fluxo do botão está correto:
+  setStepperActive(n);
+  updatePreviewInfo();
+}
+11.5. Atualizar nome no preview enquanto digita
 
-await enforceDesktopVersionGate();
-await markCharacterPlayed(selectedId, session.userId);
-sessionStorage.setItem('activeCharacterId', selectedId);
-track('first_world_enter', { characterId: selectedId });
-location.href = `play.html?characterId=${encodeURIComponent(selectedId)}`;
+Depois dos listeners:
 
-Eu só adicionaria loading visual:
+document.getElementById('charName')?.addEventListener('input', () => {
+  updatePreviewInfo();
+});
+11.6. Botões voltar
 
-enterBtn.addEventListener('click', async () => {
-  if (!selectedId) return;
+Adicione:
 
-  const originalText = enterBtn.textContent ?? 'Entrar no mundo';
-
-  try {
-    enterBtn.disabled = true;
-    enterBtn.textContent = 'Entrando...';
-
-    const versionOk = await enforceDesktopVersionGate();
-    if (!versionOk) return;
-
-    await markCharacterPlayed(selectedId, session.userId);
-    sessionStorage.setItem('activeCharacterId', selectedId);
-    track('first_world_enter', { characterId: selectedId });
-
-    location.href = `play.html?characterId=${encodeURIComponent(selectedId)}`;
-  } catch (err) {
-    errEl.textContent = err instanceof Error ? err.message : 'Erro ao entrar.';
-    errEl.hidden = false;
-    enterBtn.disabled = false;
-    enterBtn.textContent = originalText;
-  }
+backToStep1Btn?.addEventListener('click', () => {
+  setError(null);
+  showStep(1);
 });
 
-Observação: se versionOk for falso, talvez você queira restaurar o botão antes do return:
+backToStep2Btn?.addEventListener('click', () => {
+  setError(null);
+  showStep(2);
+});
+12. Cards de gênero sincronizados com select
 
-if (!versionOk) {
-  enterBtn.disabled = false;
-  enterBtn.textContent = originalText;
-  return;
+O select gender continua sendo a fonte real. Os botões só mudam o valor do select.
+
+Adicione:
+
+function renderGenderCards(): void {
+  if (!genderCardsEl || !genderSelect) return;
+
+  genderCardsEl.querySelectorAll<HTMLButtonElement>('[data-gender-card]').forEach((button) => {
+    button.classList.toggle('is-selected', button.dataset.genderCard === genderSelect.value);
+  });
 }
-12. Melhorar exclusão sem mudar backend
 
-Hoje está com confirm(). Funciona, mas visualmente fica feio. Para este commit, eu faria assim:
+genderCardsEl?.addEventListener('click', (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-gender-card]');
+  if (!button || !genderSelect) return;
 
-Opção segura para agora
+  genderSelect.value = button.dataset.genderCard as Gender;
+  genderSelect.dispatchEvent(new Event('change'));
+  renderGenderCards();
+  updatePreviewInfo();
+});
 
-Manter confirm().
+E dentro do listener atual de genderSelect:
 
-Motivo: é simples e não arrisca quebrar.
+genderSelect?.addEventListener('change', () => {
+  renderOutfitOptions();
+  renderGenderCards();
+  updatePreviewInfo();
+});
 
-Opção melhor depois
+Se hoje já existe:
 
-Criar modal visual:
+genderSelect?.addEventListener('change', renderOutfitOptions);
 
-Tem certeza que deseja excluir Arthan?
-Digite o nome do personagem para confirmar.
+troque por essa versão acima.
 
-Para esta etapa, minha sugestão é:
+13. Cards de vocação sincronizados com select
 
-não mexer na exclusão ainda
-só mudar o botão visual
+Depois que fillVocationSelect() preencher o select, crie os cards.
 
-Porque seu foco agora é a seleção.
+Adicione:
 
-13. Ajuste completo do deleteBtn
+function renderVocationCards(): void {
+  if (!vocationCardsEl || !presetSelect) return;
 
-Pode manter quase igual, mas remover logs excessivos:
+  vocationCardsEl.innerHTML = '';
 
-deleteBtn.addEventListener('click', async () => {
-  const selected = getSelectedCharacter();
+  for (const option of Array.from(presetSelect.options)) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'create-vocation-card';
+    button.dataset.vocationCard = option.value;
 
-  if (!selected) return;
-
-  const confirmed = confirm(
-    `Excluir o personagem "${selected.name}"? Esta ação não pode ser desfeita.`
-  );
-
-  if (!confirmed) return;
-
-  try {
-    deleteBtn.disabled = true;
-    deleteBtn.textContent = 'Excluindo...';
-
-    await softDeleteCharacter(selected.id, session.userId);
-
-    selectedId = null;
-    characters = characters.filter((c) => c.id !== selected.id);
-
-    if (characters.length > 0) {
-      selectedId = characters[0].id;
+    if (option.value === presetSelect.value) {
+      button.classList.add('is-selected');
     }
 
-    enterBtn.disabled = !selectedId;
-    deleteBtn.disabled = !selectedId;
-    deleteBtn.textContent = 'Excluir';
+    button.innerHTML = `
+      <strong>${option.textContent ?? option.value}</strong>
+      <small>Escolher vocação</small>
+    `;
 
-    renderGrid();
-    renderSelectedCharacter();
-  } catch (err) {
-    errEl.textContent = err instanceof Error ? err.message : 'Erro ao excluir.';
-    errEl.hidden = false;
-
-    deleteBtn.disabled = false;
-    deleteBtn.textContent = 'Excluir';
+    vocationCardsEl.appendChild(button);
   }
+}
+
+function syncVocationCards(): void {
+  if (!vocationCardsEl || !presetSelect) return;
+
+  vocationCardsEl.querySelectorAll<HTMLButtonElement>('[data-vocation-card]').forEach((button) => {
+    button.classList.toggle('is-selected', button.dataset.vocationCard === presetSelect.value);
+  });
+}
+
+vocationCardsEl?.addEventListener('click', (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-vocation-card]');
+  if (!button || !presetSelect) return;
+
+  presetSelect.value = button.dataset.vocationCard ?? presetSelect.value;
+  presetSelect.dispatchEvent(new Event('change'));
+  syncVocationCards();
+  updatePreviewInfo();
 });
 
-Se quiser recarregar do servidor depois da exclusão, mantenha await loadRoster(). É mais confiável:
+Agora, toda vez que você preencher vocações, chame:
 
-await softDeleteCharacter(selected.id, session.userId);
-selectedId = null;
-await loadRoster();
-14. Arquivo final roster.ts: estrutura recomendada
+renderVocationCards();
 
-Não precisa reescrever do zero. Organize assim:
+Na função populateVocationPresetSelect, depois do fillVocationSelect:
 
-import './roster.css';
+function populateVocationPresetSelect(source?: VocationsMap): void {
+  if (!presetSelect) return;
 
-imports atuais...
+  fillVocationSelect(presetSelect, source ?? (getRuntimeVocations() as VocationsMap), {
+    includeKeyInLabel: true,
+  });
 
-initDesktopClientShell();
+  renderVocationCards();
+}
+14. Cards de outfit sincronizados com select
 
-const session = await requireAuth();
+Na função renderOutfitOptions(), depois de montar o select, chame:
 
-pegar elementos do DOM
+renderOutfitCards(availableOutfits);
 
-emailEl.textContent = session.email;
+Crie:
 
-profile / studioLink
+function renderOutfitCards(availableOutfits: OutfitPreset[]): void {
+  if (!outfitCardsEl || !outfitSelect) return;
 
-let characters = [];
-let selectedId = null;
+  outfitCardsEl.innerHTML = '';
 
-helpers:
-  getCharacterSpriteUrl
-  formatVocation
-  formatGender
-  formatLastPlayed
-  formatMap
-  getSelectedCharacter
-  escapeHtml
+  for (const outfit of availableOutfits) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'create-outfit-card';
+    button.dataset.outfitCard = outfit.id;
 
-loadRoster
-renderGrid
-renderSelectedCharacter
-drawCharacterPreview atual, preservada
+    if (outfit.id === outfitSelect.value) {
+      button.classList.add('is-selected');
+    }
 
-event enter
-event delete
-event logout
+    button.innerHTML = `
+      <strong>${outfit.name}</strong>
+      <small>${outfit.id}</small>
+    `;
 
-void loadRoster()
+    outfitCardsEl.appendChild(button);
+  }
+}
 
-O mais importante: não jogue fora drawCharacterPreview.
+function syncOutfitCards(): void {
+  if (!outfitCardsEl || !outfitSelect) return;
 
-15. Testes obrigatórios depois da implementação
+  outfitCardsEl.querySelectorAll<HTMLButtonElement>('[data-outfit-card]').forEach((button) => {
+    button.classList.toggle('is-selected', button.dataset.outfitCard === outfitSelect.value);
+  });
+}
 
-Depois de alterar, teste nesta ordem:
+outfitCardsEl?.addEventListener('click', (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-outfit-card]');
+  if (!button || !outfitSelect) return;
 
-1. Conta sem personagem
+  outfitSelect.value = button.dataset.outfitCard ?? outfitSelect.value;
+  outfitSelect.dispatchEvent(new Event('change'));
+  syncOutfitCards();
+  updatePreviewInfo();
+});
 
-Esperado:
+E no listener do outfit:
 
-mostra estado vazio
-botão Criar personagem aparece
-Entrar no mundo desabilitado
-Excluir desabilitado
-2. Conta com 1 personagem
+outfitSelect?.addEventListener('change', () => {
+  syncOutfitCards();
+  updatePreviewInfo();
+  void updatePreview();
+});
 
-Esperado:
+Se hoje já existe:
 
-seleciona automaticamente
-mostra card selecionado
-mostra preview grande
-botão Entrar habilitado
-botão Excluir habilitado
-3. Conta com vários personagens
+outfitSelect?.addEventListener('change', () => void updatePreview());
 
-Esperado:
+troque pela versão acima.
 
-clicar no card muda seleção
-preview muda
-nome/vocação/level mudam
-Entrar usa o characterId correto
-4. Personagem com outfit real
+15. Atualizar renderOutfitOptions
 
-Esperado:
+A função atual está correta. Só acrescente os cards e preview info:
 
-canvas mostra sprite correta
-chroma key funciona
-não aparece fundo magenta
-5. Personagem antigo sem outfitConfig
+function renderOutfitOptions() {
+  if (!outfitSelect || !presetSelect || !genderSelect) return;
 
-Esperado:
+  const vocation = presetSelect.value as VocationId;
+  const gender = genderSelect.value as Gender;
 
-usa fallback:
-tiles/characters/vocations/${gender}/${vocation}.png
-6. Entrar no mundo
+  const availableOutfits = filterOutfitsByVocationAndGender(outfitPresets, vocation, gender)
+    .filter((outfit) => outfit.showInCreation !== false);
 
-Esperado:
+  outfitSelect.innerHTML = '';
 
-chama markCharacterPlayed
-salva activeCharacterId no sessionStorage
-navega para play.html?characterId=...
-7. Excluir personagem
+  for (const outfit of availableOutfits) {
+    const option = document.createElement('option');
+    option.value = outfit.id;
+    option.textContent = outfit.name;
+    outfitSelect.appendChild(option);
+  }
 
-Esperado:
+  renderOutfitCards(availableOutfits);
+  syncVocationCards();
+  renderGenderCards();
 
-pede confirmação
-chama softDeleteCharacter
-recarrega lista
-não quebra quando exclui o último personagem
-8. GM Studio
+  updatePreviewInfo();
+  void updatePreview();
+}
 
-Esperado:
+Se não houver outfit disponível, mostre erro amigável:
 
-conta sem permissão: link escondido
-conta GM/admin: link visível
+if (availableOutfits.length === 0) {
+  setError('Nenhum visual disponível para esta vocação e gênero.');
+  stopPreview();
+  updatePreviewInfo();
+  return;
+}
 
-O roster.ts atual já faz essa checagem com getProfile() e profile?.canAccessStudio, então preserve isso.
+Mas cuidado: se mostrar erro sempre que troca vocação e depois carrega, pode incomodar. Eu deixaria esse erro só no next2.
 
-16. Ordem exata de implementação
+16. Melhorar Step 1
 
-Faça assim:
+Hoje ele já valida nome. Troque:
 
-1. Gerar/colocar imagem:
-   public/assets/characters/bg-roster.webp
+errEl.hidden = true;
 
-2. Confirmar assets existentes:
-   public/assets/brand/elarion-logo.png
-   public/assets/ui/panel-corner-gold.svg
+por:
 
-3. Criar:
-   src/characters/roster.css
+setError(null);
+
+E use:
+
+document.getElementById('next1')?.addEventListener('click', () => {
+  setError(null);
+
+  const name = (document.getElementById('charName') as HTMLInputElement).value;
+  const err = validateCharacterName(name);
+
+  if (err) {
+    setError(err);
+    return;
+  }
+
+  charName = name.trim();
+  updatePreviewInfo();
+  showStep(2);
+});
+
+O validateCharacterName() atual aceita 3 a 20 caracteres e letras, números e espaços.
+
+17. Melhorar Step 2
+
+Troque o listener do next2 por:
+
+document.getElementById('next2')?.addEventListener('click', () => {
+  setError(null);
+
+  selectedVocation = presetSelect.value as VocationId;
+  selectedGender = genderSelect.value as Gender;
+  selectedOutfitId = outfitSelect.value;
+
+  const outfit = findOutfitPreset(outfitPresets, selectedOutfitId);
+
+  if (!outfit) {
+    setError('Selecione um visual válido.');
+    return;
+  }
+
+  selectedSpriteSheetUrl = outfit.spriteSheetUrl;
+
+  const vocationLabel =
+    presetSelect.options[presetSelect.selectedIndex]?.textContent ?? selectedVocation;
+
+  const genderLabel = formatGenderLabel(selectedGender);
+  const outfitLabel = outfit.name;
+
+  const summaryEl = document.getElementById('summaryName') as HTMLElement | null;
+
+  if (summaryEl) {
+    summaryEl.textContent =
+      `${charName} — ${vocationLabel}, ${genderLabel}, Visual: ${outfitLabel}`;
+  }
+
+  updatePreviewInfo();
+  showStep(3);
+});
+18. Melhorar confirmação
+
+O botão final precisa ter loading para evitar duplo clique.
+
+Troque o listener do confirmCreate por:
+
+document.getElementById('confirmCreate')?.addEventListener('click', async () => {
+  setError(null);
+
+  if (!confirmCreateBtn) return;
+
+  const originalText = confirmCreateBtn.textContent ?? 'Criar e voltar';
+
+  try {
+    confirmCreateBtn.disabled = true;
+    confirmCreateBtn.textContent = 'Criando...';
+
+    await createCharacter(
+      session.userId,
+      charName,
+      selectedVocation,
+      selectedGender,
+      selectedOutfitId,
+      selectedSpriteSheetUrl
+    );
+
+    track('character_created', {
+      preset: selectedOutfitId,
+      gender: selectedGender,
+      vocation: selectedVocation,
+    });
+
+    location.href = 'characters.html';
+  } catch (err) {
+    setError(err instanceof Error ? err.message : 'Erro ao criar personagem.');
+    confirmCreateBtn.disabled = false;
+    confirmCreateBtn.textContent = originalText;
+  }
+});
+19. Ajustar init()
+
+No fim da função init, depois de renderOutfitOptions(), chame:
+
+renderGenderCards();
+renderVocationCards();
+updatePreviewInfo();
+
+Ficaria assim:
+
+async function init() {
+  await loadRuntimeVocations();
+  populateVocationPresetSelect();
+
+  window.addEventListener(VOCATIONS_UPDATED_EVENT, (event) => {
+    const detail = (event as CustomEvent<{ vocations: VocationsMap }>).detail;
+
+    if (detail?.vocations) {
+      populateVocationPresetSelect(detail.vocations);
+      renderOutfitOptions();
+      updatePreviewInfo();
+    }
+  });
+
+  try {
+    outfitPresets = await loadOutfitPresets();
+  } catch (e) {
+    console.error('Falha ao carregar outfit presets:', e);
+    setError('Não foi possível carregar os visuais disponíveis.');
+  }
+
+  presetSelect?.addEventListener('change', () => {
+    renderOutfitOptions();
+    syncVocationCards();
+    updatePreviewInfo();
+  });
+
+  genderSelect?.addEventListener('change', () => {
+    renderOutfitOptions();
+    renderGenderCards();
+    updatePreviewInfo();
+  });
+
+  outfitSelect?.addEventListener('change', () => {
+    syncOutfitCards();
+    updatePreviewInfo();
+    void updatePreview();
+  });
+
+  renderOutfitOptions();
+  renderGenderCards();
+  renderVocationCards();
+  updatePreviewInfo();
+}
+20. Sobre animação do preview
+
+A função startAnimatedPreview() atual está boa e deve ser preservada. Ela já faz:
+
+cancela animação anterior com previewAnimId
+limpa canvas
+carrega JSON do personagem
+carrega imagem da spritesheet
+usa walk_down ou idle_down
+calcula escala no canvas
+aplica chroma key
+usa imageSmoothingEnabled = false
+requestAnimationFrame
+
+Essa parte é essencial para mostrar o personagem real. Não troque por <img>.
+
+21. Ordem exata de implementação
+
+Faça nessa ordem:
+
+1. Salvar imagem:
+   public/assets/characters/bg-create-character.webp
+
+2. Criar:
+   src/characters/create-character.css
+
+3. Alterar:
+   src/characters/create.ts
+   import './create-character.css'
 
 4. Substituir:
-   characters.html
+   characters-new.html
 
-5. Alterar:
-   src/characters/roster.ts
-   import './roster.css'
+5. Adicionar no create.ts:
+   novos elementos DOM
+   setError()
+   updatePreviewInfo()
+   setStepperActive()
+   renderGenderCards()
+   renderVocationCards()
+   renderOutfitCards()
+   syncVocationCards()
+   syncOutfitCards()
 
-6. Adicionar novos IDs/elementos no TS:
-   selectedName
-   selectedVocation
-   selectedLevel
-   selectedGender
-   selectedMap
-   selectedLastPlayed
-   selectedPreviewCanvas
-   selectedDetails
-   noSelectionState
-   rosterLoading
+6. Ajustar:
+   showStep()
+   init()
+   next1
+   next2
+   confirmCreate
 
-7. Refatorar renderGrid sem trocar a origem dos dados
+7. Testar criação de personagem masculino/feminino
 
-8. Criar renderSelectedCharacter
+8. Testar vocações diferentes
 
-9. Testar:
-   npm run dev
+9. Testar outfit_presets.json
 
-10. Testar build:
-   npm run build
-   npm run preview
+10. Testar se personagem aparece corretamente em characters.html
 
-11. Testar Electron:
-   npm run electron:dev
-17. O que eu deixaria para outro commit
+11. Testar se entra no play.html com sprite correta
+22. Testes obrigatórios
+Conta sem personagem
+Criar personagem deve funcionar
+Depois deve voltar para characters.html
+O personagem deve aparecer selecionável
+Nome inválido
 
-Não coloque tudo agora. Eu deixaria para depois:
+Testar:
 
-modal bonito de exclusão
-animação contínua do preview selecionado
-ranking/status do servidor
-último mundo jogado em destaque
-slots extras de personagem
-botão renomear personagem
-trocar mundo/servidor
+ab
+nome com símbolo @
+nome vazio
+nome com mais de 20 caracteres
 
-Agora o objetivo é:
+Esperado:
 
-selecionar personagem bonito
-mostrar outfit real
-entrar no mundo sem quebrar
-18. Minha recomendação final
+não avança para passo 2
+mostra erro amigável
+Trocar gênero
 
-Para esta etapa, o commit deve ser pequeno e seguro:
+Esperado:
 
-feat: redesign character roster page
+outfits mudam conforme gender
+preview muda
+preview lateral muda
+Trocar vocação
 
-Escopo do commit:
+Esperado:
 
-characters.html novo
-src/characters/roster.css novo
-src/characters/roster.ts ajustado visualmente
-asset bg-roster.webp
+outfits filtram por vocação
+preview muda
+resumo muda
+Outfit sem JSON
 
-Não mexa ainda em:
+Esperado:
 
-create.ts
+usa fallback conservador
+não quebra a tela
+Criar personagem
+
+Esperado:
+
+chama createCharacter()
+salva outfitConfig
+salva appearance
+salva position inicial
+volta para characters.html
+Limite de personagem
+
+O sistema já tem MAX_CHARACTERS_PER_ACCOUNT = 4. Se a conta tiver 4 personagens, createCharacter() deve retornar erro.
+
+23. O que não fazer agora
+
+Eu não faria neste commit:
+
+alterar backend
+alterar tabela de personagens
+alterar estrutura de CharacterRow
+mexer em play.html
+mexer em roster.ts
+criar sistema completo de customização de cabelo/cor
+criar troca avançada de outfit
+criar pagamento por slot
+criar vocação nova sem revisar vocations.json
+
+Agora é só:
+
+redesign da criação
+mantendo fluxo real
+mantendo outfit real
+mantendo preview animado
+mantendo createCharacter()
+24. Commit recomendado
+
+Nome do commit:
+
+feat: redesign character creation page
+
+Escopo:
+
 characters-new.html
-outfit_presets.json
-vocations
-backend
-play.html
+src/characters/create.ts
+src/characters/create-character.css
+public/assets/characters/bg-create-character.webp
+25. Resumo da implementação
 
-A tela de seleção deve ser só uma camada nova de UI em cima da lógica atual.
+A página nova deve ficar bonita, mas obedecer ao sistema atual:
 
-O ponto mais importante é este:
+Nome → validateCharacterName()
+Vocação → runtime vocations
+Gênero → filter outfits
+Outfit → outfit_presets.json
+Preview → spriteSheetUrl + JSON real
+Criar → createCharacter()
+Voltar → characters.html
 
-A página pode mudar 100% visualmente,
-mas a origem do personagem continua sendo CharacterRow + outfitConfig real + drawCharacterPreview.
+Essa é a regra mais importante:
 
-Isso mantém o sistema correto e evita o erro de mostrar um personagem bonito na tela de seleção, mas diferente do personagem que aparece dentro do jogo.
+A tela pode mudar visualmente, mas a criação precisa continuar salvando vocationId, gender, outfitId, spriteSheetUrl e outfitConfig corretamente.
+
+Assim o personagem criado aparece igual na tela de seleção e dentro do jogo.
