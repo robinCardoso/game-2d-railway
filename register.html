@@ -4,37 +4,111 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Criar conta — Elarion Online</title>
+    <meta name="description" content="Crie sua conta no Elarion Online e comece sua jornada em um MMORPG 2D de mundo aberto." />
     <link rel="icon" type="image/png" href="/brand/icon-elarion.png" />
-    <link rel="stylesheet" href="/src/shared/shell.css" />
   </head>
-  <body class="shell-page">
-    <div class="shell-card">
-      <div class="shell-logo">
-        <img src="/brand/icon-elarion.png" alt="Elarion Online" class="shell-brand-img" width="48" height="48" />
-        <h1>Criar conta</h1>
-        <p>Grátis — comece sua aventura</p>
-      </div>
-      <p id="registerError" class="shell-error" hidden></p>
-      <form id="registerForm">
-        <div class="shell-field">
-          <label for="email">E-mail</label>
-          <input id="email" name="email" type="email" required autocomplete="email" />
-        </div>
-        <div class="shell-field">
-          <label for="password">Senha</label>
-          <input id="password" name="password" type="password" required minlength="8" autocomplete="new-password" />
-        </div>
-        <div class="shell-field">
-          <label for="password2">Confirmar senha</label>
-          <input id="password2" name="password2" type="password" required minlength="8" autocomplete="new-password" />
-        </div>
-        <div class="shell-field">
-          <label><input type="checkbox" id="terms" required /> Aceito os <a href="terms.html">termos de uso</a></label>
-        </div>
-        <button type="submit" class="shell-btn">Registrar</button>
-      </form>
-      <p class="shell-links"><a href="login.html">Já tenho conta</a></p>
-    </div>
+  <body class="auth-page auth-page--register">
+    <main class="auth-layout">
+      <section class="auth-panel-wrap" aria-label="Criar conta">
+        <form id="registerForm" class="auth-card" autocomplete="on">
+          <span class="auth-card__corner auth-card__corner--tl" aria-hidden="true"></span>
+          <span class="auth-card__corner auth-card__corner--tr" aria-hidden="true"></span>
+          <span class="auth-card__corner auth-card__corner--br" aria-hidden="true"></span>
+          <span class="auth-card__corner auth-card__corner--bl" aria-hidden="true"></span>
+
+          <img
+            src="/assets/brand/elarion-logo.png"
+            class="auth-logo"
+            alt="Elarion Online"
+            width="280"
+            height="120"
+          />
+
+          <div class="auth-heading">
+            <h2>Criar conta</h2>
+            <p>Comece sua jornada em Elarion.</p>
+          </div>
+
+          <p id="registerError" class="auth-error" hidden></p>
+
+          <div class="auth-field">
+            <label for="email">E-mail</label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              inputmode="email"
+              placeholder="seuemail@exemplo.com"
+              autocomplete="email"
+              required
+            />
+          </div>
+
+          <div class="auth-field">
+            <label for="password">Senha</label>
+            <div class="auth-password">
+              <input
+                id="password"
+                name="password"
+                type="password"
+                placeholder="Mínimo 8 caracteres"
+                autocomplete="new-password"
+                minlength="8"
+                required
+              />
+              <button
+                class="auth-password__toggle"
+                type="button"
+                data-toggle-password="password"
+                aria-label="Mostrar senha"
+                aria-pressed="false"
+              >
+                <img src="/assets/ui/icon-eye.svg" alt="" width="18" height="18" />
+              </button>
+            </div>
+          </div>
+
+          <div class="auth-field">
+            <label for="password2">Confirmar senha</label>
+            <div class="auth-password">
+              <input
+                id="password2"
+                name="password2"
+                type="password"
+                placeholder="Repita sua senha"
+                autocomplete="new-password"
+                minlength="8"
+                required
+              />
+              <button
+                class="auth-password__toggle"
+                type="button"
+                data-toggle-password="password2"
+                aria-label="Mostrar confirmação de senha"
+                aria-pressed="false"
+              >
+                <img src="/assets/ui/icon-eye.svg" alt="" width="18" height="18" />
+              </button>
+            </div>
+          </div>
+
+          <label class="auth-check">
+            <input id="terms" type="checkbox" required />
+            <span>
+              Aceito os <a href="terms.html">termos de uso</a> e a
+              <a href="privacy.html">política de privacidade</a>.
+            </span>
+          </label>
+
+          <button class="game-button auth-submit" type="submit">Criar conta</button>
+
+          <div class="auth-links">
+            <span>Já tem uma conta?</span>
+            <a href="login.html">Entrar</a>
+          </div>
+        </form>
+      </section>
+    </main>
     <script type="module" src="/src/auth/register.ts"></script>
   </body>
 </html>

@@ -1,26 +1,47 @@
-import '../shared/shell.css';
+import './auth-pages.css';
 import { resolveAuthNextRedirect } from '../shared/authNavigation';
 import { redirectIfAuthenticated, signIn } from '../shared/authGuard';
 import { initDesktopClientShell } from '../ui/initDesktopClient';
+import { bindPasswordToggles, createAuthFormHelpers } from './authFormUi';
 
 initDesktopClientShell();
 
 await redirectIfAuthenticated();
 
-const form = document.getElementById('loginForm') as HTMLFormElement;
-const errEl = document.getElementById('loginError') as HTMLElement;
+const form = document.getElementById('loginForm') as HTMLFormElement | null;
+const errEl = document.getElementById('loginError') as HTMLElement | null;
 
-form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    errEl.hidden = true;
-    const email = (document.getElementById('email') as HTMLInputElement).value;
+if (!form || !errEl) {
+    throw new Error('Formulário de login não encontrado.');
+}
+
+const { showError, hideError, setLoading } = createAuthFormHelpers(form, errEl, {
+    idle: 'Entrar',
+    loading: 'Entrando...',
+});
+
+bindPasswordToggles();
+
+form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    hideError();
+
+    const email = (document.getElementById('email') as HTMLInputElement).value.trim();
     const password = (document.getElementById('password') as HTMLInputElement).value;
+
+    if (!email || !password) {
+        showError('Informe seu e-mail e senha para entrar.');
+        return;
+    }
+
     try {
+        setLoading(true);
         await signIn(email, password);
         const next = new URLSearchParams(location.search).get('next');
         location.href = resolveAuthNextRedirect(next);
     } catch (err) {
-        errEl.textContent = err instanceof Error ? err.message : 'Falha ao entrar.';
-        errEl.hidden = false;
+        showError(err instanceof Error ? err.message : 'Não foi possível entrar na conta.');
+    } finally {
+        setLoading(false);
     }
 });

@@ -4,35 +4,90 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Entrar — Elarion Online</title>
+    <meta name="description" content="Entre na sua conta do Elarion Online e continue sua jornada." />
     <link rel="icon" type="image/png" href="/brand/icon-elarion.png" />
-    <link rel="stylesheet" href="/src/shared/shell.css" />
   </head>
-  <body class="shell-page">
-    <div class="shell-card">
-      <div class="shell-logo">
-        <img src="/brand/icon-elarion.png" alt="Elarion Online" class="shell-brand-img" width="48" height="48" />
-        <h1>Entrar</h1>
-        <p>Acesse sua conta para escolher um personagem</p>
-      </div>
-      <p id="loginError" class="shell-error" hidden></p>
-      <form id="loginForm">
-        <div class="shell-field">
-          <label for="email">E-mail</label>
-          <input id="email" name="email" type="email" required autocomplete="email" />
-        </div>
-        <div class="shell-field">
-          <label for="password">Senha</label>
-          <input id="password" name="password" type="password" required autocomplete="current-password" />
-        </div>
-        <button type="submit" class="shell-btn">Entrar</button>
-      </form>
-      <p class="shell-links">
-        <a href="register.html">Criar conta</a> · <a href="index.html">Voltar</a>
-      </p>
-      <p class="shell-links" style="font-size: 0.75rem; color: #64748b; margin-top: 12px">
-        Modo mock: qualquer e-mail/senha. Use <code>@gm.dev</code> para acesso ao Studio.
-      </p>
-    </div>
+  <body class="auth-page auth-page--login">
+    <main class="auth-layout">
+      <section class="auth-panel-wrap" aria-label="Entrar no jogo">
+        <form id="loginForm" class="auth-card" autocomplete="on">
+          <span class="auth-card__corner auth-card__corner--tl" aria-hidden="true"></span>
+          <span class="auth-card__corner auth-card__corner--tr" aria-hidden="true"></span>
+          <span class="auth-card__corner auth-card__corner--br" aria-hidden="true"></span>
+          <span class="auth-card__corner auth-card__corner--bl" aria-hidden="true"></span>
+
+          <img
+            src="/assets/brand/elarion-logo.png"
+            class="auth-logo"
+            alt="Elarion Online"
+            width="280"
+            height="120"
+          />
+
+          <div class="auth-heading">
+            <h1>Entrar no jogo</h1>
+            <p>Acesse sua conta e continue sua jornada.</p>
+          </div>
+
+          <p id="loginError" class="auth-error" hidden></p>
+
+          <div class="auth-field">
+            <label for="email">E-mail</label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              inputmode="email"
+              placeholder="seuemail@exemplo.com"
+              autocomplete="email"
+              required
+            />
+          </div>
+
+          <div class="auth-field">
+            <label for="password">Senha</label>
+            <div class="auth-password">
+              <input
+                id="password"
+                name="password"
+                type="password"
+                placeholder="Digite sua senha"
+                autocomplete="current-password"
+                required
+              />
+              <button
+                class="auth-password__toggle"
+                type="button"
+                data-toggle-password="password"
+                aria-label="Mostrar senha"
+                aria-pressed="false"
+              >
+                <img src="/assets/ui/icon-eye.svg" alt="" width="18" height="18" />
+              </button>
+            </div>
+          </div>
+
+          <div class="auth-row">
+            <label class="auth-check auth-check--compact">
+              <input id="remember" type="checkbox" checked />
+              <span>Lembrar de mim</span>
+            </label>
+          </div>
+
+          <button class="game-button auth-submit" type="submit">Entrar</button>
+
+          <div class="auth-links">
+            <a class="auth-muted-link" href="#" aria-disabled="true">Esqueci minha senha</a>
+            <span class="auth-links__divider" aria-hidden="true">|</span>
+            <a href="register.html">Criar conta</a>
+          </div>
+
+          <p class="auth-mock-hint">
+            Modo mock: qualquer e-mail/senha. Use <code>@gm.dev</code> para acesso ao Studio.
+          </p>
+        </form>
+      </section>
+    </main>
     <script type="module" src="/src/auth/login.ts"></script>
   </body>
 </html>
