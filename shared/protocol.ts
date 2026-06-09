@@ -3,7 +3,9 @@
  * Compartilhado entre `server/` e `src/net/` (cliente).
  */
 
+import { isChatPlayerChannel, parseChatSendText } from './chatConfig.js';
 import { buildRoomKey } from './roomKey.js';
+import type { ChatChannel, ChatMessageKind, ChatPlayerChannel } from './chatConfig.js';
 import type { Gender } from './types/character.js';
 
 export const PROTOCOL_VERSION = 1;
@@ -19,10 +21,12 @@ export type ClientMessage =
     | MoveMessage
     | MapChangeMessage
     | AttackMessage
+    | CastSpellMessage
     | ProgressSyncMessage
     | ResyncRequestMessage
     | PingMessage
-    | LeaveMessage;
+    | LeaveMessage
+    | ChatSendMessage;
 
 export type ServerMessage =
     | WelcomeMessage
@@ -42,7 +46,9 @@ export type ServerMessage =
     | PongMessage
     | PlayerDamagedMessage
     | PlayerDiedMessage
-    | PlayerRespawnedMessage;
+    | PlayerRespawnedMessage
+    | AttackMissMessage
+    | ChatBroadcastMessage;
 
 export interface PlayerAppearance {
     outfitId: string;
@@ -123,6 +129,15 @@ export interface AttackMessage {
     instanceId?: string;
 }
 
+export interface CastSpellMessage {
+    type: 'cast_spell';
+    v: number;
+    spellId: string;
+    creatureId: string;
+    mapId: string;
+    instanceId?: string;
+}
+
 export interface ProgressSyncMessage {
     type: 'progress_sync';
     v: number;
@@ -172,6 +187,25 @@ export interface PingMessage {
 export interface LeaveMessage {
     type: 'leave';
     v: number;
+}
+
+export interface ChatSendMessage {
+    type: 'chat_send';
+    v: number;
+    channel: ChatPlayerChannel;
+    text: string;
+}
+
+export interface ChatBroadcastMessage {
+    type: 'chat_message';
+    v: number;
+    messageId: string;
+    channel: ChatChannel;
+    kind: ChatMessageKind;
+    text: string;
+    senderName?: string;
+    senderPlayerId?: string;
+    sentAtMs: number;
 }
 
 export interface WelcomeMessage {
@@ -255,6 +289,16 @@ export interface CreatureDamagedMessage {
     attackerPlayerId?: string;
 }
 
+/** Ataque rejeitado (fora de alcance, cooldown servidor, alvo morto, etc.). */
+export interface AttackMissMessage {
+    type: 'attack_miss';
+    v: number;
+    creatureId: string;
+    mapId: string;
+    instanceId?: string;
+    code?: string;
+}
+
 export interface CreatureDiedMessage {
     type: 'creature_died';
     v: number;
@@ -313,6 +357,8 @@ export interface ErrorMessage {
     v: number;
     code: string;
     message: string;
+    /** Tempo restante de cooldown (ms) — ex.: CHAT_COOLDOWN. */
+    retryAfterMs?: number;
 }
 
 export interface PongMessage {
@@ -494,6 +540,20 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
                 instanceId,
             };
         }
+        case 'cast_spell': {
+            const spellId = typeof m.spellId === 'string' ? m.spellId.slice(0, 64) : '';
+            const creatureId =
+                typeof m.creatureId === 'string' ? m.creatureId.slice(0, 80) : '';
+            if (!spellId || !creatureId) return null;
+            return {
+                type: 'cast_spell',
+                v: PROTOCOL_VERSION,
+                spellId,
+                creatureId,
+                mapId: typeof m.mapId === 'string' ? m.mapId.slice(0, 48) : 'mainland',
+                instanceId,
+            };
+        }
         case 'progress_sync': {
             const experience = parseOptionalNonNegativeInt(m.experience);
             if (experience === undefined) return null;
@@ -515,6 +575,18 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
             };
         case 'leave':
             return { type: 'leave', v: PROTOCOL_VERSION };
+        case 'chat_send': {
+            const channel = typeof m.channel === 'string' ? m.channel : '';
+            if (!isChatPlayerChannel(channel)) return null;
+            const text = parseChatSendText(m.text);
+            if (!text) return null;
+            return {
+                type: 'chat_send',
+                v: PROTOCOL_VERSION,
+                channel,
+                text,
+            };
+        }
         default:
             return null;
     }

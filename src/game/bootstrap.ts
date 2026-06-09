@@ -4,13 +4,25 @@ import { track } from '../shared/analytics';
 import { enforceDesktopVersionGate, initDesktopClientShell } from '../ui/initDesktopClient';
 import { resumeWorldEntryOverlayIfPending } from '../world-entry/worldEntryOverlay';
 import { initPlayMobileHud } from './playMobileHud';
+import { initPlayHudActionBar } from './ui/playHudActionBar';
+import { initPlayHudMinimap } from './ui/playHudMinimap';
+import { initPlayHudCharacterCard } from './ui/playHudCharacterCard';
 import { initPlayHudPanels } from './ui/playHudPanels';
 import { initPlayHudSettings } from './ui/playHudSettings';
+import { initPlayCombatHub } from './ui/playCombatHub';
+import { initPlaySpellModal } from './ui/playSpellModal';
+import { initPlayChatController } from './chat/playChatController';
 import { startPlay, stopLocationAutosave } from './playApp';
 
 resumeWorldEntryOverlayIfPending();
 initPlayHudPanels();
 initPlayHudSettings();
+initPlayHudCharacterCard();
+initPlayHudActionBar();
+initPlayChatController();
+initPlayHudMinimap();
+initPlayCombatHub();
+initPlaySpellModal();
 initPlayMobileHud();
 
 initDesktopClientShell();

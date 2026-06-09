@@ -4,6 +4,12 @@ import { VocationId } from '../../../shared/types/character';
 import type { CharacterRow } from '../../shared/types';
 import { getExpProgress, normalizeCharacterProgress } from '../experience';
 import { showLevelUpBanner } from './levelUpBanner';
+import { updatePlayHudLevelBadge } from './playHudCharacterCard';
+
+function formatVocationLabel(vocationId: string): string {
+    if (!vocationId) return '—';
+    return vocationId.charAt(0).toUpperCase() + vocationId.slice(1);
+}
 
 export function updateCharacterStatsUi(
     character: CharacterRow,
@@ -22,13 +28,9 @@ export function updateCharacterStatsUi(
   const elDistance = document.getElementById('statDistance');
   const elMagic = document.getElementById('statMagic');
   const elDefense = document.getElementById('statDefense');
-  const elHealth = document.getElementById('statHealth');
-  const elMana = document.getElementById('statMana');
-  const elExp = document.getElementById('statExp');
-  const elExpBar = document.getElementById('statExpBarFill');
 
-  const vocationLabel = vocationId.toUpperCase();
-  if (elVocation) elVocation.textContent = vocationLabel;
+  const vocationLabel = formatVocationLabel(vocationId);
+  if (elVocation) elVocation.textContent = vocationLabel.toUpperCase();
 
   const elHudLevel = document.getElementById('playHudLevel');
   const elCharVocation = document.getElementById('playCharVocation');
@@ -36,6 +38,7 @@ export function updateCharacterStatsUi(
   const elCharName = document.getElementById('playCharName');
   if (elHudLevel) elHudLevel.textContent = String(level);
   if (elCharVocation) elCharVocation.textContent = vocationLabel;
+  updatePlayHudLevelBadge(level);
   if (elPanelName && elCharName) elPanelName.textContent = elCharName.textContent ?? '—';
 
     if (elLevel) {
@@ -50,17 +53,11 @@ export function updateCharacterStatsUi(
   if (elDistance) elDistance.textContent = String(stats.distanceAttack);
   if (elMagic) elMagic.textContent = String(stats.magicAttack);
   if (elDefense) elDefense.textContent = String(stats.defense);
-  if (elHealth) elHealth.textContent = String(stats.health);
-  if (elMana) elMana.textContent = String(stats.mana);
-  if (elExp) {
-    elExp.textContent = `${expProgress.currentInLevel} / ${expProgress.requiredForNext} XP`;
-  }
-  if (elExpBar) {
-    elExpBar.style.width = `${expProgress.percent}%`;
-  }
 
+  const elHudXpFill = document.getElementById('playHudXpFill');
   const elHudXp = document.getElementById('playHudXpText');
+  if (elHudXpFill) elHudXpFill.style.width = `${expProgress.percent}%`;
   if (elHudXp) {
-    elHudXp.textContent = `${expProgress.currentInLevel} / ${expProgress.requiredForNext} XP`;
+    elHudXp.textContent = `${expProgress.currentInLevel} / ${expProgress.requiredForNext} (${Math.round(expProgress.percent)}%)`;
   }
 }

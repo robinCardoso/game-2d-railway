@@ -24,6 +24,7 @@ import {
 } from '../../shared/equipmentBonuses.js';
 import { createEmptyEquipment, type CharacterEquipmentState } from '../../shared/inventory.js';
 import { processAttack } from './combat/combat.js';
+import { isDatabaseConfigured } from './db/pool.js';
 import { getCharacterInventory } from './db/repositories/inventory.repo.js';
 import { loadServerItemCatalog } from './game/itemCatalogStore.js';
 import { verifyEnterTicket } from './enterTicket.js';
@@ -36,6 +37,7 @@ import { PositionPersistence } from './game/PositionPersistence.js';
 import { ProgressPersistence } from './game/ProgressPersistence.js';
 import { RoomCreatureManager } from './game/RoomCreatureManager.js';
 import type { CreaturePresetStore } from './game/CreaturePresetStore.js';
+import type { SpellCatalogStore } from './game/SpellCatalogStore.js';
 import type { VocationStore } from './game/VocationStore.js';
 import { applyExperienceGain } from '../../src/game/experience.js';
 import { getLevelFromExp, calculateStatsForLevel } from '../../src/engine/character/calculateStats.js';
@@ -44,6 +46,18 @@ import { ZoneType } from '../../src/engine/zones.js';
 import { env } from './config/env.js';
 import { shouldAcceptClientProgressSync } from '../../shared/progressSyncPolicy.js';
 import { isPlayerInAttackRange, resolvePlayerAttackProfile } from '../../shared/playerAttack.js';
+import {
+    buildPlayerChatBroadcast,
+    buildServerChatBroadcast,
+    checkChatRateLimit,
+    createChatRateLimitState,
+    getGlobalChatRecipients,
+    getLocalChatRecipients,
+    isGuildChatEnabled,
+    recordChatSend,
+    sendChatToPlayers,
+    type ChatRateLimitState,
+} from './chat/chatService.js';
 
 /** Tolerância de jitter de rede no intervalo mínimo entre passos (0.85 = 15% mais rápido que o step). */
 const MOVE_RATE_LIMIT_TOLERANCE = 0.85;
@@ -94,16 +108,20 @@ interface ConnectedPlayer {
     mana: number;
     maxMana: number;
     lastAttackAtMs: number;
+    spellCooldownUntil: Record<string, number>;
+    groupCooldownUntil: Record<string, number>;
     lastMoveRejectionSentAtMs: number;
     /** Equipamento carregado do PostgreSQL no join (autoritativo no servidor). */
     equipment: CharacterEquipmentState;
     socket: WebSocket;
+    chatRateLimit: ChatRateLimitState;
 }
 
 export interface GameRoomOptions {
     requireWsTicket?: boolean;
     positionSaveIntervalMs?: number;
     creaturePresets: CreaturePresetStore;
+    spellCatalog: SpellCatalogStore;
     vocations: VocationStore;
 }
 
@@ -114,6 +132,7 @@ export class GameRoom {
     private readonly positionPersistence: PositionPersistence;
     private readonly progressPersistence: ProgressPersistence;
     private readonly creatures: RoomCreatureManager;
+    private readonly spellCatalog: SpellCatalogStore;
     private readonly vocations: VocationStore;
     private readonly lastResyncRequestAtMs = new Map<string, number>();
     private snapshotTimer: ReturnType<typeof setInterval> | null = null;
@@ -124,6 +143,7 @@ export class GameRoom {
         options: GameRoomOptions
     ) {
         this.requireWsTicket = options.requireWsTicket ?? false;
+        this.spellCatalog = options.spellCatalog;
         this.vocations = options.vocations;
         this.positionPersistence = new PositionPersistence(options.positionSaveIntervalMs ?? 20_000);
         this.progressPersistence = new ProgressPersistence();
@@ -304,6 +324,7 @@ export class GameRoom {
     }
 
     private async hydratePlayerEquipment(player: ConnectedPlayer): Promise<void> {
+        if (!isDatabaseConfigured()) return;
         if (!player.characterId || !player.accountId) return;
         try {
             const inventory = await getCharacterInventory(player.characterId, player.accountId);
@@ -362,6 +383,9 @@ export class GameRoom {
             case 'attack':
                 this.handleAttack(socket, msg);
                 break;
+            case 'cast_spell':
+                this.handleCastSpell(socket, msg);
+                break;
             case 'progress_sync':
                 this.handleProgressSync(socket, msg);
                 break;
@@ -374,7 +398,65 @@ export class GameRoom {
             case 'leave':
                 this.handleDisconnect(socket);
                 break;
+            case 'chat_send':
+                this.handleChatSend(socket, msg);
+                break;
         }
+    }
+
+    private handleChatSend(
+        socket: WebSocket,
+        msg: Extract<ClientMessage, { type: 'chat_send' }>
+    ): void {
+        const playerId = this.socketToPlayerId.get(socket);
+        if (!playerId) return;
+        const player = this.players.get(playerId);
+        if (!player) return;
+
+        if (msg.channel === 'guild' && !isGuildChatEnabled()) {
+            this.send(socket, {
+                type: 'error',
+                v: PROTOCOL_VERSION,
+                code: 'CHAT_CHANNEL_DISABLED',
+                message: 'Canal de guilda ainda não está disponível.',
+            });
+            return;
+        }
+
+        const nowMs = Date.now();
+        const limit = checkChatRateLimit(player.chatRateLimit, msg.channel, msg.text, nowMs);
+        if (!limit.ok) {
+            this.send(socket, {
+                type: 'error',
+                v: PROTOCOL_VERSION,
+                code: limit.code,
+                message:
+                    limit.code === 'CHAT_COOLDOWN'
+                        ? 'Aguarde antes de enviar outra mensagem.'
+                        : 'Mensagem duplicada — aguarde um pouco.',
+                retryAfterMs: limit.retryAfterMs,
+            });
+            return;
+        }
+
+        recordChatSend(player.chatRateLimit, msg.channel, msg.text, nowMs);
+        const broadcast = buildPlayerChatBroadcast(msg.channel, player, msg.text, nowMs);
+        const allPlayers = [...this.players.values()];
+        const recipients =
+            msg.channel === 'global'
+                ? getGlobalChatRecipients(allPlayers)
+                : getLocalChatRecipients(player, allPlayers);
+        sendChatToPlayers(recipients, broadcast);
+    }
+
+    /** Mensagens de loot/sistema geradas pelo servidor (fase futura: hooks de combate). */
+    pushServerChat(
+        channel: 'loot' | 'system',
+        text: string,
+        kind: 'loot' | 'system' | 'combat' = channel
+    ): void {
+        const broadcast = buildServerChatBroadcast(channel, text, kind, Date.now());
+        sendChatToPlayers(this.players.values(), broadcast);
     }
 
     private handleJoin(
@@ -508,8 +590,11 @@ export class GameRoom {
             mana: 50,
             maxMana: 50,
             lastAttackAtMs: 0,
+            spellCooldownUntil: {},
+            groupCooldownUntil: {},
             equipment: createEmptyEquipment(),
             socket,
+            chatRateLimit: createChatRateLimitState(),
         };
 
         const pVocationId = (appearance.vocationId || 'knight') as VocationId;
@@ -1147,11 +1232,97 @@ export class GameRoom {
             this.resolveAttackCooldownMs(vocationId, player.level)
         );
 
-        if (!outcome.ok) return;
+        if (!outcome.ok) {
+            this.send(player.socket, {
+                type: 'attack_miss',
+                v: PROTOCOL_VERSION,
+                creatureId: msg.creatureId,
+                mapId: msg.mapId,
+                instanceId: instanceId ?? player.instanceId,
+                code: outcome.code,
+            });
+            return;
+        }
 
         if (outcome.newLastAttackAtMs !== undefined) {
             player.lastAttackAtMs = outcome.newLastAttackAtMs;
         }
+
+        if (outcome.damaged) {
+            this.broadcastToRoom(room, outcome.damaged);
+        }
+
+        if (outcome.died) {
+            this.broadcastToRoom(room, outcome.died);
+
+            const gain = applyExperienceGain(player.experience, outcome.died.xpReward);
+            player.experience = gain.experience;
+            player.level = gain.level;
+
+            this.send(player.socket, {
+                type: 'player_progress',
+                v: PROTOCOL_VERSION,
+                playerId: player.id,
+                level: gain.level,
+                experience: gain.experience,
+                leveledUp: gain.leveledUp,
+            });
+
+            if (player.characterId && player.accountId) {
+                void this.progressPersistence.saveNow({
+                    characterId: player.characterId,
+                    accountId: player.accountId,
+                    level: gain.level,
+                    experience: gain.experience,
+                });
+            }
+        }
+    }
+
+    private handleCastSpell(
+        socket: WebSocket,
+        msg: Extract<ClientMessage, { type: 'cast_spell' }>
+    ): void {
+        const playerId = this.socketToPlayerId.get(socket);
+        if (!playerId) return;
+
+        const player = this.players.get(playerId);
+        if (!player) return;
+
+        const room = buildRoomKey(msg.mapId, msg.instanceId);
+        if (this.roomKey(player) !== room) return;
+
+        const spell = this.spellCatalog.getSpell(msg.spellId);
+        if (!spell) return;
+
+        const vocationId = (player.appearance.vocationId || 'knight') as VocationId;
+        const vocationConfig = this.vocations.get(vocationId);
+        const now = Date.now();
+
+        const outcome = this.creatures.processSpellCast(
+            room,
+            spell,
+            {
+                playerId: player.id,
+                tileX: player.tileX,
+                tileY: player.tileY,
+                z: player.z,
+                level: player.level,
+                vocationId,
+                mana: player.mana,
+                spellCooldownUntil: player.spellCooldownUntil,
+                groupCooldownUntil: player.groupCooldownUntil,
+            },
+            msg.creatureId,
+            now,
+            vocationConfig
+        );
+
+        if (!outcome.ok) return;
+
+        if (outcome.newMana !== undefined) player.mana = outcome.newMana;
+        if (outcome.spellCooldownUntil) player.spellCooldownUntil = outcome.spellCooldownUntil;
+        if (outcome.groupCooldownUntil) player.groupCooldownUntil = outcome.groupCooldownUntil;
 
         if (outcome.damaged) {
             this.broadcastToRoom(room, outcome.damaged);

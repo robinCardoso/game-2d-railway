@@ -20,7 +20,7 @@ const DAMAGE_FONT_FAMILY =
 /** Rótulo compacto — sem separador de milhar para largura previsível no canvas. */
 export function formatDamageLabel(damage: number): string {
     const amount = Math.max(0, Math.floor(damage));
-    if (amount <= 0) return 'Miss';
+    if (amount <= 0) return 'MISS';
     return `-${amount}`;
 }
 
@@ -31,7 +31,7 @@ export function formatXpLabel(xp: number): string {
 
 export function floatingTextFillColor(entry: FloatingDamageEntry): string {
     if (entry.kind === 'xp') return '#4ade80';
-    return entry.label === 'Miss' ? '#cbd5e1' : '#fff7ed';
+    return entry.label === 'MISS' ? '#cbd5e1' : '#fff7ed';
 }
 
 export function floatingDamageFont(label: string): string {

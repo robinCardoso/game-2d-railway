@@ -83,9 +83,16 @@
             </div>
 
             <div class="menu-item">
+              <button type="button" class="menu-trigger">Jogo</button>
+              <div class="menu-dropdown menu-dropdown--wide">
+                <button type="button" class="menu-dropdown-item" data-open-panel="spells">✨ Magias</button>
+                <button type="button" class="menu-dropdown-item" data-open-panel="mechanics">Mecânicas de jogo</button>
+              </div>
+            </div>
+
+            <div class="menu-item">
               <button type="button" class="menu-trigger">Ver</button>
               <div class="menu-dropdown menu-dropdown--wide">
-                <button type="button" class="menu-dropdown-item" data-open-panel="mechanics">Mecânicas de jogo</button>
                 <button type="button" class="menu-dropdown-item" data-open-panel="stats">Dados técnicos</button>
                 <button type="button" class="menu-dropdown-item" data-open-panel="minimap">Minimap</button>
               </div>
@@ -286,6 +293,111 @@
                 <div class="info-row"><span class="info-label">Equip</span> <span id="posEquip" class="info-value">—</span></div>
                 <div class="info-row"><span class="info-label">Buffs</span> <span id="posBuffs" class="info-value">—</span></div>
                 <p class="flyout-hint" id="posStepDelta">—</p>
+              </section>
+
+              <!-- Magias -->
+              <section class="flyout-section" data-panel="spells">
+                <div class="spell-editor">
+                  <p class="spell-editor__intro">
+                    <strong>1 magia = 1 entrada no catálogo.</strong> Para compartilhar entre vocações, marque
+                    vários chips em &quot;Quem pode usar&quot; — não crie IDs duplicados.
+                  </p>
+
+                  <div class="spell-editor__filter-row">
+                    <label class="flyout-label" for="spellVocationFilter">Filtrar por vocação</label>
+                    <select id="spellVocationFilter" class="select-full">
+                      <option value="all">Todas as vocações</option>
+                      <option value="knight">Knight</option>
+                      <option value="mage">Mage</option>
+                      <option value="archer">Archer</option>
+                      <option value="paladin">Paladin</option>
+                      <option value="sorcerer">Sorcerer</option>
+                    </select>
+                  </div>
+
+                  <label class="flyout-label">Catálogo</label>
+                  <div id="spellEditorList" class="spell-editor__list"></div>
+                  <button type="button" id="spellNewBtn" class="menu-dropdown-item block-btn">+ Nova magia</button>
+
+                  <div class="spell-editor__form-section">
+                    <h3 class="spell-editor__form-title">Editar magia</h3>
+                    <label class="flyout-label">ID (único, slug)</label>
+                    <input type="text" id="spellIdInput" class="select-full" placeholder="knight_brutal_strike" />
+                    <label class="flyout-label" style="margin-top:8px;">Nome</label>
+                    <input type="text" id="spellNameInput" class="select-full" />
+                    <label class="flyout-label" style="margin-top:8px;">Descrição</label>
+                    <textarea id="spellDescInput" rows="2" class="select-full"></textarea>
+
+                    <label class="flyout-label" style="margin-top:10px;">Quem pode usar</label>
+                    <div id="spellVocationChips" class="spell-editor__chip-grid"></div>
+                    <p id="spellSharedHint" class="flyout-hint" style="margin-top:6px;"></p>
+                    <button type="button" id="spellAddVocationBtn" class="menu-dropdown-item block-btn" style="margin-top:6px;">
+                      + Incluir vocação do filtro
+                    </button>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px;">
+                      <div>
+                        <label class="flyout-label">Grupo</label>
+                        <select id="spellGroupInput" class="select-full">
+                          <option value="attack">Ataque</option>
+                          <option value="healing">Cura</option>
+                          <option value="support">Suporte</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label class="flyout-label">Tipo de dano</label>
+                        <select id="spellDamageTypeInput" class="select-full">
+                          <option value="magic">Magia</option>
+                          <option value="melee">Melee</option>
+                          <option value="distance">Distância</option>
+                          <option value="healing">Cura</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px;">
+                      <div>
+                        <label class="flyout-label">Alcance (tiles)</label>
+                        <input type="number" id="spellRangeInput" class="select-full" min="1" max="15" value="1" />
+                      </div>
+                      <div>
+                        <label class="flyout-label">Level mín.</label>
+                        <input type="number" id="spellMinLevelInput" class="select-full" min="1" value="1" />
+                      </div>
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:8px;">
+                      <div>
+                        <label class="flyout-label">Mana</label>
+                        <input type="number" id="spellManaInput" class="select-full" min="0" />
+                      </div>
+                      <div>
+                        <label class="flyout-label">CD (ms)</label>
+                        <input type="number" id="spellCdInput" class="select-full" min="0" />
+                      </div>
+                      <div>
+                        <label class="flyout-label">CD grupo</label>
+                        <input type="number" id="spellGroupCdInput" class="select-full" min="0" />
+                      </div>
+                    </div>
+                    <label class="flyout-label" style="margin-top:8px;">Mult. dano</label>
+                    <input type="number" id="spellDamageMultInput" class="select-full" min="0" step="0.1" value="1" />
+                    <label class="flyout-label" style="margin-top:8px;">Ícone (URL)</label>
+                    <input type="text" id="spellIconInput" class="select-full" />
+                    <input type="file" id="spellIconFileInput" accept="image/png" hidden />
+                    <button type="button" id="spellUploadIconBtn" class="menu-dropdown-item block-btn" style="margin-top:8px;">Upload ícone 32×32 PNG</button>
+                    <label class="check-row" style="margin-top:10px;">
+                      <span>Requer alvo</span>
+                      <input type="checkbox" id="spellRequiresTargetInput" checked />
+                    </label>
+                    <label class="check-row">
+                      <span>Implementada (gameplay)</span>
+                      <input type="checkbox" id="spellImplementedInput" />
+                    </label>
+                    <div class="spell-editor__actions">
+                      <button type="button" id="spellSaveBtn" class="menu-dropdown-item block-btn" style="border-color:#6366f1;color:#6366f1;">Salvar catálogo</button>
+                    </div>
+                    <p class="flyout-hint">Ícones em <code>tiles/effects/spells/icons/</code>. VFX de cast (<code>castEffect</code>) — fase futura.</p>
+                  </div>
+                </div>
               </section>
 
               <!-- Mecânicas -->

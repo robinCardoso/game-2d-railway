@@ -1,0 +1,13 @@
+<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M32 8l4 12h12l-10 8 4 12-10-8-10 8 4-12-10-8h12l4-12z" fill="#fbbf24" opacity="0.15"/>
+  <path d="M18 48l22-34 6 6-22 34-6-6z" fill="url(#blade)"/>
+  <path d="M38 14l12-4-4 12-8-8z" fill="#fcd34d"/>
+  <rect x="14" y="44" width="10" height="6" rx="2" transform="rotate(-35 19 47)" fill="#92400e"/>
+  <defs>
+    <linearGradient id="blade" x1="28" y1="14" x2="28" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#e2e8f0"/>
+      <stop offset="0.5" stop-color="#94a3b8"/>
+      <stop offset="1" stop-color="#64748b"/>
+    </linearGradient>
+  </defs>
+</svg>

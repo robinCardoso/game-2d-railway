@@ -5,6 +5,7 @@ import { GameRoom } from './GameRoom.js';
 import { MapCollisionStore } from './MapCollisionStore.js';
 import { MapInstanceStore } from './MapInstanceStore.js';
 import { CreaturePresetStore } from './game/CreaturePresetStore.js';
+import { SpellCatalogStore } from './game/SpellCatalogStore.js';
 import { VocationStore } from './game/VocationStore.js';
 import { runMigrations } from './db/migrate.js';
 import { env } from './config/env.js';
@@ -27,14 +28,16 @@ if (env.isProduction && env.jwtSecret.includes('change-in-production')) {
 const collision = new MapCollisionStore();
 const instances = new MapInstanceStore();
 const creaturePresets = new CreaturePresetStore();
+const spellCatalog = new SpellCatalogStore();
 const vocations = new VocationStore();
 
-await Promise.all([collision.loadAll(), creaturePresets.load(), vocations.load()]);
+await Promise.all([collision.loadAll(), creaturePresets.load(), spellCatalog.load(), vocations.load()]);
 
 const room = new GameRoom(collision, instances, {
     requireWsTicket: env.requireWsTicket,
     positionSaveIntervalMs: env.wsPositionSaveIntervalMs,
     creaturePresets,
+    spellCatalog,
     vocations,
 });
 

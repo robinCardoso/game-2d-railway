@@ -84,8 +84,15 @@ import type { CharacterRow } from '../shared/types';
 import { updateCharacterLocation, updateCharacterProgress } from '../shared/characterStore';
 import { fetchWsTicket, isServerWsTicketEnabled } from '../shared/wsTicketClient';
 import { updateCharacterStatsUi } from './ui/characterStatsUi';
+import { updatePlayHudCharacterPortrait } from './ui/playHudCharacterCard';
+import {
+    markPlayMinimapDirty,
+    setPlayMinimapFrameProvider,
+    tickPlayHudMinimap,
+} from './ui/playHudMinimap';
 import { updatePlayHudPing, updatePlayHudStatus } from './ui/playHudStatusUi';
 import { initPlayHudInventory } from './ui/playHudInventory';
+import { bindPlayChatNetwork, createPlayChatNetHandlers } from './chat/playChatController';
 import { getPlayDefaultZoom, getPlayRenderOptions } from './ui/playHudSettings';
 import {
     PLAY_DEFAULT_ZOOM_CHANGED_EVENT,
@@ -97,7 +104,30 @@ import { getExpProgress, normalizeCharacterProgress } from './experience';
 import { serverStateStore } from '../net/serverStateStore';
 import { shouldCelebrateSessionLevelUp } from './playProgress';
 import { getPlayBorderConfig, loadPlayBorderConfig } from './playBorderConfig';
-import { resetPlayCombatInput, tickPlayCombat, getPlayCombatHoverId, getPlayCombatTargetId, updatePlayCombatHover, handlePlayCombatTargetClick, clearPlayCombatTarget, type PlayCombatServerBridge } from './playCombat';
+import {
+    resetPlayCombatInput,
+    tickPlayCombat,
+    getPlayCombatHoverId,
+    getPlayCombatTargetId,
+    getPlayCombatTarget,
+    updatePlayCombatHover,
+    handlePlayCombatTargetClick,
+    clearPlayCombatTarget,
+    requestPlayBasicAttack,
+    type PlayCombatServerBridge,
+} from './playCombat';
+import { loadSpellCatalog } from '../game-data/spellCatalog';
+import { initPlaySpellBar } from './ui/playSpellBar';
+import {
+    initPlayCombatHub,
+    setPlayCombatHubBridge,
+    tickPlayCombatHub,
+    refreshPlayCombatHubSpells,
+} from './ui/playCombatHub';
+import { bindPlaySpellModalCharacter, refreshPlaySpellModal } from './ui/playSpellModal';
+import { resetPlaySpellCooldowns, tryCastSpellFromSlot } from './playSpellCast';
+import type { SpellBarSlot } from './ui/playSpellBar';
+import { toast } from '../utils/popup';
 import { ensureCombatTargetRingLoaded } from './combatTargetRing';
 import { tickOfflineMonsterDeathAndRespawn } from './creatureDeathLifecycle';
 import { loadRuntimeVocations, getVocationById } from '../game-data/vocationRegistry';
@@ -436,6 +466,7 @@ function applyLoadedMap(loaded: ReturnType<typeof loadMapFromJson>): void {
     editingFloor = player.worldZ;
     refreshPlayerMovementSpeed();
     respawnEntities();
+    markPlayMinimapDirty();
     resetPortalTriggerState();
     updateActiveMapHud();
     invalidateBorderDrawCache();
@@ -536,6 +567,78 @@ function triggerPlayAttackAnimation(): void {
             activeCharacterController.setState('idle');
         }
     };
+}
+
+function triggerPlayCastAnimation(): void {
+    const facing = resolveSpriteDirectionForState(
+        activeCharacterController.config,
+        'cast',
+        activeCharacterController.currentDirection
+    );
+    activeCharacterController.setDirection(facing);
+    activeCharacterController.setState('cast', { force: true });
+    activeCharacterController.onAnimationEndCallback = () => {
+        if (gridMovement.stepping) {
+            activeCharacterController.setState('walk');
+        } else {
+            activeCharacterController.setState('idle');
+        }
+    };
+}
+
+function buildPlayCombatCallbacks(nowMs: number) {
+    return {
+        faceToward: faceTowardEntity,
+        onAttackSwing: triggerPlayAttackAnimation,
+        onCastSwing: triggerPlayCastAnimation,
+        onDamage: (target: GameEntity, damage: number) => {
+            target.spawnFloatingDamage(damage, nowMs);
+        },
+        onMonsterKilled: (_target: GameEntity, xpReward: number) => {
+            localPlayerFloats.spawnXp(xpReward, nowMs);
+        },
+        onProgressUpdated: ({ experience, level }: { experience: number; level: number }) => {
+            applyPlayProgressUpdate(level, experience);
+        },
+    };
+}
+
+function tryPlaySpellSlot(slot: SpellBarSlot): void {
+    if (!activeCharacter) return;
+    const nowMs = performance.now();
+    tryCastSpellFromSlot(slot, {
+        nowMs,
+        player,
+        character: activeCharacter,
+        characterSpeed,
+        npcs: getPlayEntities(),
+        playerMana: { current: player.mana, max: player.maxMana },
+        callbacks: buildPlayCombatCallbacks(nowMs),
+        server: buildPlayCombatServerBridge(),
+    });
+    syncPlayHudVitals();
+}
+
+function tryPlayBasicAttack(): void {
+    if (!activeCharacter) return;
+    if (!getPlayCombatTarget()) {
+        toast('Selecione um alvo (clique direito no monstro).');
+        return;
+    }
+    const nowMs = performance.now();
+    const ok = requestPlayBasicAttack({
+        nowMs,
+        npcs: getPlayEntities(),
+        player,
+        character: activeCharacter,
+        characterSpeed,
+        callbacks: buildPlayCombatCallbacks(nowMs),
+        server: buildPlayCombatServerBridge(),
+        remotes: getRemoteTargetables(),
+    });
+    if (!ok && getPlayCombatTarget()) {
+        toast('Aguarde o cooldown ou aproxime-se do alvo.');
+    }
 }
 
 function getRemoteTargetables(): import('./playCombat').PlayCombatTargetable[] {
@@ -681,6 +784,7 @@ function applyPlayProgressUpdate(
     updateCharacterStatsUi(activeCharacter, { flashLevel: leveledUp });
     if (leveledUp) {
         refreshPlayerMovementSpeed(performance.now());
+        refreshPlaySpellModal();
     }
     scheduleProgressSave(leveledUp);
 }
@@ -948,24 +1052,14 @@ function update(): void {
             characterSpeed,
             server: buildPlayCombatServerBridge(),
             remotes: getRemoteTargetables(),
-            callbacks: {
-                faceToward: faceTowardEntity,
-                onAttackSwing: triggerPlayAttackAnimation,
-                onDamage: (target, damage) => {
-                    target.spawnFloatingDamage(damage, nowMs);
-                },
-                onMonsterKilled: (_target, xpReward) => {
-                    localPlayerFloats.spawnXp(xpReward, nowMs);
-                },
-                onProgressUpdated: ({ experience, level }) => {
-                    applyPlayProgressUpdate(level, experience);
-                },
-            },
+            callbacks: buildPlayCombatCallbacks(nowMs),
         });
     }
 
     localPlayerFloats.tick(nowMs);
     syncPlayHudVitals();
+    tickPlayHudMinimap();
+    tickPlayCombatHub();
 }
 
 function getPlayBorderDrawContext() {
@@ -1306,6 +1400,12 @@ function buildPlayCombatServerBridge(): PlayCombatServerBridge | undefined {
                 gameNet.sendAttack(creatureId, currentMapId, gameNet.getNetworkInstanceId());
             }
         },
+        getCreatureAuthoritativeTile: (creatureId) => serverCreatures.getAuthoritativeTile(creatureId),
+        sendCastSpell: (spellId, creatureId) => {
+            if (gameNet?.isConnected() && currentMapId) {
+                gameNet.sendCastSpell(spellId, creatureId, currentMapId, gameNet.getNetworkInstanceId());
+            }
+        },
     };
 }
 
@@ -1340,6 +1440,8 @@ function setupNetwork(
             return undefined;
         }
     };
+
+    const chatHandlers = createPlayChatNetHandlers();
 
     gameNet = new GameNetClient({
         url,
@@ -1392,11 +1494,13 @@ function setupNetwork(
             }
             syncProgressToServer();
         },
-        onServerError: ({ code, message }) => {
+        onServerError: ({ code, message, retryAfterMs }) => {
+            chatHandlers.onServerError({ code, message, retryAfterMs });
             if (code === 'NO_PVP_MAP') {
                 toast.info(message);
             }
         },
+        onChatMessage: chatHandlers.onChatMessage,
         onCreatureSync: ({ mapId, instanceId, creatures }) => {
             if (!currentMapId || mapId !== currentMapId) return;
             logPlayJoinTimeline('onCreatureSync', {
@@ -1425,16 +1529,16 @@ function setupNetwork(
         },
         onCreatureDamaged: (msg) => {
             if (!currentMapId || msg.mapId !== currentMapId) return;
-            const isLocalAttacker =
-                Boolean(msg.attackerPlayerId) &&
-                msg.attackerPlayerId === gameNet?.getLocalPlayerId();
             serverCreatures.applyDamaged(
                 msg.creatureId,
                 msg.health,
                 msg.maxHealth,
-                msg.damage,
-                { showFloatingDamage: !isLocalAttacker }
+                msg.damage
             );
+        },
+        onAttackMiss: (msg) => {
+            if (!currentMapId || msg.mapId !== currentMapId) return;
+            serverCreatures.applyAttackMiss(msg.creatureId, performance.now());
         },
         onCreatureDied: (msg) => {
             if (!currentMapId || msg.mapId !== currentMapId) return;
@@ -1507,6 +1611,8 @@ function setupNetwork(
         },
     });
 
+    bindPlayChatNetwork(gameNet);
+
     if (ticket !== undefined) {
         logPlayJoinTimeline('connect (prefetched ticket)');
         gameNet.connect();
@@ -1521,6 +1627,7 @@ function setupNetwork(
 export async function startPlay(character: CharacterRow, accountId: string): Promise<void> {
     activeCharacter = character;
     resetPlayCombatInput();
+    resetPlaySpellCooldowns();
     ensureCombatTargetRingLoaded();
 
     if (isWorldEntryPending()) {
@@ -1539,6 +1646,10 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
     }
 
     await loadRuntimeVocations();
+    await loadSpellCatalog();
+    initPlaySpellBar(character.id, character.vocation);
+    refreshPlayCombatHubSpells();
+    bindPlaySpellModalCharacter(character);
 
     const progress = normalizeCharacterProgress(character.experience, character.level);
     character.experience = progress.experience;
@@ -1552,6 +1663,7 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
     const panelName = document.getElementById('characterPanelName');
     if (panelName) panelName.textContent = character.name;
     updateCharacterStatsUi(character);
+    void updatePlayHudCharacterPortrait(character);
     initPlayHudInventory(character.id);
     syncPlayHudVitals();
 
@@ -1624,13 +1736,61 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
         mapId: entry.id,
         spawn,
     });
+    setPlayMinimapFrameProvider(() => {
+        const entities = getPlayEntities().flatMap((entity) => {
+            if (entity.type !== 'monster' && entity.type !== 'npc') return [];
+            const foot = entity.getFootTile(TILE_SIZE_SCREEN);
+            return [
+                {
+                    tileX: foot.tileX,
+                    tileY: foot.tileY,
+                    kind: entity.type as 'monster' | 'npc',
+                },
+            ];
+        });
+        if (currentMapId && gameNet) {
+            for (const remote of gameNet.getRemotePlayers(
+                currentMapId,
+                gameNet.getNetworkInstanceId()
+            )) {
+                if (remote.z !== player.worldZ) continue;
+                entities.push({
+                    tileX: remote.tileX,
+                    tileY: remote.tileY,
+                    kind: 'remote',
+                });
+            }
+        }
+        return {
+            worldMap,
+            grassOverlay: grassOverlayMap,
+            mapSize: activeMapSize,
+            playerTileX: player.tileX,
+            playerTileY: player.tileY,
+            playerFloor: player.worldZ,
+            entities,
+        };
+    });
     invalidateBorderDrawCache();
     setWorldEntryStage('map', 'done');
+
+    setPlayCombatHubBridge({
+        nowMs: () => performance.now(),
+        onBasicAttack: () => tryPlayBasicAttack(),
+        onSpellSlot: (slot) => tryPlaySpellSlot(slot),
+    });
 
     window.addEventListener('keydown', (e) => {
         keys[e.key.toLowerCase()] = true;
         if (e.key === 'Escape') {
             clearPlayCombatTarget();
+            return;
+        }
+        if (e.key === '1' || e.key === '2' || e.key === '3') {
+            const tag = (e.target as HTMLElement | null)?.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+            e.preventDefault();
+            tryPlaySpellSlot(Number(e.key) as SpellBarSlot);
         }
     });
     window.addEventListener('keyup', (e) => {

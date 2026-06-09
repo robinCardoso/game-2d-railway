@@ -1,0 +1,181 @@
+/**
+ * Fase 3 — minimapa circular (canto superior direito, abaixo do menu).
+ */
+
+.play-hud-right-column {
+    position: absolute;
+    top: max(12px, env(safe-area-inset-top, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+    pointer-events: none;
+}
+
+.play-hud-right-column > * {
+    pointer-events: auto;
+}
+
+/* Reposiciona barra de ações (antes era absolute próprio) */
+.play-hud-right-column .play-hud-action-bar-wrap {
+    position: relative;
+    top: auto;
+    right: auto;
+}
+
+.play-hud-minimap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.play-hud-minimap__frame {
+    position: relative;
+    width: 118px;
+    height: 118px;
+    border-radius: 50%;
+    padding: 5px;
+    background: linear-gradient(145deg, #3d4450 0%, #1a1f28 45%, #0f1218 100%);
+    border: 2px solid rgba(255, 255, 255, 0.12);
+    box-shadow:
+        0 8px 28px rgba(0, 0, 0, 0.5),
+        inset 0 2px 6px rgba(255, 255, 255, 0.06),
+        inset 0 -3px 8px rgba(0, 0, 0, 0.45);
+}
+
+.play-hud-minimap__viewport {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    overflow: hidden;
+    background: #05070c;
+    border: 1px solid rgba(0, 0, 0, 0.55);
+}
+
+.play-hud-minimap__viewport canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    image-rendering: auto;
+}
+
+/* Jogador fixo no centro — mapa se move ao redor */
+.play-hud-minimap__player {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 14px;
+    height: 14px;
+    margin: -7px 0 0 -7px;
+    pointer-events: none;
+    filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.85));
+}
+
+.play-hud-minimap__player::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 2px;
+    width: 0;
+    height: 0;
+    margin-left: -5px;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 10px solid #f8fafc;
+}
+
+.play-hud-minimap__player::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 10px;
+    width: 6px;
+    height: 4px;
+    margin-left: -3px;
+    border-radius: 1px;
+    background: #f8fafc;
+}
+
+/* Zoom +/- à direita do círculo */
+.play-hud-minimap__zoom {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.play-hud-minimap__zoom button {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    background: radial-gradient(circle at 35% 30%, #2a3140 0%, #141820 75%);
+    color: #e2e8f0;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    transition:
+        border-color 0.15s ease,
+        color 0.15s ease,
+        transform 0.12s ease;
+}
+
+.play-hud-minimap__zoom button:hover:not(:disabled) {
+    border-color: rgba(245, 158, 11, 0.55);
+    color: #fbbf24;
+}
+
+.play-hud-minimap__zoom button:active:not(:disabled) {
+    transform: scale(0.94);
+}
+
+.play-hud-minimap__zoom button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.play-hud-minimap__zoom button:focus-visible {
+    outline: 2px solid #f59e0b;
+    outline-offset: 2px;
+}
+
+@media (min-width: 1366px) {
+    .play-hud-right-column {
+        top: max(16px, env(safe-area-inset-top, 0px));
+        right: max(16px, env(safe-area-inset-right, 0px));
+        gap: 12px;
+    }
+
+    .play-hud-minimap__frame {
+        width: 128px;
+        height: 128px;
+    }
+
+    .play-hud-minimap__zoom button {
+        width: 32px;
+        height: 32px;
+    }
+}
+
+@media (max-width: 520px) {
+    .play-hud-right-column {
+        right: max(8px, env(safe-area-inset-right, 0px));
+    }
+
+    .play-hud-minimap__frame {
+        width: 100px;
+        height: 100px;
+    }
+
+    .play-hud-minimap__zoom button {
+        width: 26px;
+        height: 26px;
+        font-size: 16px;
+    }
+}

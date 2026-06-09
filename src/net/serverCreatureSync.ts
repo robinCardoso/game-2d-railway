@@ -177,6 +177,17 @@ export class ServerCreatureSync {
         return [...this.entities.values()];
     }
 
+    /** Tile autoritativo do servidor — ignora interpolação visual durante deslize. */
+    getAuthoritativeTile(creatureId: string): { tileX: number; tileY: number; z: number } | null {
+        const server = this.serverTiles.get(creatureId);
+        if (server) {
+            return { tileX: server.tileX, tileY: server.tileY, z: server.z };
+        }
+        const entity = this.entities.get(creatureId);
+        if (!entity) return null;
+        return { tileX: entity.tileX, tileY: entity.tileY, z: entity.worldZ };
+    }
+
     applySync(creatures: CreatureSnapshot[], mapId: string, instanceId?: string): void {
         const activeIds = new Set<string>();
         const nowMs = performance.now();
@@ -234,6 +245,14 @@ export class ServerCreatureSync {
             worldY: entity.worldY,
             desyncPx: desync.max,
         });
+        return entity;
+    }
+
+    /** Ataque não conectou no mob (servidor rejeitou ou bloqueio total). */
+    applyAttackMiss(creatureId: string, nowMs: number = performance.now()): GameEntity | undefined {
+        const entity = this.entities.get(creatureId);
+        if (!entity || entity.isDead) return undefined;
+        entity.spawnFloatingDamage(0, nowMs);
         return entity;
     }
 

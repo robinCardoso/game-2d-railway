@@ -17,6 +17,7 @@ export function updatePlayHudStatus(input: PlayHudStatusInput): void {
     const hpText = document.getElementById('playHudHpText');
     const mpFill = document.getElementById('playHudMpFill');
     const mpText = document.getElementById('playHudMpText');
+    const xpFill = document.getElementById('playHudXpFill');
     const xpText = document.getElementById('playHudXpText');
 
     const hpPct = fillPercent(input.health, input.maxHealth);
@@ -27,8 +28,12 @@ export function updatePlayHudStatus(input: PlayHudStatusInput): void {
     if (mpFill) mpFill.style.width = `${mpPct}%`;
     if (mpText) mpText.textContent = `${Math.floor(input.mana)} / ${Math.floor(input.maxMana)}`;
 
-    if (xpText && input.xpCurrent !== undefined && input.xpRequired !== undefined) {
-        xpText.textContent = `${input.xpCurrent} / ${input.xpRequired} XP`;
+    if (input.xpCurrent !== undefined && input.xpRequired !== undefined) {
+        const xpPct = fillPercent(input.xpCurrent, input.xpRequired);
+        if (xpFill) xpFill.style.width = `${xpPct}%`;
+        if (xpText) {
+            xpText.textContent = `${input.xpCurrent} / ${input.xpRequired} (${Math.round(xpPct)}%)`;
+        }
     }
 }
 

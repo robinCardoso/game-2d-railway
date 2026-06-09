@@ -7,9 +7,15 @@
     <link rel="icon" type="image/png" href="/brand/icon-elarion.png" />
     <link rel="stylesheet" href="/src/style.css" />
     <link rel="stylesheet" href="/src/game/play-desktop-hud.css" />
+    <link rel="stylesheet" href="/src/game/play-hud-character.css" />
+    <link rel="stylesheet" href="/src/game/play-hud-actions.css" />
+    <link rel="stylesheet" href="/src/game/play-hud-minimap.css" />
+    <link rel="stylesheet" href="/src/game/play-hud-combat.css" />
+    <link rel="stylesheet" href="/src/game/play-spell-modal.css" />
     <link rel="stylesheet" href="/src/game/play-panels.css" />
     <link rel="stylesheet" href="/src/game/play-inventory.css" />
     <link rel="stylesheet" href="/src/game/play-settings.css" />
+    <link rel="stylesheet" href="/src/game/play-hud-chat.css" />
     <link rel="stylesheet" href="/src/game/play-mobile.css" />
     <link rel="stylesheet" href="/src/ui/player-flow-mobile.css" />
     <meta name="theme-color" content="#12141a" />
@@ -38,60 +44,8 @@
     </style>
   </head>
   <body>
-    <div class="play-layout">
-      <!-- Desktop HUD -->
-      <header class="play-hud-top play-hud-top--desktop">
-        <div class="play-hud-player">
-          <div class="play-hud-avatar">
-            <img id="playCharAvatar" src="/brand/icon-elarion.png" alt="" />
-          </div>
-          <div class="play-hud-player-text">
-            <strong id="playCharName">—</strong>
-            <span>
-              <span id="playCharVocation">—</span>
-              · Level <span id="playHudLevel">1</span>
-            </span>
-          </div>
-        </div>
-
-        <div class="play-hud-bars">
-          <div class="hud-bar-row hud-bar-row--hp">
-            <span>HP</span>
-            <div class="hud-bar"><div id="playHudHpFill" class="hud-bar-fill"></div></div>
-            <strong id="playHudHpText">—</strong>
-          </div>
-          <div class="hud-bar-row hud-bar-row--mp">
-            <span>MP</span>
-            <div class="hud-bar"><div id="playHudMpFill" class="hud-bar-fill"></div></div>
-            <strong id="playHudMpText">—</strong>
-          </div>
-          <div class="hud-xp-row"><span id="playHudXpText">—</span></div>
-        </div>
-
-        <div>
-          <nav class="play-hud-actions" aria-label="Ações do jogo">
-            <button type="button" class="play-hud-action" data-panel="character" aria-expanded="false">
-              <span>Personagem</span>
-            </button>
-            <button type="button" class="play-hud-action" data-panel="inventory" aria-expanded="false">
-              <span>Inventário</span>
-            </button>
-            <button type="button" class="play-hud-action" data-panel="map" aria-expanded="false">
-              <span>Mapa</span>
-            </button>
-            <button type="button" class="play-hud-action" data-panel="settings" aria-expanded="false">
-              <span>Config.</span>
-            </button>
-            <button type="button" class="play-hud-action" data-panel="chat" aria-expanded="false">
-              <span>Chat</span>
-            </button>
-          </nav>
-          <div class="play-hud-account">
-            <a href="#" id="changeCharLink" class="play-top-link">Trocar personagem</a>
-            <a href="#" id="logoutPlay" class="play-top-link">Sair</a>
-          </div>
-        </div>
-      </header>
+    <div class="play-layout play-ui-redesign play-ui-redesign--phase4">
+      <!-- HUD legado — removido na fase 2 (substituído por playHudActionBar) -->
 
       <!-- Mobile compact top -->
       <header class="play-hud-top--mobile-compact play-mobile-only">
@@ -115,6 +69,156 @@
       </header>
 
       <div class="play-viewport">
+        <aside
+          id="playHudCharacterCard"
+          class="play-hud-character-card is-expanded"
+          aria-expanded="true"
+          aria-label="Status do personagem"
+        >
+          <div class="play-hud-character-card__left">
+            <button
+              type="button"
+              class="play-hud-character-card__toggle"
+              aria-label="Ocultar status do personagem"
+            >
+              <div class="play-hud-character-card__avatar">
+                <canvas id="playCharAvatar" width="56" height="56" aria-hidden="true"></canvas>
+              </div>
+              <span id="playHudLevelBadge" class="play-hud-character-card__level">1</span>
+            </button>
+            <div class="play-hud-character-card__identity">
+              <strong id="playCharName">—</strong>
+              <span>
+                <span id="playCharVocation">—</span>
+                · Level <span id="playHudLevel">1</span>
+              </span>
+            </div>
+          </div>
+          <div class="play-hud-character-card__body">
+            <div class="play-hud-character-card__bars">
+              <div class="hud-bar-row hud-bar-row--hp">
+                <span>HP</span>
+                <div class="hud-bar"><div id="playHudHpFill" class="hud-bar-fill"></div></div>
+                <strong id="playHudHpText">—</strong>
+              </div>
+              <div class="hud-bar-row hud-bar-row--mp">
+                <span>MP</span>
+                <div class="hud-bar"><div id="playHudMpFill" class="hud-bar-fill"></div></div>
+                <strong id="playHudMpText">—</strong>
+              </div>
+              <div class="hud-bar-row hud-bar-row--xp">
+                <span>XP</span>
+                <div class="hud-bar"><div id="playHudXpFill" class="hud-bar-fill"></div></div>
+                <strong id="playHudXpText">—</strong>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <div class="play-hud-right-column">
+        <div id="playHudActionBarWrap" class="play-hud-action-bar-wrap is-expanded" aria-label="Menu principal">
+        <nav id="playHudActionBar" class="play-hud-action-bar">
+          <button type="button" class="play-hud-action-btn" data-panel="character" aria-expanded="false">
+            <span class="play-hud-action-btn__ring">
+              <span class="play-hud-action-btn__icon">
+                <img src="/ui/play-hud/character.svg" width="32" height="32" alt="" draggable="false" />
+              </span>
+            </span>
+            <span class="play-hud-action-btn__label">Personagem</span>
+            <span class="play-hud-action-btn__badge" hidden aria-hidden="true">0</span>
+          </button>
+          <button type="button" class="play-hud-action-btn" data-panel="inventory" aria-expanded="false">
+            <span class="play-hud-action-btn__ring">
+              <span class="play-hud-action-btn__icon">
+                <img src="/ui/play-hud/inventory.svg" width="32" height="32" alt="" draggable="false" />
+              </span>
+            </span>
+            <span class="play-hud-action-btn__label">Inventário</span>
+            <span class="play-hud-action-btn__badge" hidden aria-hidden="true">0</span>
+          </button>
+          <button type="button" class="play-hud-action-btn" data-panel="map" aria-expanded="false">
+            <span class="play-hud-action-btn__ring">
+              <span class="play-hud-action-btn__icon">
+                <img src="/ui/play-hud/map.svg" width="32" height="32" alt="" draggable="false" />
+              </span>
+            </span>
+            <span class="play-hud-action-btn__label">Mapa</span>
+          </button>
+          <button type="button" class="play-hud-action-btn" data-panel="settings" aria-expanded="false">
+            <span class="play-hud-action-btn__ring">
+              <span class="play-hud-action-btn__icon">
+                <img src="/ui/play-hud/config.svg" width="32" height="32" alt="" draggable="false" />
+              </span>
+            </span>
+            <span class="play-hud-action-btn__label">Config.</span>
+          </button>
+          <button
+            type="button"
+            id="playHudChatToggle"
+            class="play-hud-action-btn"
+            aria-expanded="true"
+            aria-controls="playChatDock"
+            aria-label="Chat"
+          >
+            <span class="play-hud-action-btn__ring">
+              <span class="play-hud-action-btn__icon">
+                <img src="/ui/play-hud/chat.svg" width="32" height="32" alt="" draggable="false" />
+              </span>
+            </span>
+            <span class="play-hud-action-btn__label">Chat</span>
+            <span class="play-hud-action-btn__badge" hidden aria-hidden="true">0</span>
+          </button>
+          <div class="play-hud-action-menu">
+            <button
+              type="button"
+              id="playHudMenuBtn"
+              class="play-hud-action-btn"
+              aria-expanded="false"
+              aria-haspopup="menu"
+              aria-controls="playHudMenuDropdown"
+            >
+              <span class="play-hud-action-btn__ring">
+                <span class="play-hud-action-btn__icon">
+                  <img src="/ui/play-hud/menu.svg" width="32" height="32" alt="" draggable="false" />
+                </span>
+              </span>
+              <span class="play-hud-action-btn__label">Menu</span>
+            </button>
+            <div id="playHudMenuDropdown" class="play-hud-menu-dropdown" role="menu" hidden>
+              <a href="#" id="changeCharLink" role="menuitem">Trocar personagem</a>
+              <hr />
+              <a href="#" id="logoutPlay" role="menuitem">Sair</a>
+            </div>
+          </div>
+        </nav>
+        <button
+          type="button"
+          id="playHudActionBarToggle"
+          class="play-hud-action-bar__toggle"
+          aria-expanded="true"
+          aria-controls="playHudActionBar"
+          aria-label="Recolher menu"
+        >
+          <span class="play-hud-action-bar__toggle-icon" aria-hidden="true">
+            <img src="/ui/play-hud/collapse-toggle.svg" width="20" height="20" alt="" draggable="false" />
+          </span>
+        </button>
+        </div>
+
+        <div id="playHudMinimap" class="play-hud-minimap" aria-label="Minimapa">
+          <div class="play-hud-minimap__frame">
+            <div class="play-hud-minimap__viewport">
+              <canvas id="playMinimapCanvas" aria-hidden="true"></canvas>
+              <div class="play-hud-minimap__player" aria-hidden="true" title="Você"></div>
+            </div>
+          </div>
+          <div class="play-hud-minimap__zoom">
+            <button type="button" id="playMinimapZoomIn" aria-label="Aproximar minimapa">+</button>
+            <button type="button" id="playMinimapZoomOut" aria-label="Afastar minimapa">−</button>
+          </div>
+        </div>
+        </div>
+
         <div id="canvasContainer">
           <canvas id="gameCanvas"></canvas>
           <div id="levelUpBanner" class="level-up-banner" hidden aria-live="polite">
@@ -137,6 +241,99 @@
             <button type="button" id="playZoomOut" aria-label="Afastar">−</button>
             <span id="playZoomLabel">100%</span>
             <button type="button" id="playZoomIn" aria-label="Aproximar">+</button>
+          </div>
+
+          <div id="playChatDock" class="play-chat-dock is-expanded" aria-label="Chat">
+            <button
+              type="button"
+              class="play-chat-dock__collapse-btn"
+              aria-expanded="true"
+              aria-controls="playChatPanel"
+              aria-label="Recolher chat"
+            >
+              <img src="/ui/play-hud/chat.svg" width="20" height="20" alt="" draggable="false" />
+            </button>
+            <div id="playChatPanel" class="play-chat-dock__panel">
+              <nav class="play-chat-dock__tabs" role="tablist" aria-label="Canais de chat">
+                <button type="button" class="play-chat-dock__tab is-active" data-chat-tab="local" role="tab" aria-selected="true">
+                  Local
+                  <span class="play-chat-dock__tab-badge" hidden aria-hidden="true">0</span>
+                </button>
+                <button type="button" class="play-chat-dock__tab" data-chat-tab="global" role="tab" aria-selected="false">
+                  Global
+                  <span class="play-chat-dock__tab-badge" hidden aria-hidden="true">0</span>
+                </button>
+                <button type="button" class="play-chat-dock__tab" data-chat-tab="guild" role="tab" aria-selected="false">
+                  Guilda
+                  <span class="play-chat-dock__tab-badge" hidden aria-hidden="true">0</span>
+                </button>
+                <button type="button" class="play-chat-dock__tab" data-chat-tab="loot" role="tab" aria-selected="false">
+                  Loot
+                  <span class="play-chat-dock__tab-badge" hidden aria-hidden="true">0</span>
+                </button>
+                <button type="button" class="play-chat-dock__tab" data-chat-tab="system" role="tab" aria-selected="false">
+                  Sistema
+                  <span class="play-chat-dock__tab-badge" hidden aria-hidden="true">0</span>
+                </button>
+              </nav>
+              <div id="playChatLog" class="play-chat-dock__log" role="log" aria-live="polite" aria-relevant="additions"></div>
+              <div class="play-chat-dock__composer">
+                <div class="play-chat-dock__composer-meta">
+                  <p id="playChatComposerHint" class="play-chat-dock__composer-hint"></p>
+                  <span id="playChatCharCount" class="play-chat-dock__char-count">0/200</span>
+                </div>
+                <input
+                  id="playChatInput"
+                  class="play-chat-dock__input"
+                  type="text"
+                  maxlength="200"
+                  placeholder="Digite sua mensagem…"
+                  autocomplete="off"
+                  aria-label="Mensagem de chat"
+                />
+                <button type="button" id="playChatSendBtn" class="play-chat-dock__send">Enviar</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="playCombatHub" class="play-combat-hub" aria-label="Hub de combate">
+            <div class="play-combat-hub__cluster">
+              <button type="button" id="playCombatSlot1" class="play-combat-hub__spell-slot play-combat-hub__spell-slot--1" aria-label="Magia slot 1">
+                <span class="play-combat-hub__spell-ring">
+                  <span class="play-combat-hub__spell-icon">
+                    <img src="/ui/play-hud/combat/spell_fire.svg" alt="" draggable="false" />
+                  </span>
+                  <span class="play-combat-hub__spell-cooldown" aria-hidden="true"></span>
+                </span>
+                <span class="play-combat-hub__spell-badge">1</span>
+              </button>
+              <button type="button" id="playCombatSlot2" class="play-combat-hub__spell-slot play-combat-hub__spell-slot--2" aria-label="Magia slot 2">
+                <span class="play-combat-hub__spell-ring">
+                  <span class="play-combat-hub__spell-icon">
+                    <img src="/ui/play-hud/combat/spell_lightning.svg" alt="" draggable="false" />
+                  </span>
+                  <span class="play-combat-hub__spell-cooldown" aria-hidden="true"></span>
+                </span>
+                <span class="play-combat-hub__spell-badge">2</span>
+              </button>
+              <button type="button" id="playCombatSlot3" class="play-combat-hub__spell-slot play-combat-hub__spell-slot--3" aria-label="Magia slot 3">
+                <span class="play-combat-hub__spell-ring">
+                  <span class="play-combat-hub__spell-icon">
+                    <img src="/ui/play-hud/combat/spell_void.svg" alt="" draggable="false" />
+                  </span>
+                  <span class="play-combat-hub__spell-cooldown" aria-hidden="true"></span>
+                </span>
+                <span class="play-combat-hub__spell-badge">3</span>
+              </button>
+              <div class="play-combat-hub__attack-wrap">
+                <button type="button" id="playCombatAttackBtn" class="play-combat-hub__attack" aria-label="Ataque básico">
+                  <span class="play-combat-hub__attack-icon">
+                    <img src="/ui/play-hud/combat/attack.svg" alt="" draggable="false" />
+                  </span>
+                  <span class="play-combat-hub__attack-cooldown" aria-hidden="true"></span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -174,19 +371,138 @@
                 </span>
               </div>
             </div>
-            <div class="character-panel-bars">
-              <div>HP máx. <strong id="statHealth">0</strong></div>
-              <div>MP máx. <strong id="statMana">0</strong></div>
-              <div>
-                XP <strong id="statExp">0 / 100 XP</strong>
-                <div class="stat-exp-bar" aria-hidden="true"><div id="statExpBarFill"></div></div>
-              </div>
-            </div>
             <div class="character-stat-list">
               <div><span>Melee</span><strong id="statMelee">0</strong></div>
               <div><span>Distância</span><strong id="statDistance">0</strong></div>
               <div><span>Magia</span><strong id="statMagic">0</strong></div>
               <div><span>Defesa</span><strong id="statDefense">0</strong></div>
+            </div>
+            <button type="button" id="openSpellsPanelBtn" class="play-spell-open-btn">
+              ✨ Gerenciar magias
+            </button>
+            <p class="play-spell-modal__hint-bar" style="border:0;padding:8px 0 0;text-align:left;">
+              Magias desbloqueiam automaticamente ao subir de level.
+            </p>
+          </div>
+        </section>
+
+        <section
+          id="spellsPanel"
+          class="play-panel play-panel--spells"
+          data-panel-name="spells"
+          hidden
+        >
+          <header class="play-panel-header">
+            <h2>Magias</h2>
+            <button type="button" class="play-panel-close" data-close-panel aria-label="Fechar">×</button>
+          </header>
+          <div class="play-panel-body">
+            <div class="play-spell-modal">
+              <div class="play-spell-modal__slots" aria-label="Slots equipados">
+                <button type="button" class="play-spell-modal__slot is-target" data-spell-target-slot="1">
+                  <span class="play-spell-modal__slot-badge">1</span>
+                  <span class="play-spell-modal__slot-icon">
+                    <img src="/ui/play-hud/combat/slot_empty.svg" alt="" draggable="false" />
+                  </span>
+                  <span class="play-spell-modal__slot-name">Vazio</span>
+                  <span class="play-spell-modal__slot-meta">Slot 1</span>
+                </button>
+                <button type="button" class="play-spell-modal__slot" data-spell-target-slot="2">
+                  <span class="play-spell-modal__slot-badge">2</span>
+                  <span class="play-spell-modal__slot-icon">
+                    <img src="/ui/play-hud/combat/slot_empty.svg" alt="" draggable="false" />
+                  </span>
+                  <span class="play-spell-modal__slot-name">Vazio</span>
+                  <span class="play-spell-modal__slot-meta">Slot 2</span>
+                </button>
+                <button type="button" class="play-spell-modal__slot" data-spell-target-slot="3">
+                  <span class="play-spell-modal__slot-badge">3</span>
+                  <span class="play-spell-modal__slot-icon">
+                    <img src="/ui/play-hud/combat/slot_empty.svg" alt="" draggable="false" />
+                  </span>
+                  <span class="play-spell-modal__slot-name">Vazio</span>
+                  <span class="play-spell-modal__slot-meta">Slot 3</span>
+                </button>
+              </div>
+
+              <div id="playSpellModalMain" class="play-spell-modal__main">
+                <div class="play-spell-modal__list-pane">
+                  <div class="play-spell-modal__list-head">
+                    <h3>Todas as magias</h3>
+                    <div class="play-spell-modal__filter-wrap">
+                      <button
+                        type="button"
+                        id="playSpellModalFilterBtn"
+                        class="play-spell-modal__filter-btn"
+                        aria-haspopup="listbox"
+                        aria-expanded="false"
+                        aria-controls="playSpellModalFilterMenu"
+                        aria-label="Filtrar magias"
+                        title="Filtrar magias"
+                      >
+                        <svg class="play-spell-modal__filter-icon" viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M4 6h16l-6.2 7.4v5.1l-3.6 2.1v-7.2L4 6z" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/>
+                          <path d="M4 6h16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                        </svg>
+                      </button>
+                      <div
+                        id="playSpellModalFilterMenu"
+                        class="play-spell-modal__filter-menu"
+                        role="listbox"
+                        aria-label="Filtrar magias"
+                        hidden
+                      >
+                        <button type="button" role="option" data-filter="all" aria-selected="true">Todas</button>
+                        <button type="button" role="option" data-filter="attack" aria-selected="false">Ataque</button>
+                        <button type="button" role="option" data-filter="healing" aria-selected="false">Cura</button>
+                        <button type="button" role="option" data-filter="support" aria-selected="false">Suporte</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div id="playSpellModalList" class="play-spell-modal__list"></div>
+                </div>
+
+                <div id="playSpellModalDetail" class="play-spell-modal__detail-pane">
+                  <button type="button" id="playSpellModalBack" class="play-spell-modal__back">← Voltar</button>
+                  <div id="playSpellModalDetailEmpty" class="play-spell-modal__detail-empty">
+                    Selecione uma magia desbloqueada na lista.
+                  </div>
+                  <div id="playSpellModalDetailContent" hidden>
+                    <div class="play-spell-modal__detail-hero">
+                      <div class="play-spell-modal__detail-icon">
+                        <img id="playSpellDetailIcon" src="/ui/play-hud/combat/slot_empty.svg" alt="" draggable="false" />
+                      </div>
+                      <div class="play-spell-modal__detail-title">
+                        <div id="playSpellDetailTags" class="play-spell-modal__detail-tags"></div>
+                        <h4 id="playSpellDetailName">—</h4>
+                        <p id="playSpellDetailSummary" class="play-spell-modal__detail-summary">—</p>
+                      </div>
+                    </div>
+                    <p id="playSpellDetailDesc" class="play-spell-modal__detail-desc"></p>
+                    <div class="play-spell-modal__stats">
+                      <div class="play-spell-modal__stat">
+                        <span class="play-spell-modal__stat-label">Mana</span>
+                        <span id="playSpellDetailMana" class="play-spell-modal__stat-value">—</span>
+                      </div>
+                      <div class="play-spell-modal__stat">
+                        <span class="play-spell-modal__stat-label">Recarga</span>
+                        <span id="playSpellDetailCd" class="play-spell-modal__stat-value">—</span>
+                      </div>
+                      <div class="play-spell-modal__stat">
+                        <span class="play-spell-modal__stat-label">Alcance</span>
+                        <span id="playSpellDetailRange" class="play-spell-modal__stat-value">—</span>
+                      </div>
+                    </div>
+                    <button type="button" id="playSpellEquipBtn" class="play-spell-modal__equip-btn">
+                      Equipar no slot 1
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <p class="play-spell-modal__hint-bar">
+                Toque no slot 1–3 acima, escolha a magia e equipe. Desbloqueio automático por level.
+              </p>
             </div>
           </div>
         </section>
@@ -301,15 +617,6 @@
           </div>
         </section>
 
-        <section id="chatPanel" class="play-panel play-panel--chat" data-panel-name="chat" hidden>
-          <header class="play-panel-header">
-            <h2>Chat</h2>
-            <button type="button" class="play-panel-close" data-close-panel aria-label="Fechar">×</button>
-          </header>
-          <div class="play-panel-body">
-            <p class="play-panel-placeholder">Chat em breve.</p>
-          </div>
-        </section>
       </div>
 
       <span id="posX" hidden></span>

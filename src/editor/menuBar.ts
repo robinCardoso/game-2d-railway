@@ -14,7 +14,8 @@ export type FlyoutPanelId =
     | 'minimap'
     | 'character'
     | 'sprite_creator'
-    | 'map_editor';
+    | 'map_editor'
+    | 'spells';
 
 const PANEL_TITLES: Record<FlyoutPanelId, string> = {
     paint: 'Pintar',
@@ -28,6 +29,7 @@ const PANEL_TITLES: Record<FlyoutPanelId, string> = {
     character: 'Personagem',
     sprite_creator: 'Criar Sprites',
     map_editor: 'Editor de Mapa',
+    spells: 'Magias',
 };
 
 export interface EditorShellController {

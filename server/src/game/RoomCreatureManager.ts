@@ -20,7 +20,10 @@ import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
 import { MONSTER_RESPAWN_MS } from '../../../shared/creatureDeath.js';
 import type { VocationId } from '../../../shared/types/character.js';
 import { processAttack } from '../combat/combat.js';
+import { validateAndResolveSpellCast } from '../combat/spellCast.js';
 import { isPlayerInAttackRange, resolvePlayerAttackProfile } from '../../../shared/playerAttack.js';
+import type { SpellDefinition } from '../../../src/game-data/spellCatalogTypes.js';
+import type { VocationConfig } from '../../../src/engine/character/calculateStats.js';
 import type { MapCollisionStore } from '../MapCollisionStore.js';
 import type { CreaturePresetStore } from './CreaturePresetStore.js';
 import type { VocationStore } from './VocationStore.js';
@@ -257,6 +260,115 @@ export class RoomCreatureManager {
                 xpReward: creature.xpReward,
                 killerPlayerId: attacker.playerId,
             },
+        };
+    }
+
+    processSpellCast(
+        room: string,
+        spell: SpellDefinition,
+        attacker: {
+            playerId: string;
+            tileX: number;
+            tileY: number;
+            z: number;
+            level: number;
+            vocationId: VocationId;
+            mana: number;
+            spellCooldownUntil: Record<string, number>;
+            groupCooldownUntil: Record<string, number>;
+        },
+        creatureId: string,
+        nowMs: number,
+        vocationConfig: VocationConfig | undefined
+    ): {
+        ok: boolean;
+        code?: string;
+        damaged?: CreatureDamagedMessage;
+        died?: CreatureDiedMessage;
+        newMana?: number;
+        spellCooldownUntil?: Record<string, number>;
+        groupCooldownUntil?: Record<string, number>;
+    } {
+        const state = this.rooms.get(room);
+        if (!state) return { ok: false, code: 'ROOM_NOT_FOUND' };
+
+        const creature = state.creatures.find((c) => c.id === creatureId);
+        const resolved = validateAndResolveSpellCast(
+            spell,
+            attacker,
+            creature
+                ? {
+                      id: creature.id,
+                      name: creature.name,
+                      tileX: creature.tileX,
+                      tileY: creature.tileY,
+                      z: creature.z,
+                      health: creature.health,
+                      maxHealth: creature.maxHealth,
+                      defense: creature.defense,
+                      isDead: creature.isDead,
+                      creatureType: creature.creatureType,
+                  }
+                : undefined,
+            vocationConfig,
+            nowMs
+        );
+
+        if (!resolved.ok) return { ok: false, code: resolved.code };
+
+        if (!creature || resolved.damage === undefined) {
+            return {
+                ok: true,
+                newMana: resolved.newMana,
+                spellCooldownUntil: resolved.spellCooldownUntil,
+                groupCooldownUntil: resolved.groupCooldownUntil,
+            };
+        }
+
+        creature.health = resolved.newHealth ?? creature.health;
+        const damaged: CreatureDamagedMessage = {
+            type: 'creature_damaged',
+            v: PROTOCOL_VERSION,
+            creatureId: creature.id,
+            mapId: state.mapId,
+            instanceId: state.instanceId,
+            health: creature.health,
+            maxHealth: creature.maxHealth,
+            damage: resolved.damage,
+            attackerPlayerId: attacker.playerId,
+        };
+
+        if (creature.health > 0) {
+            return {
+                ok: true,
+                damaged,
+                newMana: resolved.newMana,
+                spellCooldownUntil: resolved.spellCooldownUntil,
+                groupCooldownUntil: resolved.groupCooldownUntil,
+            };
+        }
+
+        creature.isDead = true;
+        creature.health = 0;
+        creature.respawnAtMs = nowMs + MONSTER_RESPAWN_MS;
+        return {
+            ok: true,
+            damaged,
+            died: {
+                type: 'creature_died',
+                v: PROTOCOL_VERSION,
+                creatureId: creature.id,
+                mapId: state.mapId,
+                instanceId: state.instanceId,
+                tileX: creature.tileX,
+                tileY: creature.tileY,
+                z: creature.z,
+                xpReward: creature.xpReward,
+                killerPlayerId: attacker.playerId,
+            },
+            newMana: resolved.newMana,
+            spellCooldownUntil: resolved.spellCooldownUntil,
+            groupCooldownUntil: resolved.groupCooldownUntil,
         };
     }
 

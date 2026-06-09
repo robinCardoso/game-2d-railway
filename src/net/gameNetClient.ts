@@ -1,4 +1,6 @@
+import type { ChatPlayerChannel } from '../../shared/chatConfig';
 import type {
+    ChatBroadcastMessage,
     ClientMessage,
     CreatureSnapshot,
     PlayerAppearance,
@@ -77,6 +79,12 @@ export interface GameNetClientOptions {
         damage: number;
         attackerPlayerId?: string;
     }) => void;
+    onAttackMiss?: (payload: {
+        creatureId: string;
+        mapId: string;
+        instanceId?: string;
+        code?: string;
+    }) => void;
     onCreatureDied?: (payload: {
         creatureId: string;
         mapId: string;
@@ -128,7 +136,8 @@ export interface GameNetClientOptions {
         mana?: number;
         maxMana?: number;
     }) => void;
-    onServerError?: (payload: { code: string; message: string }) => void;
+    onServerError?: (payload: { code: string; message: string; retryAfterMs?: number }) => void;
+    onChatMessage?: (msg: ChatBroadcastMessage) => void;
     /** Após `welcome` — sincronizar XP local com o servidor (dev/mock). */
     onWelcome?: (payload: { health: number; maxHealth: number }) => void;
 }
@@ -204,6 +213,24 @@ export class GameNetClient {
         });
     }
 
+    /** Conjura magia em criatura — combate autoritativo (spell system). */
+    sendCastSpell(
+        spellId: string,
+        creatureId: string,
+        mapId: string,
+        instanceId?: string | null
+    ): void {
+        if (!this.isConnected()) return;
+        this.send({
+            type: 'cast_spell',
+            v: PROTOCOL_VERSION,
+            spellId,
+            creatureId,
+            mapId,
+            instanceId: instanceId ?? this.networkInstanceId ?? undefined,
+        });
+    }
+
     sendProgressSync(level: number, experience: number): void {
         if (!this.isConnected()) return;
         this.send({
@@ -218,6 +245,18 @@ export class GameNetClient {
     requestRoomResync(): void {
         if (!this.isConnected()) return;
         this.send({ type: 'resync_request', v: PROTOCOL_VERSION });
+    }
+
+    sendChat(channel: ChatPlayerChannel, text: string): void {
+        if (!this.isConnected()) return;
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        this.send({
+            type: 'chat_send',
+            v: PROTOCOL_VERSION,
+            channel,
+            text: trimmed,
+        });
     }
 
     connect(): void {
@@ -583,7 +622,14 @@ export class GameNetClient {
                 break;
             case 'error':
                 console.warn(`[GameNet] ${msg.code}: ${msg.message}`);
-                this.options.onServerError?.({ code: msg.code, message: msg.message });
+                this.options.onServerError?.({
+                    code: msg.code,
+                    message: msg.message,
+                    retryAfterMs: msg.retryAfterMs,
+                });
+                break;
+            case 'chat_message':
+                this.options.onChatMessage?.(msg);
                 break;
             case 'pong':
                 break;
@@ -616,6 +662,14 @@ export class GameNetClient {
                     maxHealth: msg.maxHealth,
                     damage: msg.damage,
                     attackerPlayerId: msg.attackerPlayerId,
+                });
+                break;
+            case 'attack_miss':
+                this.options.onAttackMiss?.({
+                    creatureId: msg.creatureId,
+                    mapId: msg.mapId,
+                    instanceId: msg.instanceId,
+                    code: msg.code,
                 });
                 break;
             case 'creature_died':

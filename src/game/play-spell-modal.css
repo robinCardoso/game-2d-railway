@@ -1,0 +1,651 @@
+/**
+ * Modal Magias — conceito A (lista + detalhe), desktop e mobile.
+ */
+
+.play-panel--spells {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.play-panel--spells .play-panel-body {
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.play-panel--spells .play-panel-header h2 {
+    font-family: 'Cinzel', 'Palatino Linotype', Palatino, Georgia, serif;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: #f8fafc;
+    text-transform: none;
+}
+
+.play-panel--spells .play-panel-close {
+    border-color: rgba(251, 191, 36, 0.35);
+    color: #fcd34d;
+}
+
+.play-spell-modal {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+/* Slots equipados (topo) */
+.play-spell-modal__slots {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.15);
+    flex-shrink: 0;
+}
+
+.play-spell-modal__slot {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 6px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: #1a1d24;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    color: inherit;
+    min-width: 0;
+}
+
+.play-spell-modal__slot:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: #1e2229;
+}
+
+.play-spell-modal__slot.is-target {
+    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(251, 191, 36, 0.04);
+    box-shadow: none;
+}
+
+.play-spell-modal__slot.is-target::after {
+    content: '';
+    position: absolute;
+    left: 14%;
+    right: 14%;
+    bottom: 0;
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+    background: linear-gradient(90deg, rgba(251, 191, 36, 0.15), #fbbf24 35%, #fcd34d 50%, #fbbf24 65%, rgba(251, 191, 36, 0.15));
+    box-shadow: 0 0 10px rgba(251, 191, 36, 0.45);
+}
+
+.play-spell-modal__slot-badge {
+    font-size: 10px;
+    font-weight: 800;
+    color: #94a3b8;
+    line-height: 1;
+}
+
+.play-spell-modal__slot.is-target .play-spell-modal__slot-badge {
+    color: #fcd34d;
+}
+
+.play-spell-modal__slot-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 28%, #2a3140 0%, #141820 72%);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.play-spell-modal__slot-icon img {
+    width: 26px;
+    height: 26px;
+    object-fit: contain;
+}
+
+.play-spell-modal__slot-name {
+    font-size: 10px;
+    font-weight: 600;
+    color: #e2e8f0;
+    text-align: center;
+    line-height: 1.2;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.play-spell-modal__slot-meta {
+    font-size: 9px;
+    color: #64748b;
+}
+
+/* Área principal lista + detalhe */
+.play-spell-modal__main {
+    display: grid;
+    grid-template-columns: minmax(0, 42%) minmax(0, 58%);
+    flex: 1;
+    min-height: 0;
+}
+
+.play-spell-modal__list-pane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.play-spell-modal__list-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 2;
+}
+
+.play-spell-modal__list-head h3 {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #94a3b8;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.play-spell-modal__filter-wrap {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.play-spell-modal__filter-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border-radius: 9px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    color: #cbd5e1;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.play-spell-modal__filter-btn img,
+.play-spell-modal__filter-icon {
+    display: block;
+    width: 18px;
+    height: 18px;
+    opacity: 0.9;
+}
+
+.play-spell-modal__filter-btn:hover {
+    border-color: rgba(251, 191, 36, 0.4);
+    color: #fcd34d;
+    background: rgba(251, 191, 36, 0.08);
+}
+
+.play-spell-modal__filter-btn.is-active {
+    border-color: rgba(251, 191, 36, 0.55);
+    color: #fcd34d;
+    background: rgba(251, 191, 36, 0.1);
+    box-shadow: 0 0 10px rgba(251, 191, 36, 0.15);
+}
+
+.play-spell-modal__filter-btn.is-open {
+    border-color: #fbbf24;
+    color: #fcd34d;
+    background: rgba(251, 191, 36, 0.12);
+}
+
+.play-spell-modal__filter-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 5;
+    min-width: 132px;
+    padding: 6px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #1a1d24;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+.play-spell-modal__filter-menu button {
+    display: block;
+    width: 100%;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: #cbd5e1;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+
+.play-spell-modal__filter-menu button:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #f8fafc;
+}
+
+.play-spell-modal__filter-menu button[aria-selected='true'] {
+    background: rgba(251, 191, 36, 0.12);
+    color: #fcd34d;
+}
+
+.play-spell-modal__list {
+    overflow-y: auto;
+    padding: 8px;
+    flex: 1;
+    min-height: 0;
+    -webkit-overflow-scrolling: touch;
+}
+
+.play-spell-modal__list-item {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 8px;
+    margin-bottom: 6px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: #181b22;
+    text-align: left;
+    cursor: pointer;
+    color: inherit;
+    transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.play-spell-modal__list-item:hover:not(:disabled) {
+    border-color: rgba(251, 191, 36, 0.35);
+}
+
+.play-spell-modal__list-item.is-selected {
+    border-color: #fbbf24;
+    background: rgba(251, 191, 36, 0.08);
+}
+
+.play-spell-modal__list-item.is-locked {
+    opacity: 0.55;
+}
+
+.play-spell-modal__list-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #0f1218;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.play-spell-modal__list-icon img {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+}
+
+.play-spell-modal__list-body {
+    min-width: 0;
+    overflow: hidden;
+}
+
+.play-spell-modal__list-body strong {
+    display: block;
+    font-size: 12px;
+    color: #f1f5f9;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.play-spell-modal__list-body small {
+    display: block;
+    margin-top: 2px;
+    font-size: 10px;
+    color: #94a3b8;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.play-spell-modal__status {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 4px 7px;
+    border-radius: 999px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.play-spell-modal__status--ok {
+    background: rgba(34, 197, 94, 0.15);
+    color: #86efac;
+    border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.play-spell-modal__status--lock {
+    background: rgba(100, 116, 139, 0.15);
+    color: #94a3b8;
+    border: 1px solid rgba(100, 116, 139, 0.25);
+}
+
+/* Detalhe */
+.play-spell-modal__detail-pane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+    padding: 14px 16px 16px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    box-sizing: border-box;
+}
+
+.play-spell-modal__back {
+    display: none;
+    align-self: flex-start;
+    margin-bottom: 10px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid #3d4450;
+    background: #1e2229;
+    color: #cbd5e1;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.play-spell-modal__detail-empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: #64748b;
+    font-size: 13px;
+    padding: 24px;
+}
+
+.play-spell-modal__detail-hero {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    margin-bottom: 14px;
+    min-width: 0;
+}
+
+.play-spell-modal__detail-title {
+    min-width: 0;
+    flex: 1;
+}
+
+.play-spell-modal__detail-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at 35% 28%, #2a3140 0%, #141820 72%);
+    border: 2px solid rgba(251, 191, 36, 0.35);
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.12);
+}
+
+.play-spell-modal__detail-icon img {
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+}
+
+.play-spell-modal__detail-title h4 {
+    margin: 0 0 6px;
+    font-family: 'Cinzel', 'Palatino Linotype', Palatino, Georgia, serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: #f8fafc;
+    letter-spacing: 0.02em;
+}
+
+.play-spell-modal__detail-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.play-spell-modal__detail-tags span {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #cbd5e1;
+}
+
+.play-spell-modal__detail-tags .is-unlocked {
+    background: rgba(34, 197, 94, 0.15);
+    color: #86efac;
+}
+
+.play-spell-modal__detail-summary {
+    font-size: 11px;
+    color: #94a3b8;
+    overflow-wrap: anywhere;
+}
+
+.play-spell-modal__detail-desc {
+    margin: 0 0 14px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #cbd5e1;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.play-spell-modal__stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.play-spell-modal__stat {
+    padding: 10px 8px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    text-align: center;
+}
+
+.play-spell-modal__stat-label {
+    display: block;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+    margin-bottom: 4px;
+}
+
+.play-spell-modal__stat-value {
+    font-size: 15px;
+    font-weight: 700;
+    color: #f1f5f9;
+}
+
+.play-spell-modal__equip-btn {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 14px 16px;
+    border: 0;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #fbbf24 0%, #d97706 100%);
+    color: #1a1208;
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(251, 191, 36, 0.25);
+    transition: transform 0.12s ease, opacity 0.15s ease;
+    margin-top: auto;
+}
+
+.play-spell-modal__equip-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+.play-spell-modal__equip-btn:active:not(:disabled) {
+    transform: scale(0.98);
+}
+
+.play-spell-modal__equip-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.play-spell-modal__hint-bar {
+    padding: 8px 14px;
+    font-size: 10px;
+    color: #64748b;
+    text-align: center;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    flex-shrink: 0;
+}
+
+/* Link no painel personagem */
+.play-spell-open-btn {
+    width: 100%;
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    background: rgba(251, 191, 36, 0.08);
+    color: #fcd34d;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.play-spell-open-btn:hover {
+    background: rgba(251, 191, 36, 0.14);
+    border-color: #fbbf24;
+}
+
+@media (min-width: 769px) {
+    .play-panel.play-panel--spells {
+        width: min(860px, calc(100vw - 44px));
+        max-height: min(640px, calc(100dvh - 110px));
+    }
+
+    .play-spell-modal__main {
+        min-height: 360px;
+    }
+}
+
+@media (max-width: 768px) {
+    .play-panel--spells {
+        max-height: min(92dvh, 720px);
+        width: 100%;
+    }
+
+    .play-spell-modal__slots {
+        padding: 10px 12px;
+        gap: 6px;
+    }
+
+    .play-spell-modal__slot-icon {
+        width: 38px;
+        height: 38px;
+    }
+
+    .play-spell-modal__slot-icon img {
+        width: 22px;
+        height: 22px;
+    }
+
+    .play-spell-modal__main {
+        grid-template-columns: 1fr;
+        position: relative;
+    }
+
+    .play-spell-modal__list-pane {
+        border-right: 0;
+    }
+
+    .play-spell-modal__detail-pane {
+        display: none;
+        position: absolute;
+        inset: 0;
+        background: #15171c;
+        z-index: 2;
+        padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+    }
+
+    .play-spell-modal__main.is-detail-view .play-spell-modal__detail-pane {
+        display: flex;
+    }
+
+    .play-spell-modal__main.is-detail-view .play-spell-modal__list-pane {
+        visibility: hidden;
+        pointer-events: none;
+    }
+
+    .play-spell-modal__back {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .play-spell-modal__stats {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 380px) {
+    .play-spell-modal__slot-name {
+        font-size: 9px;
+    }
+
+    .play-spell-modal__list-item {
+        grid-template-columns: 36px 1fr auto;
+    }
+}

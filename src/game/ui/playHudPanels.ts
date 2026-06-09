@@ -1,4 +1,4 @@
-export type PlayPanelName = 'character' | 'inventory' | 'settings' | 'map' | 'chat';
+export type PlayPanelName = 'character' | 'inventory' | 'settings' | 'map' | 'spells';
 
 type PanelOpenListener = (name: PlayPanelName) => void;
 
@@ -39,7 +39,17 @@ export function initPlayHudPanels(): void {
         document.body.classList.remove('play-panel-open');
     };
 
+    const closeHudMenu = (): void => {
+        const dropdown = document.getElementById('playHudMenuDropdown');
+        const menuBtn = document.getElementById('playHudMenuBtn');
+        if (!dropdown || dropdown.hidden) return;
+        dropdown.hidden = true;
+        menuBtn?.setAttribute('aria-expanded', 'false');
+        menuBtn?.classList.remove('is-active');
+    };
+
     const openPanel = (name: PlayPanelName): void => {
+        closeHudMenu();
         closePanels();
 
         const panel = document.querySelector<HTMLElement>(`[data-panel-name="${name}"]`);

@@ -39,6 +39,12 @@ export interface PlayCombatServerBridge {
     /** Quando true, XP/dano local não são aplicados — só o servidor. */
     multiplayerConfigured: boolean;
     sendAttack: (creatureId: string) => void;
+    /** Tile autoritativo do mob (serverTiles) — ignora pé interpolado no deslize. */
+    getCreatureAuthoritativeTile?: (
+        creatureId: string
+    ) => { tileX: number; tileY: number; z: number } | null;
+    /** SPELL_SYSTEM_TODO: reconciliar mana com servidor após cast. */
+    sendCastSpell?: (spellId: string, creatureId: string) => void;
 }
 
 export interface PlayCombatCamera {
@@ -55,13 +61,23 @@ export interface CombatTarget {
 }
 
 let attackCooldownUntil = 0;
+let lastAttackCooldownMs = DEFAULT_ATTACK_COOLDOWN_MS;
 let combatTarget: CombatTarget | null = null;
 let hoveredMonsterId: string | null = null;
 
 export function resetPlayCombatInput(): void {
     attackCooldownUntil = 0;
+    lastAttackCooldownMs = DEFAULT_ATTACK_COOLDOWN_MS;
     combatTarget = null;
     hoveredMonsterId = null;
+}
+
+/** Progresso do cooldown do ataque básico (0–1 restante) para o hub de combate. */
+export function getPlayAttackCooldownProgress(nowMs: number): { active: boolean; percent: number } {
+    if (nowMs >= attackCooldownUntil) return { active: false, percent: 0 };
+    const total = Math.max(1, lastAttackCooldownMs);
+    const remaining = attackCooldownUntil - nowMs;
+    return { active: true, percent: Math.min(1, remaining / total) };
 }
 
 export function getPlayCombatHoverId(): string | null {
@@ -255,17 +271,41 @@ function getPlayerAttackCooldownMs(
     return Math.max(200, stats.attackSpeed || DEFAULT_ATTACK_COOLDOWN_MS);
 }
 
+/** Tile do mob para alcance — MP usa tile autoritativo; SP usa pé visual. */
+export function resolveMonsterTileForAttackRange(
+    target: GameEntity,
+    authoritativeTile?: { tileX: number; tileY: number; z: number } | null
+): { tileX: number; tileY: number; z: number } {
+    if (authoritativeTile) {
+        return authoritativeTile;
+    }
+    const foot = target.getFootTile(ENGINE_CONFIG.TILE_SIZE);
+    return { tileX: foot.tileX, tileY: foot.tileY, z: target.worldZ };
+}
+
+function resolveAuthoritativeMonsterTile(
+    target: GameEntity,
+    server?: PlayCombatServerBridge
+): { tileX: number; tileY: number; z: number } {
+    if (server?.multiplayerConfigured && server.getCreatureAuthoritativeTile) {
+        const auth = server.getCreatureAuthoritativeTile(target.id);
+        if (auth) return auth;
+    }
+    return resolveMonsterTileForAttackRange(target);
+}
+
 function isAdjacentToPlayer(
     target: GameEntity,
     player: PlayCombatPlayer,
-    character: CharacterRow
+    character: CharacterRow,
+    server?: PlayCombatServerBridge
 ): boolean {
-    const foot = target.getFootTile(ENGINE_CONFIG.TILE_SIZE);
+    const mobTile = resolveAuthoritativeMonsterTile(target, server);
     const vocationId = (character.vocation as VocationId) || 'knight';
     const profile = resolvePlayerAttackProfile(vocationId, getVocationById(vocationId));
     return isPlayerInAttackRange(
         { tileX: player.tileX, tileY: player.tileY, z: player.worldZ },
-        { tileX: foot.tileX, tileY: foot.tileY, z: target.worldZ },
+        { tileX: mobTile.tileX, tileY: mobTile.tileY, z: mobTile.z },
         profile
     );
 }
@@ -309,6 +349,7 @@ function executeAttack(
     }
 ): void {
     const cooldownMs = getPlayerAttackCooldownMs(options.character, options.characterSpeed);
+    lastAttackCooldownMs = cooldownMs;
     attackCooldownUntil = options.nowMs + cooldownMs;
     options.callbacks.faceToward(target);
     options.callbacks.onAttackSwing?.();
@@ -316,14 +357,8 @@ function executeAttack(
     if (options.server?.multiplayerConfigured) {
         if (options.server.wsConnected) {
             options.server.sendAttack(target.id);
-            const predicted = resolvePredictedMeleeDamage(
-                options.character,
-                options.characterSpeed,
-                target
-            );
-            if (predicted > 0) {
-                options.callbacks.onDamage(target, predicted);
-            }
+        } else {
+            options.callbacks.onDamage(target, 0);
         }
         return;
     }
@@ -397,6 +432,7 @@ export function tickPlayCombat(options: {
         }
 
         const cooldownMs = getPlayerAttackCooldownMs(options.character, options.characterSpeed);
+        lastAttackCooldownMs = cooldownMs;
         attackCooldownUntil = options.nowMs + cooldownMs;
 
         options.callbacks.onAttackSwing?.();
@@ -415,7 +451,57 @@ export function tickPlayCombat(options: {
     }
 
     if (options.nowMs < attackCooldownUntil || options.stepping) return;
-    if (!isAdjacentToPlayer(target, options.player, options.character)) return;
+    if (!isAdjacentToPlayer(target, options.player, options.character, options.server)) return;
 
     executeAttack(target, options);
+}
+
+/** Dispara um ataque básico manual (botão do hub) — reutiliza alvo e cooldown existentes. */
+export function requestPlayBasicAttack(options: {
+    nowMs: number;
+    npcs: GameEntity[];
+    player: PlayCombatPlayer;
+    character: CharacterRow;
+    characterSpeed: CharacterSpeedState;
+    callbacks: PlayCombatCallbacks;
+    server?: PlayCombatServerBridge;
+    remotes?: PlayCombatTargetable[];
+}): boolean {
+    if (!combatTarget) return false;
+    if (options.nowMs < attackCooldownUntil) return false;
+
+    if (combatTarget.type === 'player') {
+        const target = options.remotes?.find((r) => r.id === combatTarget!.id);
+        if (!target || target.z !== options.player.worldZ) return false;
+
+        const vocationId = (options.character.vocation as VocationId) || 'knight';
+        const attackProfile = resolvePlayerAttackProfile(vocationId, getVocationById(vocationId));
+        if (
+            !isPlayerInAttackRange(
+                { tileX: options.player.tileX, tileY: options.player.tileY, z: options.player.worldZ },
+                { tileX: target.tileX, tileY: target.tileY, z: target.z },
+                attackProfile
+            )
+        ) {
+            return false;
+        }
+
+        const cooldownMs = getPlayerAttackCooldownMs(options.character, options.characterSpeed);
+        lastAttackCooldownMs = cooldownMs;
+        attackCooldownUntil = options.nowMs + cooldownMs;
+        options.callbacks.faceToward(target);
+        options.callbacks.onAttackSwing?.();
+
+        if (options.server?.multiplayerConfigured && options.server.wsConnected) {
+            options.server.sendAttack(combatTarget.id);
+        }
+        return true;
+    }
+
+    const target = resolveCombatTarget(options.npcs);
+    if (!target) return false;
+    if (!isAdjacentToPlayer(target, options.player, options.character, options.server)) return false;
+
+    executeAttack(target, options);
+    return true;
 }
