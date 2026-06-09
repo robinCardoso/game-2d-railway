@@ -18,6 +18,7 @@
     "../src/game-data/itemCatalogTypes.ts",
     "../src/engine/character/calculateStats.ts",
     "../src/engine/combat/calculateDamage.ts",
+    "../src/character/characterSpriteTypes.ts",
     "../src/character/characterCalibration.ts"
   ],
   "exclude": [

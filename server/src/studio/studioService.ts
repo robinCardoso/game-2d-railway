@@ -8,6 +8,7 @@ import {
     serializeCharacterCalibration,
     stripCalibrationFromConfig,
 } from '../../../src/character/characterCalibration.js';
+import type { CharacterSpriteConfig } from '../../../src/character/characterSpriteTypes.js';
 import { sanitizeCreaturePresetEntry } from '../../../src/game-data/mobPresetTypes.js';
 import { sanitizeItemCatalogDocument, findUnknownLootItemIds } from '../../../src/game-data/itemCatalogTypes.js';
 import { paths } from '../config/paths.js';
@@ -191,7 +192,7 @@ export class StudioService {
         const jsonFiles = getJsonFiles(charactersDir);
         const folders = getSubdirectories(charactersDir, charactersDir);
         const characters = jsonFiles.map((filePath) => {
-            let content = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as import('../../../src/character/spriteAnimation.js').CharacterSpriteConfig;
+            let content = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as CharacterSpriteConfig;
             const calPath = calibrationPathFromConfigPath(filePath);
             if (fs.existsSync(calPath)) {
                 try {
@@ -561,7 +562,7 @@ export class StudioService {
         configJson.spriteSheetUrl = spriteSheetUrl;
         const mainJsonPath = path.join(targetDir, `${filename}.json`);
         const calibrationJsonPath = path.join(targetDir, `${filename}.calibration.json`);
-        const fullConfig = configJson as import('../../../src/character/spriteAnimation.js').CharacterSpriteConfig;
+        const fullConfig = configJson as unknown as CharacterSpriteConfig;
         let identityOnly: Record<string, unknown>;
         try {
             const calibrationDoc = extractCalibrationFromConfig(fullConfig);

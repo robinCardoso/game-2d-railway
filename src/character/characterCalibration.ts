@@ -1,4 +1,4 @@
-import type { AnimationDef, CharacterSpriteConfig } from './spriteAnimation';
+import type { AnimationDef, CharacterSpriteConfig } from './characterSpriteTypes.js';
 
 /** Versão do schema — incrementar apenas com migração explícita. */
 export const CHARACTER_CALIBRATION_SCHEMA_VERSION = 1;

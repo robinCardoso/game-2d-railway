@@ -1,9 +1,20 @@
 import { removeChromaKey } from '../utils/imageProcessor';
 import { resolveAnimationSourceRect } from './sheetFrameLayout';
 import { resolveApiUrl } from '../shared/apiUrl';
+import type {
+    AnimationDef,
+    CharacterSpriteConfig,
+    CharacterState,
+    Direction,
+} from './characterSpriteTypes';
 
-export type CharacterState = 'idle' | 'walk' | 'attack' | 'sit' | 'dead' | 'cast';
-export type Direction = 'up' | 'down' | 'left' | 'right';
+export type {
+    AnimationEvent,
+    AnimationDef,
+    CharacterSpriteConfig,
+    CharacterState,
+    Direction,
+} from './characterSpriteTypes';
 
 const DIRECTION_FALLBACK_ORDER: Direction[] = ['right', 'left', 'down', 'up'];
 
@@ -18,44 +29,6 @@ export function resolveSpriteDirectionForState(
         if (config.animations[`${state}_${dir}`]) return dir;
     }
     return preferred;
-}
-
-export interface AnimationEvent {
-    frameIndex: number;
-    action: 'sound' | 'effect';
-    parameter: string; // Ex: 'footstep', 'slash', 'cast'
-}
-
-export interface AnimationDef {
-    row: number;
-    frames: number;
-    speedFps: number;
-    loop: boolean;
-    startFrame?: number; // Frame/Coluna onde a animação inicia na linha
-    events?: AnimationEvent[]; // Eventos vinculados a frames específicos
-}
-
-export interface CharacterSpriteConfig {
-    name: string;
-    spriteSheetUrl: string;
-    frameWidth: number;
-    frameHeight: number;
-    defaultDirection: Direction;
-    animations: Record<string, AnimationDef>;
-    offsetX?: number; // Margem inicial na horizontal (X)
-    offsetY?: number; // Margem inicial na vertical (Y)
-    gapX?: number;    // Espaçamento horizontal entre colunas de frames
-    gapY?: number;    // Espaçamento vertical entre linhas de frames
-    anchorX?: number; // Ajuste fino de âncora/renderização no mapa (X)
-    anchorY?: number; // Ajuste fino de âncora/renderização no mapa (Y)
-    /** Âncora Y extra quando morto (corpo/esqueleto no chão). */
-    corpseAnchorY?: number;
-    /** Escala visual no tile; movimento/colisão permanecem no grid da engine. */
-    drawScale?: number;
-    chromaKey?: boolean; // Se ativo, remove o fundo rosa (#FF00FF)
-    chromaKeyTolerance?: number; // Tolerância de remoção de cor (10 a 180)
-    sheetLayout?: 'horizontal' | 'vertical'; // Orientação da spritesheet
-    category?: string; // Subpasta/categoria de organização
 }
 
 export class SpriteAnimationController {
