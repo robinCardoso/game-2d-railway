@@ -104,6 +104,7 @@ export function createStudioRouter(): Router {
 
     router.get('/get-item-catalog', wrap(() => studioService.getItemCatalog()));
     router.post('/save-item-catalog', wrap((req) => studioService.saveItemCatalog(req.body ?? {})));
+    router.post('/save-item-icon', wrap((req) => studioService.saveItemIcon(req.body ?? {})));
 
     return router;
 }

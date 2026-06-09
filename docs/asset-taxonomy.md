@@ -6,7 +6,8 @@ Guia rápido para **onde colocar PNGs**, **quais metadados usar** e **como evita
 
 | Pasta | Registry | Uso |
 |-------|----------|-----|
-| `tiles/maps/**` | Sim | Chão, grama, bordas, natureza, paredes, itens |
+| `tiles/maps/**` | Sim | Chão, grama, bordas, natureza, paredes, decoração (`maps/items/`) |
+| `tiles/items/**` | **Não** | Ícones de inventário (`items/icons/`) — ver [item-sprite-pipeline.md](item-sprite-pipeline.md) |
 | `tiles/effects/**` | **Não** | FX de combate/UI — fetch direto (ex. `target_ring.json`) |
 | `tiles/characters/**` | **Não** | Outfits e sprites de criaturas |
 

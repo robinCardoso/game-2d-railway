@@ -68,9 +68,19 @@ function isEffectsTilePath(path: string): boolean {
     return pathNorm.includes('/effects/');
 }
 
-/** Paths que nunca entram no registry de mapa (personagens, FX). */
+/** Ícones de inventário (`tiles/items/**`) — fetch dedicado; não confundir com `tiles/maps/items/`. */
+function isGameplayItemTilePath(path: string): boolean {
+    const pathNorm = path.replace(/\\/g, '/').toLowerCase();
+    return pathNorm.includes('/tiles/items/');
+}
+
+/** Paths que nunca entram no registry de mapa (personagens, FX, ícones de item). */
 export function isExcludedFromTileRegistry(path: string): boolean {
-    return isCharacterTilePath(path) || isEffectsTilePath(path);
+    return (
+        isCharacterTilePath(path) ||
+        isEffectsTilePath(path) ||
+        isGameplayItemTilePath(path)
+    );
 }
 
 /** Filtro unificado sync + async: exclusão de path + metadados em tile_properties. */

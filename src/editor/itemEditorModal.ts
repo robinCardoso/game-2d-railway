@@ -7,8 +7,10 @@ import {
     type ItemCatalogEntry,
     type ItemCategory,
 } from '../game-data/itemCatalogTypes';
+import { defaultItemIconUrl } from '../../shared/itemSprite';
 import { apiFetch } from '../shared/apiFetch';
 import { toast, popup } from '../utils/popup';
+import { initItemSpriteCalibrator, openItemSpriteCalibrator } from './itemSpriteCalibrator';
 
 let catalog: ItemCatalogDocument = { items: [] };
 let activeItemId: string | null = null;
@@ -51,9 +53,26 @@ export function initItemEditor(): void {
         };
     }
 
+    document.getElementById('itemOpenSpriteCalibratorBtn')?.addEventListener('click', () => {
+        if (!activeItemId) {
+            toast.error('Salve o item no catálogo antes de calibrar o sprite.');
+            return;
+        }
+        const item = catalog.items.find((i) => i.id === activeItemId);
+        if (!item) return;
+        void openItemSpriteCalibrator(item, () => void reloadItemCatalog(activeItemId));
+    });
+
+    initItemSpriteCalibrator();
+
     confirmBtn.onclick = async () => {
         const draft = readDraftFromForm();
         if (!draft) return;
+
+        if (draft.implemented && !draft.sprite?.iconUrl) {
+            toast.error('Calibre e salve o sprite antes de marcar Implementado.');
+            return;
+        }
 
         const previousId = activeItemId;
         const idx = catalog.items.findIndex((i) => i.id === (previousId ?? draft.id));
@@ -145,7 +164,30 @@ function readDraftFromForm(): ItemCatalogEntry | null {
         toast.error('ID e nome são obrigatórios.');
         return null;
     }
+
+    const preserved = catalog.items.find(
+        (i) => i.id === activeItemId || i.id === entry.id
+    );
+    if (preserved?.sprite) {
+        entry.sprite = preserved.sprite;
+    }
+
     return entry;
+}
+
+async function reloadItemCatalog(selectId: string | null): Promise<void> {
+    try {
+        const res = await apiFetch('/api/get-item-catalog');
+        if (!res.ok) return;
+        const data = (await res.json()) as { catalog?: ItemCatalogDocument };
+        catalog = data.catalog ?? { items: [] };
+        applyItemCatalogDocument(catalog);
+        dispatchItemCatalogUpdated(catalog);
+        renderItemList();
+        if (selectId) selectItem(selectId);
+    } catch {
+        /* ignore */
+    }
 }
 
 async function saveCatalog(selectIdAfter: string): Promise<void> {
@@ -208,8 +250,25 @@ function renderItemList(): void {
         row.style.alignItems = 'center';
         row.style.gap = '8px';
 
+        const thumb = document.createElement('img');
+        thumb.width = 24;
+        thumb.height = 24;
+        thumb.style.imageRendering = 'pixelated';
+        thumb.style.borderRadius = '4px';
+        thumb.style.background = '#0f1115';
+        thumb.style.flexShrink = '0';
+        const iconUrl = item.sprite?.iconUrl ?? defaultItemIconUrl(item.id);
+        thumb.src = `/${iconUrl}?t=${Date.now()}`;
+        thumb.alt = '';
+        thumb.onerror = () => {
+            thumb.style.opacity = '0.25';
+        };
+        row.appendChild(thumb);
+
         const label = document.createElement('span');
         label.textContent = item.name;
+        label.style.flex = '1';
+        label.style.minWidth = '0';
         row.appendChild(label);
 
         const badge = document.createElement('span');
@@ -217,11 +276,20 @@ function renderItemList(): void {
         badge.style.opacity = '0.85';
         badge.style.padding = '2px 6px';
         badge.style.borderRadius = '999px';
-        badge.style.background = item.implemented
-            ? 'rgba(16, 185, 129, 0.25)'
-            : 'rgba(251, 191, 36, 0.2)';
-        badge.style.color = item.implemented ? '#6ee7b7' : '#fcd34d';
-        badge.textContent = item.implemented ? 'OK' : 'rascunho';
+        badge.style.flexShrink = '0';
+        if (item.implemented) {
+            badge.style.background = 'rgba(16, 185, 129, 0.25)';
+            badge.style.color = '#6ee7b7';
+            badge.textContent = 'OK';
+        } else if (item.sprite?.iconUrl) {
+            badge.style.background = 'rgba(99, 102, 241, 0.2)';
+            badge.style.color = '#a5b4fc';
+            badge.textContent = 'com arte';
+        } else {
+            badge.style.background = 'rgba(251, 191, 36, 0.2)';
+            badge.style.color = '#fcd34d';
+            badge.textContent = 'rascunho';
+        }
         row.appendChild(badge);
 
         row.onclick = () => selectItem(item.id);
@@ -243,6 +311,7 @@ function selectItem(id: string | null): void {
         }
         if (deleteBtn) deleteBtn.style.display = 'none';
         resetForm();
+        syncSpriteCalibratorButton();
         return;
     }
 
@@ -272,6 +341,12 @@ function selectItem(id: string | null): void {
         item.description ?? '';
     (document.getElementById('itemImplementedCheck') as HTMLInputElement).checked = item.implemented;
     syncSlotFieldVisibility();
+    syncSpriteCalibratorButton();
+}
+
+function syncSpriteCalibratorButton(): void {
+    const btn = document.getElementById('itemOpenSpriteCalibratorBtn') as HTMLButtonElement | null;
+    if (btn) btn.disabled = !activeItemId;
 }
 
 function resetForm(): void {

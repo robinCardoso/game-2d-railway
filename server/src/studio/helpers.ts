@@ -34,6 +34,11 @@ export function mapsTilesDir(p: AppPaths = paths): string {
     return path.join(p.tilesDir, 'maps');
 }
 
+/** Ícones de inventário — `tiles/items/icons/` (fora do tile registry). */
+export function itemIconsDir(p: AppPaths = paths): string {
+    return path.join(p.tilesDir, 'items', 'icons');
+}
+
 export function resolveTilesRelative(relative: string, p: AppPaths = paths): string {
     const clean = relative.replace(/^tiles\//, '');
     return path.join(p.tilesDir, clean);

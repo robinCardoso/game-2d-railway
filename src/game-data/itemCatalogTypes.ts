@@ -1,5 +1,12 @@
 /** Tipos do catálogo de itens (`public/item_catalog.json`). */
 
+import {
+    sanitizeItemSpriteCalibration,
+    type ItemSpriteCalibration,
+} from '../../shared/itemSprite.js';
+
+export type { ItemSpriteCalibration };
+
 export type EquipmentSlot =
     | 'head'
     | 'body'
@@ -36,6 +43,8 @@ export interface ItemCatalogEntry {
      * true = pronto para gameplay (quando implementado).
      */
     implemented: boolean;
+    /** Ícone de inventário — `tiles/items/icons/` (fora do tile registry). */
+    sprite?: ItemSpriteCalibration;
 }
 
 export interface ItemCatalogDocument {
@@ -81,7 +90,9 @@ export function sanitizeItemCatalogEntry(raw: unknown): ItemCatalogEntry | null 
         return Number.isFinite(n) ? Math.floor(n) : undefined;
     };
 
-    return {
+    const sprite = sanitizeItemSpriteCalibration(row.sprite, id);
+
+    const entry: ItemCatalogEntry = {
         id,
         name,
         category,
@@ -92,6 +103,8 @@ export function sanitizeItemCatalogEntry(raw: unknown): ItemCatalogEntry | null 
         description: typeof row.description === 'string' ? row.description.trim() : undefined,
         implemented: row.implemented === true,
     };
+    if (sprite) entry.sprite = sprite;
+    return entry;
 }
 
 export function sanitizeItemCatalogDocument(raw: unknown): ItemCatalogDocument {

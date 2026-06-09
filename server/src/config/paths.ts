@@ -84,6 +84,7 @@ function seedDataRoot(dataRoot: string): void {
 
     // FX/UI read-only: merge subpastas novas do repo sem sobrescrever o volume
     copyDirRecursive(path.join(repoTiles, 'effects'), path.join(dataTiles, 'effects'));
+    copyDirRecursive(path.join(repoTiles, 'items'), path.join(dataTiles, 'items'));
 
     const publicFiles = [
         'tile_catalog.json',

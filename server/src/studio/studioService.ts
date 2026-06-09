@@ -11,6 +11,11 @@ import {
 import type { CharacterSpriteConfig } from '../../../src/character/characterSpriteTypes.js';
 import { sanitizeCreaturePresetEntry } from '../../../src/game-data/mobPresetTypes.js';
 import { sanitizeItemCatalogDocument, findUnknownLootItemIds } from '../../../src/game-data/itemCatalogTypes.js';
+import {
+    defaultItemIconUrl,
+    sanitizeItemSpriteCalibration,
+    validateItemCatalogDocument,
+} from '../../../shared/itemSprite.js';
 import { paths } from '../config/paths.js';
 import { invalidateServerItemCatalogCache } from '../game/itemCatalogStore.js';
 import { refreshServerMapEntry } from '../mapRegistry.js';
@@ -36,6 +41,7 @@ import {
     normalizeMapSpriteFileKey,
     readAutoBorderManifest,
     resolveMapSpriteFileKey,
+    itemIconsDir,
     resolveTilesRelative,
     sanitizeMapSaveFilename,
     sanitizeMapSpriteFilename,
@@ -808,10 +814,71 @@ export const VOCATIONS: Record<string, VocationConfig> = ${JSON.stringify(vocati
 
     saveItemCatalog(body: Record<string, unknown>): ApiResult {
         const catalog = sanitizeItemCatalogDocument(body.catalog ?? body);
+        const validation = validateItemCatalogDocument(catalog, {
+            iconFileExists: (iconUrl) => fs.existsSync(resolveTilesRelative(iconUrl)),
+        });
+        if (!validation.ok) {
+            return { status: 400, body: { error: validation.errors.join(' ') } };
+        }
         fs.mkdirSync(path.dirname(paths.itemCatalogPath), { recursive: true });
         fs.writeFileSync(paths.itemCatalogPath, JSON.stringify(catalog, null, 2) + '\n');
         invalidateServerItemCatalogCache();
         return { status: 200, body: { success: true, catalog } };
+    }
+
+    saveItemIcon(body: Record<string, unknown>): ApiResult {
+        const itemId = typeof body.itemId === 'string' ? body.itemId.trim() : '';
+        if (!itemId || !/^[a-z0-9_]+$/.test(itemId)) {
+            return { status: 400, body: { error: 'itemId inválido (use slug a-z0-9_).' } };
+        }
+
+        const spriteBase64 = body.spriteBase64;
+        if (!spriteBase64 || !String(spriteBase64).startsWith('data:image/png;base64,')) {
+            return { status: 400, body: { error: 'spriteBase64 PNG obrigatório.' } };
+        }
+
+        let rawCatalog: unknown = { items: [] };
+        if (fs.existsSync(paths.itemCatalogPath)) {
+            try {
+                rawCatalog = JSON.parse(fs.readFileSync(paths.itemCatalogPath, 'utf-8'));
+            } catch {
+                rawCatalog = { items: [] };
+            }
+        }
+        const catalog = sanitizeItemCatalogDocument(rawCatalog);
+        const idx = catalog.items.findIndex((i) => i.id === itemId);
+        if (idx < 0) {
+            return {
+                status: 404,
+                body: { error: `Item "${itemId}" não encontrado. Salve o cadastro antes do sprite.` },
+            };
+        }
+
+        const sprite =
+            sanitizeItemSpriteCalibration(body.sprite ?? {}, itemId) ?? {
+                iconUrl: defaultItemIconUrl(itemId),
+                frameWidth: 32,
+                frameHeight: 32,
+                gridCols: 1,
+                gridRows: 1,
+            };
+
+        const targetDir = itemIconsDir();
+        fs.mkdirSync(targetDir, { recursive: true });
+        const imageBuffer = Buffer.from(
+            String(spriteBase64).replace(/^data:image\/png;base64,/, ''),
+            'base64'
+        );
+        fs.writeFileSync(path.join(targetDir, `${itemId}.png`), imageBuffer);
+
+        catalog.items[idx] = { ...catalog.items[idx], sprite };
+        fs.writeFileSync(paths.itemCatalogPath, JSON.stringify(catalog, null, 2) + '\n');
+        invalidateServerItemCatalogCache();
+
+        return {
+            status: 200,
+            body: { success: true, item: catalog.items[idx], catalog },
+        };
     }
 }
 

@@ -1,6 +1,8 @@
 import { BACKPACK_SLOT_COUNT } from '../../../shared/inventory';
 import type { CharacterInventoryDocument } from '../../../shared/inventory';
 import type { EquipmentSlot } from '../../game-data/itemCatalogTypes';
+import { getItemCatalogEntry } from '../../game-data/itemCatalog';
+import { drawItemIconFrame, fetchItemIconImage } from '../../game-data/itemIconRegistry';
 import { fetchCharacterInventory } from '../characterInventoryApi';
 import { onPlayPanelOpen } from './playHudPanels';
 
@@ -12,6 +14,8 @@ const SLOT_LABELS: Record<EquipmentSlot, string> = {
     ring: 'Anel',
     amulet: 'Amuleto',
 };
+
+const ICON_SIZE = 28;
 
 let activeCharacterId: string | null = null;
 let lastInventory: CharacterInventoryDocument | null = null;
@@ -33,18 +37,74 @@ function ensureBagGrid(): void {
     bagGridReady = true;
 }
 
+function ensureSlotIconCanvas(container: HTMLElement): HTMLCanvasElement {
+    let canvas = container.querySelector('canvas.item-slot-icon') as HTMLCanvasElement | null;
+    if (!canvas) {
+        canvas = document.createElement('canvas');
+        canvas.className = 'item-slot-icon';
+        canvas.width = ICON_SIZE;
+        canvas.height = ICON_SIZE;
+        container.appendChild(canvas);
+    }
+    return canvas;
+}
+
+function ensureTextFallback(container: HTMLElement, className: string): HTMLSpanElement {
+    let el = container.querySelector(`.${className}`) as HTMLSpanElement | null;
+    if (!el) {
+        el = document.createElement('span');
+        el.className = className;
+        container.appendChild(el);
+    }
+    return el;
+}
+
+async function paintItemInSlot(container: HTMLElement, itemId: string, textClass: string): Promise<void> {
+    const entry = getItemCatalogEntry(itemId);
+    const canvas = ensureSlotIconCanvas(container);
+    const textEl = ensureTextFallback(container, textClass);
+    const displayName = entry?.name ?? itemId;
+    container.title = displayName;
+
+    if (!entry?.sprite?.iconUrl) {
+        canvas.hidden = true;
+        textEl.hidden = false;
+        textEl.textContent = displayName;
+        return;
+    }
+
+    const img = await fetchItemIconImage(entry.sprite.iconUrl);
+    const ctx = canvas.getContext('2d');
+    if (!img || !ctx) {
+        canvas.hidden = true;
+        textEl.hidden = false;
+        textEl.textContent = displayName;
+        return;
+    }
+
+    drawItemIconFrame(ctx, img, entry.sprite, 0, 0, ICON_SIZE);
+    canvas.hidden = false;
+    textEl.hidden = true;
+    textEl.textContent = '';
+}
+
+function clearSlotVisual(container: HTMLElement, textClass: string): void {
+    container.removeAttribute('title');
+    const canvas = container.querySelector('canvas.item-slot-icon') as HTMLCanvasElement | null;
+    if (canvas) canvas.hidden = true;
+    const textEl = container.querySelector(`.${textClass}`) as HTMLSpanElement | null;
+    if (textEl) {
+        textEl.hidden = true;
+        textEl.textContent = '';
+    }
+}
+
 function renderEquipment(equipment: CharacterInventoryDocument['equipment']): void {
     document.querySelectorAll<HTMLButtonElement>('.equipment-slot').forEach((slot) => {
         const key = slot.dataset.slot as EquipmentSlot | undefined;
         if (!key) return;
         const itemId = equipment[key];
         const label = slot.querySelector('.equipment-slot__label');
-        let itemEl = slot.querySelector('.equipment-slot__item');
-        if (!itemEl) {
-            itemEl = document.createElement('span');
-            itemEl.className = 'equipment-slot__item';
-            slot.appendChild(itemEl);
-        }
         if (!label) {
             const span = document.createElement('span');
             span.className = 'equipment-slot__label';
@@ -53,10 +113,10 @@ function renderEquipment(equipment: CharacterInventoryDocument['equipment']): vo
         }
         if (itemId) {
             slot.classList.add('has-item');
-            itemEl.textContent = itemId;
+            void paintItemInSlot(slot, itemId, 'equipment-slot__item');
         } else {
             slot.classList.remove('has-item');
-            itemEl.textContent = '';
+            clearSlotVisual(slot, 'equipment-slot__item');
         }
     });
 }
@@ -67,18 +127,18 @@ function renderBackpack(backpack: CharacterInventoryDocument['backpack']): void 
     document.querySelectorAll<HTMLButtonElement>('.bag-slot').forEach((slot) => {
         const index = Number(slot.dataset.slotIndex);
         const row = byIndex.get(index);
+        slot.replaceChildren();
         slot.classList.toggle('has-item', Boolean(row));
         if (row) {
-            slot.textContent = '';
-            const name = document.createElement('span');
-            name.textContent = row.itemId;
-            const qty = document.createElement('span');
-            qty.className = 'bag-slot__qty';
-            qty.textContent = row.quantity > 1 ? `×${row.quantity}` : '';
-            slot.appendChild(name);
-            if (row.quantity > 1) slot.appendChild(qty);
+            void paintItemInSlot(slot, row.itemId, 'bag-slot__name');
+            if (row.quantity > 1) {
+                const qty = document.createElement('span');
+                qty.className = 'bag-slot__qty';
+                qty.textContent = `×${row.quantity}`;
+                slot.appendChild(qty);
+            }
         } else {
-            slot.textContent = '';
+            clearSlotVisual(slot, 'bag-slot__name');
         }
     });
 

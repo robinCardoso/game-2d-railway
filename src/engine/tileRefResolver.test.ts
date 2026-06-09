@@ -38,6 +38,11 @@ describe('isExcludedFromTileRegistry', () => {
     it('inclui tiles/maps/', () => {
         expect(isExcludedFromTileRegistry('../../tiles/maps/nature/tree/01_arvore.png')).toBe(false);
     });
+
+    it('exclui ícones de inventário em tiles/items/', () => {
+        expect(isExcludedFromTileRegistry('../../tiles/items/icons/gold_coin.png')).toBe(true);
+        expect(isExcludedFromTileRegistry('../../tiles/maps/items/vase.png')).toBe(false);
+    });
 });
 
 describe('resolveMapTileId', () => {

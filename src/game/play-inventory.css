@@ -59,6 +59,22 @@
     word-break: break-all;
 }
 
+.item-slot-icon {
+    image-rendering: pixelated;
+    display: block;
+    flex-shrink: 0;
+}
+
+.bag-slot__name {
+    font-size: 8px;
+    font-weight: 600;
+    text-align: center;
+    line-height: 1.1;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .bag-grid {
     display: grid;
     grid-template-columns: repeat(6, 1fr);

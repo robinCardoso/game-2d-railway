@@ -7,14 +7,14 @@
       "slot": "feet",
       "speedBonus": 20,
       "description": "Botas encantadas que aceleram a corrida.",
-      "implemented": true
+      "implemented": false
     },
     {
       "id": "gold_coin",
       "name": "Gold Coin",
       "category": "loot",
       "description": "Moeda de ouro.",
-      "implemented": true
+      "implemented": false
     },
     {
       "id": "leather_armor",
@@ -23,7 +23,7 @@
       "slot": "body",
       "defenseBonus": 3,
       "description": "Armadura leve de couro.",
-      "implemented": true
+      "implemented": false
     },
     {
       "id": "leather_boots",
@@ -31,7 +31,7 @@
       "category": "equipment",
       "slot": "feet",
       "description": "Botas simples de couro.",
-      "implemented": true
+      "implemented": false
     },
     {
       "id": "warrior_ring",
@@ -40,7 +40,7 @@
       "slot": "ring",
       "attackBonus": 2,
       "description": "Anel que fortalece o golpe.",
-      "implemented": true
+      "implemented": false
     }
   ]
 }
