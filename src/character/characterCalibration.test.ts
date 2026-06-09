@@ -3,12 +3,14 @@ import {
     CHARACTER_CALIBRATION_FILE_SUFFIX,
     applyCalibrationToConfig,
     calibrationPathFromConfigPath,
+    configHasInlineCalibrationFields,
     extractCalibrationFromConfig,
     isCharacterCalibrationFilename,
     mergeCharacterConfigWithCalibration,
     parseCharacterCalibration,
     serializeCharacterCalibration,
     spriteUrlToConfigPaths,
+    stripCalibrationFromConfig,
 } from './characterCalibration';
 import type { CharacterSpriteConfig } from './spriteAnimation';
 
@@ -78,6 +80,16 @@ describe('characterCalibration', () => {
         expect(merged.frameWidth).toBe(64);
         expect(merged.anchorX).toBe(-5);
         expect(merged.animations.walk_down.frames).toBe(4);
+    });
+
+    it('stripCalibrationFromConfig remove só campos técnicos', () => {
+        const stripped = stripCalibrationFromConfig(baseConfig as unknown as Record<string, unknown>);
+        expect(stripped.name).toBe('Knight');
+        expect(stripped.category).toBe('vocations/male');
+        expect(stripped.frameWidth).toBeUndefined();
+        expect(stripped.animations).toBeUndefined();
+        expect(configHasInlineCalibrationFields(baseConfig as unknown as Record<string, unknown>)).toBe(true);
+        expect(configHasInlineCalibrationFields(stripped)).toBe(false);
     });
 
     it('applyCalibrationToConfig não altera referência de metadados extras', () => {

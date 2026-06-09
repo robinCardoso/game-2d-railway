@@ -149,6 +149,38 @@ export function serializeCharacterCalibration(doc: CharacterCalibrationDocument)
     return `${JSON.stringify(doc, null, 2)}\n`;
 }
 
+/** Campos que pertencem exclusivamente ao sidecar `.calibration.json`. */
+export const CHARACTER_CALIBRATION_FIELD_KEYS = [
+    'frameWidth',
+    'frameHeight',
+    'offsetX',
+    'offsetY',
+    'gapX',
+    'gapY',
+    'anchorX',
+    'anchorY',
+    'corpseAnchorY',
+    'drawScale',
+    'sheetLayout',
+    'defaultDirection',
+    'chromaKey',
+    'chromaKeyTolerance',
+    'animations',
+] as const;
+
+/** Remove campos de calibração do JSON principal — identidade/metadados permanecem. */
+export function stripCalibrationFromConfig<T extends Record<string, unknown>>(config: T): T {
+    const result = { ...config };
+    for (const key of CHARACTER_CALIBRATION_FIELD_KEYS) {
+        delete result[key];
+    }
+    return result;
+}
+
+export function configHasInlineCalibrationFields(config: Record<string, unknown>): boolean {
+    return CHARACTER_CALIBRATION_FIELD_KEYS.some((key) => key in config);
+}
+
 export function mergeCharacterConfigWithCalibration(
     config: CharacterSpriteConfig,
     calibration: CharacterCalibrationDocument

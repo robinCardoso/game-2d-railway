@@ -14,6 +14,7 @@
     "start:railway": "npm run build && npm run start",
     "preview": "vite preview",
     "test": "vitest run && node scripts/check-calibrator-listeners.mjs",
+    "migrate:character-calibration": "node scripts/migrate-character-calibration.mjs",
     "test:calibrator": "node scripts/check-calibrator-listeners.mjs",
     "electron:compile": "tsc -p desktop/electron/tsconfig.json && node scripts/write-electron-dist-package.mjs",
     "electron:check": "npm run build && npm run electron:compile",

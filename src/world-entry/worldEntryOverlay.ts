@@ -32,6 +32,9 @@ let overlayEl: HTMLElement | null = null;
 let tipIndex = 0;
 let tipTimer: number | null = null;
 let failsafeTimer: number | null = null;
+let worldEntryReleasedByFailsafe = false;
+
+export const WORLD_ENTRY_FAILSAFE_EVENT = 'world-entry-failsafe';
 
 function clearWorldEntryFailsafe(): void {
     if (failsafeTimer !== null) {
@@ -46,8 +49,16 @@ function scheduleWorldEntryFailsafe(ms: number): void {
         failsafeTimer = null;
         if (!isWorldEntryOverlayVisible()) return;
         console.warn('[world-entry] Failsafe liberando overlay após timeout.');
+        worldEntryReleasedByFailsafe = true;
         finishWorldEntryOverlay();
+        window.dispatchEvent(new CustomEvent(WORLD_ENTRY_FAILSAFE_EVENT));
     }, ms);
+}
+
+export function consumeWorldEntryFailsafeRelease(): boolean {
+    if (!worldEntryReleasedByFailsafe) return false;
+    worldEntryReleasedByFailsafe = false;
+    return true;
 }
 
 function createOverlay(): HTMLElement {
@@ -200,6 +211,7 @@ export function showWorldEntryOverlay(
     message = 'Preparando entrada...',
     options?: { immediate?: boolean; failsafeMs?: number }
 ): void {
+    worldEntryReleasedByFailsafe = false;
     const overlay = ensureOverlay();
 
     if (options?.immediate) {
@@ -276,6 +288,7 @@ export function setWorldEntryStage(
 }
 
 export function resetWorldEntryOverlay(): void {
+    worldEntryReleasedByFailsafe = false;
     const overlay = ensureOverlay();
 
     overlay.querySelector('#worldEntryErrorActions')?.remove();

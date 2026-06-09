@@ -6,6 +6,7 @@ import {
     mergeCharacterConfigWithCalibration,
     parseCharacterCalibration,
     serializeCharacterCalibration,
+    stripCalibrationFromConfig,
 } from '../../../src/character/characterCalibration.js';
 import { sanitizeCreaturePresetEntry } from '../../../src/game-data/mobPresetTypes.js';
 import { sanitizeItemCatalogDocument, findUnknownLootItemIds } from '../../../src/game-data/itemCatalogTypes.js';
@@ -198,13 +199,6 @@ export class StudioService {
                     content = mergeCharacterConfigWithCalibration(content, calibration);
                 } catch (err) {
                     console.warn(`[StudioService] Calibração inválida em ${calPath}:`, err);
-                }
-            } else {
-                try {
-                    const calibrationDoc = extractCalibrationFromConfig(content);
-                    fs.writeFileSync(calPath, serializeCharacterCalibration(calibrationDoc));
-                } catch (err) {
-                    console.warn(`[StudioService] Falha ao migrar calibração para ${calPath}:`, err);
                 }
             }
             const relativePath = path.relative(charactersDir, filePath).replace(/\\/g, '/');
@@ -567,17 +561,18 @@ export class StudioService {
         configJson.spriteSheetUrl = spriteSheetUrl;
         const mainJsonPath = path.join(targetDir, `${filename}.json`);
         const calibrationJsonPath = path.join(targetDir, `${filename}.calibration.json`);
-        fs.writeFileSync(mainJsonPath, JSON.stringify(configJson, null, 2));
+        const fullConfig = configJson as import('../../../src/character/spriteAnimation.js').CharacterSpriteConfig;
+        let identityOnly: Record<string, unknown>;
         try {
-            const calibrationDoc = extractCalibrationFromConfig(
-                configJson as import('../../../src/character/spriteAnimation.js').CharacterSpriteConfig
-            );
+            const calibrationDoc = extractCalibrationFromConfig(fullConfig);
             fs.writeFileSync(calibrationJsonPath, serializeCharacterCalibration(calibrationDoc));
+            identityOnly = stripCalibrationFromConfig(configJson);
+            fs.writeFileSync(mainJsonPath, `${JSON.stringify(identityOnly, null, 2)}\n`);
         } catch (err) {
             console.error(`[StudioService] Falha ao gravar calibração em ${calibrationJsonPath}:`, err);
             return { status: 500, body: { error: 'Falha ao gravar arquivo de calibração.' } };
         }
-        return { status: 200, body: { success: true, spriteSheetUrl, name: configJson.name } };
+        return { status: 200, body: { success: true, spriteSheetUrl, name: identityOnly.name ?? configJson.name } };
     }
 
     upsertCreaturePreset(entry: Record<string, unknown>): ApiResult {

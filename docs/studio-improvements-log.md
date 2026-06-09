@@ -506,10 +506,17 @@ Calibração de animação (fatiamento, âncoras, `animations`) misturada no JSO
 - **Delete:** remove `.calibration.json` junto com `.json` e `.png`.
 - **Testes:** `src/character/characterCalibration.test.ts`.
 
+### Evoluções (2026-06-08, pós-análise)
+- **Save enxuto:** `save-character` grava JSON principal só com identidade/metadados; calibração exclusiva no sidecar (`stripCalibrationFromConfig`).
+- **Migração explícita:** `npm run migrate:character-calibration` — cria sidecars ausentes e enxuga JSONs legados; `list-characters` não escreve mais arquivos.
+- **Failsafe overlay:** `consumeWorldEntryFailsafeRelease()` + toast no Play quando o overlay libera por timeout de 15s.
+
 ### Checklist pós-sidecar
-- [ ] Salvar outfit no Studio → existem `knight.json` + `knight.calibration.json`
+- [ ] Salvar outfit no Studio → `knight.json` (identidade) + `knight.calibration.json` (técnico)
 - [ ] Reabrir calibrador 3× → animações estáveis
 - [ ] Play/roster/criação refletem âncoras e frames do sidecar
+- [ ] `npm run migrate:character-calibration` em outfits antigos
+- [ ] Failsafe 15s → toast discreto no canto (sem travar jogador)
 - [ ] `npm test` passa (inclui `characterCalibration.test.ts`)
 
 ---

@@ -1,12 +1,14 @@
 import '../style.css';
 import { resolveApiUrl } from '../shared/apiUrl';
 import {
+    consumeWorldEntryFailsafeRelease,
     finishWorldEntryOverlay,
     isWorldEntryOverlayVisible,
     isWorldEntryPending,
     resetWorldEntryOverlay,
     setWorldEntryStage,
     showWorldEntryOverlay,
+    WORLD_ENTRY_FAILSAFE_EVENT,
 } from '../world-entry/worldEntryOverlay';
 
 const WORLD_ENTRY_FAILSAFE_MS = 15000;
@@ -185,6 +187,13 @@ function isPlayJoinDebugEnabled(): boolean {
     }
 }
 
+function notifyWorldEntryFailsafeIfNeeded(): void {
+    if (!consumeWorldEntryFailsafeRelease()) return;
+    toast.info(
+        'Conexão ou carregamento demorou mais que o normal. Alguns elementos podem aparecer em instantes.'
+    );
+}
+
 function logPlayJoinTimeline(event: string, detail?: Record<string, unknown>): void {
     if (!isPlayJoinDebugEnabled()) return;
     const elapsed =
@@ -206,6 +215,7 @@ function releaseCreatureSyncLoading(): void {
     setWorldEntryStage('sync', 'done');
     finishWorldEntryOverlay();
     hideLoading();
+    notifyWorldEntryFailsafeIfNeeded();
     logPlayJoinTimeline('hideLoading (creature sync ready)');
 }
 
@@ -1584,8 +1594,11 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
         setWorldEntryStage('sync', 'done');
         finishWorldEntryOverlay();
         hideLoading();
+        notifyWorldEntryFailsafeIfNeeded();
         logPlayJoinTimeline('hideLoading (offline)');
     }
+
+    window.addEventListener(WORLD_ENTRY_FAILSAFE_EVENT, notifyWorldEntryFailsafeIfNeeded);
 
     setupLocationAutosave();
     setupPlayZoomControls();

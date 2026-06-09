@@ -53,6 +53,7 @@ npm run dev         # Vite :5173 + servidor :8787 (APIs unificadas via proxy)
 npm run dev:web     # só frontend (sem APIs)
 npm run dev:server  # só Express
 npm test            # vitest — tile ref / registry
+npm run migrate:character-calibration  # sidecar + JSON enxuto para outfits legados
 ```
 
 Reiniciar `npm run dev` após mudanças em `server/src/studio/` ou rotas `/api/*`.
