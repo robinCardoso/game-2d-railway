@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "spriteSheetUrl": "tiles/characters/vocations/female/knight_64.png",
+  "frameWidth": 64,
+  "frameHeight": 64,
+  "offsetX": -1,
+  "offsetY": 9,
+  "gapX": 0,
+  "gapY": 0,
+  "anchorX": -20,
+  "anchorY": 0,
+  "sheetLayout": "horizontal",
+  "defaultDirection": "down",
+  "chromaKey": true,
+  "chromaKeyTolerance": 50,
+  "animations": {
+    "idle_up": {
+      "row": 0,
+      "frames": 1,
+      "speedFps": 1,
+      "loop": true,
+      "startFrame": 0
+    },
+    "idle_down": {
+      "row": 0,
+      "frames": 1,
+      "speedFps": 1,
+      "loop": true,
+      "startFrame": 0
+    },
+    "idle_left": {
+      "row": 0,
+      "frames": 1,
+      "speedFps": 1,
+      "loop": true,
+      "startFrame": 0
+    },
+    "idle_right": {
+      "row": 0,
+      "frames": 1,
+      "speedFps": 5,
+      "loop": true,
+      "startFrame": 0
+    },
+    "walk_up": {
+      "row": 0,
+      "frames": 1,
+      "speedFps": 5,
+      "loop": true,
+      "startFrame": 0
+    },
+    "walk_down": {
+      "row": 0,
+      "frames": 1,
+      "speedFps": 5,
+      "loop": true,
+      "startFrame": 0
+    },
+    "walk_left": {
+      "row": 0,
+      "frames": 2,
+      "speedFps": 5,
+      "loop": true,
+      "startFrame": 1
+    },
+    "walk_right": {
+      "row": 0,
+      "frames": 2,
+      "speedFps": 5,
+      "loop": true,
+      "startFrame": 4
+    },
+    "attack_up": {
+      "row": 0,
+      "frames": 1,
+      "speedFps": 5,
+      "loop": false
+    },
+    "attack_down": {
+      "row": 0,
+      "frames": 1,
+      "speedFps": 5,
+      "loop": false
+    },
+    "attack_left": {
+      "row": 0,
+      "frames": 1,
+      "speedFps": 5,
+      "loop": false
+    },
+    "attack_right": {
+      "row": 0,
+      "frames": 1,
+      "speedFps": 5,
+      "loop": false
+    }
+  },
+  "updatedAt": "2026-06-09T01:34:32.991Z"
+}

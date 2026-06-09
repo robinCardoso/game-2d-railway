@@ -36,7 +36,8 @@ Este repositório é **Elarion Online** — MMORPG 2D estilo Tibia com **Elarion
 8. **Save mapa:** `formatMapDocumentJson` inclui `layers.grass` / `layers.border` quando não vazios; `validateMapDocument` bloqueia brush 9000+
 9. **Auto-borda:** grama no overlay; filete na célula de chão vizinha; `collectBorderDrawTileIdsCached` no draw (não recalcular vizinhos todo frame)
 10. **Performance Studio:** viewport culling em `draw()`; cache invalida em load/undo/recalc; Play sempre 60 FPS
-11. **Testes:** `npm test` — ref priority, exclusão effects/, anti double-remap
+11. **Calibração personagem:** sidecar `{nome}.calibration.json` — fonte de verdade; `fetchCharacterConfigMerged` no load; `save-character` grava ambos
+12. **Testes:** `npm test` — ref priority, exclusão effects/, anti double-remap, `characterCalibration`
 
 ## Ao implementar melhorias nesta área
 

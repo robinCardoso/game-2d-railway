@@ -81,13 +81,9 @@ export async function createCharacter(
         }
 
         let outfitConfig: CharacterSpriteConfig | null = null;
-        const cleanPath = spriteSheetUrl.replace(/^\//, '');
-        const jsonUrl = resolveApiUrl('/' + cleanPath.replace(/\.png$/i, '.json'));
         try {
-            const res = await fetch(jsonUrl);
-            if (res.ok) {
-                outfitConfig = await res.json();
-            }
+            const { fetchCharacterConfigMerged } = await import('../character/characterCalibrationLoader');
+            outfitConfig = await fetchCharacterConfigMerged(spriteSheetUrl);
         } catch (e) {
             console.error('Falha ao carregar outfit config durante criação:', e);
         }

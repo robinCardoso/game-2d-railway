@@ -264,13 +264,9 @@ export async function mockCreateCharacter(
     }
 
     let outfitConfig: Record<string, unknown> | null = null;
-    const cleanPath = spriteSheetUrl.replace(/^\//, '');
-    const jsonUrl = resolveApiUrl('/' + cleanPath.replace(/\.png$/i, '.json'));
     try {
-        const res = await fetch(jsonUrl);
-        if (res.ok) {
-            outfitConfig = await res.json();
-        }
+        const { fetchCharacterConfigMerged } = await import('../character/characterCalibrationLoader');
+        outfitConfig = (await fetchCharacterConfigMerged(spriteSheetUrl)) as Record<string, unknown> | null;
     } catch (e) {
         console.error('Falha ao carregar outfit config durante criação no mock:', e);
     }

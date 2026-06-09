@@ -1498,13 +1498,11 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
     player.mana = stats.mana;
 
     const outfit = { ...character.outfitConfig } as CharacterSpriteConfig;
-    // Sincroniza a configuração do sprite em tempo real a partir do JSON oficial
-    const cleanPath = outfit.spriteSheetUrl.replace(/^\//, '');
-    const jsonUrl = resolveApiUrl('/' + cleanPath.replace(/\.png$/i, '.json'));
+    // Sincroniza calibração em tempo real: JSON principal + arquivo lateral `.calibration.json`
     try {
-        const res = await fetch(jsonUrl);
-        if (res.ok) {
-            const realConfig = await res.json();
+        const { fetchCharacterConfigMerged } = await import('../character/characterCalibrationLoader');
+        const realConfig = await fetchCharacterConfigMerged(outfit.spriteSheetUrl);
+        if (realConfig) {
             Object.assign(outfit, realConfig);
             console.log('[playApp] Configuração de outfit carregada e atualizada com sucesso:', outfit);
         }

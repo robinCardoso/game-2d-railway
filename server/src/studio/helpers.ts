@@ -198,7 +198,7 @@ export function getJsonFiles(dir: string, filesList: string[] = []): string[] {
     for (const file of fs.readdirSync(dir)) {
         const name = path.join(dir, file);
         if (fs.statSync(name).isDirectory()) getJsonFiles(name, filesList);
-        else if (file.endsWith('.json')) filesList.push(name);
+        else if (file.endsWith('.json') && !file.endsWith('.calibration.json')) filesList.push(name);
     }
     return filesList;
 }
@@ -231,7 +231,7 @@ export function findMapSpritePngPath(filename: string, category?: string, p: App
         const direct = path.join(mapsDir, category, `${filename}.png`);
         if (fs.existsSync(direct)) return direct;
     }
-    function walk(dir: string): string | null {
+    const walk = (dir: string): string | null => {
         if (!fs.existsSync(dir)) return null;
         for (const entry of fs.readdirSync(dir)) {
             const full = path.join(dir, entry);
@@ -241,7 +241,7 @@ export function findMapSpritePngPath(filename: string, category?: string, p: App
             } else if (entry === `${filename}.png`) return full;
         }
         return null;
-    }
+    };
     return walk(mapsDir);
 }
 

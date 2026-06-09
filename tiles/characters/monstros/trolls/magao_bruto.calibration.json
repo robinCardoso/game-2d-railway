@@ -1,9 +1,19 @@
 {
-  "name": "Magao Bruto",
+  "schemaVersion": 1,
   "spriteSheetUrl": "tiles/characters/monstros/trolls/magao_bruto.png",
   "frameWidth": 64,
   "frameHeight": 64,
+  "offsetX": 0,
+  "offsetY": 0,
+  "gapX": 0,
+  "gapY": 0,
+  "anchorX": -10,
+  "anchorY": 0,
+  "corpseAnchorY": 18,
+  "sheetLayout": "horizontal",
   "defaultDirection": "down",
+  "chromaKey": true,
+  "chromaKeyTolerance": 50,
   "animations": {
     "idle_up": {
       "row": 0,
@@ -117,18 +127,5 @@
       "loop": false
     }
   },
-  "category": "monstros/trolls",
-  "offsetX": 0,
-  "offsetY": 0,
-  "gapX": 0,
-  "gapY": 0,
-  "anchorX": -10,
-  "anchorY": 0,
-  "corpseAnchorY": 18,
-  "chromaKey": true,
-  "chromaKeyTolerance": 50,
-  "sheetLayout": "horizontal",
-  "vocation": "knight",
-  "gender": "male",
-  "showInCreation": true
+  "updatedAt": "2026-06-09T01:36:23.817Z"
 }

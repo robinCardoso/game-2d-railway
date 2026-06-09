@@ -17,7 +17,8 @@
     "../src/game-data/mobPresetTypes.ts",
     "../src/game-data/itemCatalogTypes.ts",
     "../src/engine/character/calculateStats.ts",
-    "../src/engine/combat/calculateDamage.ts"
+    "../src/engine/combat/calculateDamage.ts",
+    "../src/character/characterCalibration.ts"
   ],
   "exclude": [
     "../shared/**/*.test.ts",

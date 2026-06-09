@@ -41,11 +41,10 @@ export async function loadOutfitSpriteConfig(
     displayName?: string
 ): Promise<CharacterSpriteConfig> {
     const sheetPath = appearance.spriteSheetUrl.replace(/^\//, '');
-    const jsonUrl = resolveApiUrl('/' + sheetPath.replace(/\.png$/i, '.json'));
     try {
-        const res = await fetch(jsonUrl);
-        if (res.ok) {
-            const config = (await res.json()) as CharacterSpriteConfig;
+        const { fetchCharacterConfigMerged } = await import('../character/characterCalibrationLoader');
+        const config = await fetchCharacterConfigMerged(sheetPath);
+        if (config) {
             return {
                 ...config,
                 name: displayName ?? config.name ?? appearance.outfitId,
@@ -53,7 +52,7 @@ export async function loadOutfitSpriteConfig(
             };
         }
     } catch (err) {
-        console.warn('[playerAppearance] JSON de outfit indisponível:', jsonUrl, err);
+        console.warn('[playerAppearance] Config de outfit indisponível:', sheetPath, err);
     }
     return {
         name: displayName ?? appearance.outfitId,

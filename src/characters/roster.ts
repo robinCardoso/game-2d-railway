@@ -223,13 +223,10 @@ async function drawCharacterPreview(canvas: HTMLCanvasElement, spriteSheetUrl: s
     if (!ctx) return;
 
     const cleanPath = spriteSheetUrl.replace(/^\//, '');
-    const jsonUrl = resolveApiUrl('/' + cleanPath.replace(/\.png$/i, '.json'));
     let config: CharacterConfig | null = null;
     try {
-        const res = await fetch(jsonUrl);
-        if (res.ok) {
-            config = await res.json() as CharacterConfig;
-        }
+        const { fetchCharacterConfigMerged } = await import('../character/characterCalibrationLoader');
+        config = (await fetchCharacterConfigMerged(spriteSheetUrl)) as CharacterConfig | null;
     } catch (e) {
         console.error('Erro ao buscar config do personagem no roster:', e);
     }

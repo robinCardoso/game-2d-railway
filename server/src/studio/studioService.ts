@@ -1,5 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {
+    calibrationPathFromConfigPath,
+    extractCalibrationFromConfig,
+    mergeCharacterConfigWithCalibration,
+    parseCharacterCalibration,
+    serializeCharacterCalibration,
+} from '../../../src/character/characterCalibration.js';
 import { sanitizeCreaturePresetEntry } from '../../../src/game-data/mobPresetTypes.js';
 import { sanitizeItemCatalogDocument, findUnknownLootItemIds } from '../../../src/game-data/itemCatalogTypes.js';
 import { paths } from '../config/paths.js';
@@ -125,6 +132,8 @@ export class StudioService {
             if (fs.existsSync(pngPath)) fs.unlinkSync(pngPath);
         }
         fs.unlinkSync(jsonPath);
+        const calibrationPath = calibrationPathFromConfigPath(jsonPath);
+        if (fs.existsSync(calibrationPath)) fs.unlinkSync(calibrationPath);
         if (fs.existsSync(paths.creaturePresetsPath) && usage.presetName) {
             try {
                 const presets = JSON.parse(fs.readFileSync(paths.creaturePresetsPath, 'utf-8'));
@@ -181,7 +190,23 @@ export class StudioService {
         const jsonFiles = getJsonFiles(charactersDir);
         const folders = getSubdirectories(charactersDir, charactersDir);
         const characters = jsonFiles.map((filePath) => {
-            const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+            let content = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as import('../../../src/character/spriteAnimation.js').CharacterSpriteConfig;
+            const calPath = calibrationPathFromConfigPath(filePath);
+            if (fs.existsSync(calPath)) {
+                try {
+                    const calibration = parseCharacterCalibration(fs.readFileSync(calPath, 'utf-8'));
+                    content = mergeCharacterConfigWithCalibration(content, calibration);
+                } catch (err) {
+                    console.warn(`[StudioService] Calibração inválida em ${calPath}:`, err);
+                }
+            } else {
+                try {
+                    const calibrationDoc = extractCalibrationFromConfig(content);
+                    fs.writeFileSync(calPath, serializeCharacterCalibration(calibrationDoc));
+                } catch (err) {
+                    console.warn(`[StudioService] Falha ao migrar calibração para ${calPath}:`, err);
+                }
+            }
             const relativePath = path.relative(charactersDir, filePath).replace(/\\/g, '/');
             return {
                 name: content.name || path.basename(filePath, '.json'),
@@ -540,7 +565,18 @@ export class StudioService {
             spriteSheetUrl = `${relativeUrlPrefix}/${filename}.png`;
         }
         configJson.spriteSheetUrl = spriteSheetUrl;
-        fs.writeFileSync(path.join(targetDir, `${filename}.json`), JSON.stringify(configJson, null, 2));
+        const mainJsonPath = path.join(targetDir, `${filename}.json`);
+        const calibrationJsonPath = path.join(targetDir, `${filename}.calibration.json`);
+        fs.writeFileSync(mainJsonPath, JSON.stringify(configJson, null, 2));
+        try {
+            const calibrationDoc = extractCalibrationFromConfig(
+                configJson as import('../../../src/character/spriteAnimation.js').CharacterSpriteConfig
+            );
+            fs.writeFileSync(calibrationJsonPath, serializeCharacterCalibration(calibrationDoc));
+        } catch (err) {
+            console.error(`[StudioService] Falha ao gravar calibração em ${calibrationJsonPath}:`, err);
+            return { status: 500, body: { error: 'Falha ao gravar arquivo de calibração.' } };
+        }
         return { status: 200, body: { success: true, spriteSheetUrl, name: configJson.name } };
     }
 

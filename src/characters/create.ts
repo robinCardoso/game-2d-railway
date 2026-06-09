@@ -97,15 +97,8 @@ function applyChromaKey(imageData: ImageData, tolerance: number): void {
 }
 
 async function loadCharacterConfig(spriteSheetUrl: string): Promise<CharacterConfig | null> {
-    const cleanPath = spriteSheetUrl.replace(/^\//, '');
-    const jsonUrl = resolveApiUrl('/' + cleanPath.replace(/\.png$/i, '.json'));
-    try {
-        const response = await fetch(jsonUrl);
-        if (!response.ok) return null;
-        return await response.json() as CharacterConfig;
-    } catch {
-        return null;
-    }
+    const { fetchCharacterConfigMerged } = await import('../character/characterCalibrationLoader');
+    return fetchCharacterConfigMerged(spriteSheetUrl) as Promise<CharacterConfig | null>;
 }
 
 async function drawStaticCharacterPreview(canvas: HTMLCanvasElement, spriteSheetUrl: string): Promise<void> {
@@ -248,7 +241,7 @@ async function startAnimatedPreview(outfit: OutfitPreset): Promise<void> {
         tempCtx = tempCanvas.getContext('2d');
     }
 
-    function drawFrame(timestamp: number): void {
+    const drawFrame = (timestamp: number): void => {
         if (thisAnimId !== previewAnimId || !previewCtx) return;
 
         if (timestamp - lastFrameTime >= msPerFrame) {
@@ -293,7 +286,7 @@ async function startAnimatedPreview(outfit: OutfitPreset): Promise<void> {
         }
 
         requestAnimationFrame(drawFrame);
-    }
+    };
 
     requestAnimationFrame(drawFrame);
 }
@@ -522,9 +515,9 @@ async function init(): Promise<void> {
     populateVocationPresetSelect();
 
     window.addEventListener(VOCATIONS_UPDATED_EVENT, (event) => {
-        const detail = (event as CustomEvent<{ vocations: VocationsMap }>).detail;
-        if (detail?.vocations) {
-            populateVocationPresetSelect(detail.vocations);
+        const { detail: { vocations } = {} } = event as CustomEvent<{ vocations: VocationsMap }>;
+        if (vocations) {
+            populateVocationPresetSelect(vocations);
             renderOutfitOptions();
             updatePreviewInfo();
         }

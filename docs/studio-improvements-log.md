@@ -492,6 +492,28 @@ Sessão dedicada à resolução de problemas de usabilidade que causavam perda d
 
 ---
 
+## 20.9 Calibração de personagem em arquivo lateral (2026-06-08)
+
+### Problema
+Calibração de animação (fatiamento, âncoras, `animations`) misturada no JSON principal do outfit (`knight.json`). Atualizações no editor/servidor podiam sobrescrever ou ignorar campos — regressões recorrentes após mudanças no subsistema.
+
+### Solução
+- **Arquivo dedicado:** `{nome}.calibration.json` ao lado de `{nome}.json` e `{nome}.png` (ex. `knight.calibration.json`).
+- **Schema v1** em `src/character/characterCalibration.ts` — só dados de calibração + `spriteSheetUrl` de pareamento.
+- **Save:** `POST /api/save-character` grava JSON principal **e** sidecar; falha se o sidecar não puder ser escrito.
+- **Load:** `fetchCharacterConfigMerged()` (`characterCalibrationLoader.ts`) — Play, roster, criação, `characterStore`, `playerAppearance`.
+- **Studio list:** `list-characters` mescla sidecar (prioridade); migra sidecar ausente a partir do JSON legado na primeira listagem.
+- **Delete:** remove `.calibration.json` junto com `.json` e `.png`.
+- **Testes:** `src/character/characterCalibration.test.ts`.
+
+### Checklist pós-sidecar
+- [ ] Salvar outfit no Studio → existem `knight.json` + `knight.calibration.json`
+- [ ] Reabrir calibrador 3× → animações estáveis
+- [ ] Play/roster/criação refletem âncoras e frames do sidecar
+- [ ] `npm test` passa (inclui `characterCalibration.test.ts`)
+
+---
+
 ## 21. Âncora de sprites de mapa (2026-06-04)
 
 ### 21.1 Posicionamento unificado com personagens
