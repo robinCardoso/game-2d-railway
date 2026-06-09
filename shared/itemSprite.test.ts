@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { ItemCatalogDocument } from '../src/game-data/itemCatalogTypes';
 import {
+    buildDefaultIdleAnimation,
     defaultItemIconUrl,
+    itemSpriteHasAnimation,
+    resolveItemIconAnimationFrame,
     sanitizeItemSpriteCalibration,
     validateItemCatalogDocument,
 } from './itemSprite';
@@ -44,6 +47,28 @@ describe('itemSprite', () => {
         if (!result.ok) {
             expect(result.errors[0]).toContain('sprite.iconUrl');
         }
+    });
+
+    it('sanitize e resolve animação idle em strip', () => {
+        const sprite = sanitizeItemSpriteCalibration(
+            {
+                gridCols: 4,
+                gridRows: 1,
+                animations: {
+                    idle: { frames: [0, 1, 2, 3], speedFps: 4, loop: true },
+                },
+            },
+            'potion'
+        );
+        expect(sprite?.animations?.idle.frames).toEqual([0, 1, 2, 3]);
+        expect(itemSpriteHasAnimation(sprite!)).toBe(true);
+        expect(resolveItemIconAnimationFrame(sprite!, 0)).toBe(0);
+        expect(resolveItemIconAnimationFrame(sprite!, 500)).toBe(2);
+    });
+
+    it('buildDefaultIdleAnimation gera frames row-major', () => {
+        const anim = buildDefaultIdleAnimation(2, 2, 8);
+        expect(anim?.idle.frames).toEqual([0, 1, 2, 3]);
     });
 
     it('validateItemCatalogDocument checa arquivo quando callback informado', () => {

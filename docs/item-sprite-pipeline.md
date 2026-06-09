@@ -2,7 +2,7 @@
 
 Plano para evoluir o **catálogo de itens** (metadados + stats) até itens **visíveis e jogáveis** no inventário, com suporte futuro a animações.
 
-**Estado atual (2026-06-08):** Commits A+B+C implementados — calibrador Studio, API `save-item-icon`, validação `implemented`, registry de ícones e inventário Play com canvas. **Falta:** animações strip (Commit D), drop no chão (E), PNGs reais nos itens seed.
+**Estado atual (2026-06-08):** Commits A+B+C+D implementados — calibrador com strip animada (`animations.idle`), preview animado no Studio e inventário Play com loop via `itemIconAnimator`. **Falta:** drop no chão (Commit E), PNGs reais nos itens seed, checklist manual HUD §18.
 
 ---
 
@@ -15,22 +15,19 @@ Plano para evoluir o **catálogo de itens** (metadados + stats) até itens **vis
 | **Loot de mobs** | Mobs Stats | Valida `itemId` contra o catálogo |
 | **Inventário PG** | `character_equipment` + `character_backpack_slots` | Persistência autoritativa |
 | **Combate servidor** | `GameRoom` + `equipmentBonuses` | Bônus de ataque/defesa do equipamento |
-| **HUD inventário Play** | `playHudInventory.ts` | Mostra **texto do `itemId`**, não sprite |
+| **HUD inventário Play** | `playHudInventory.ts` | Ícone 32×32 (estático ou animado); fallback texto sem sprite |
 | **Sprites de mapa** | `tiles/maps/items/**` | Decoração no **mapa** (Y-sort); **não** é ícone de inventário |
 
 Os itens seed (`boots_of_haste`, `warrior_ring`, etc.) são **rascunhos de stats** — `implemented: false` até existir arte + calibração.
 
 ---
 
-## O que ainda não existe (escopo deste plano)
+## O que ainda não existe (escopo restante)
 
-1. Pasta e convenção de PNGs de item (ícone inventário / sprite no chão)
-2. Calibrador Studio “Criar Sprite de Item” (grid, âncora, strip animada)
-3. Metadados de frame/animação ligados ao `itemId`
-4. Registry cliente para carregar ícones (fora do tile registry de mapa)
-5. Inventário Play desenhando ícone 32×32 (e tooltip com nome)
-6. Regra: `implemented: true` só quando sprite + calibração + UI estiverem prontos
-7. (Fase 2) Item no chão / animação de uso / FX equipado
+1. Sprite no chão / drop (Commit E)
+2. PNGs calibrados nos itens seed do catálogo
+3. Animações custom (frames fora de ordem row-major) — hoje só strip `idle` automática
+4. FX de uso / equipado no personagem
 
 ---
 

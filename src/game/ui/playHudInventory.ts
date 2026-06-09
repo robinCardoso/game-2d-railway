@@ -3,7 +3,12 @@ import type { CharacterInventoryDocument } from '../../../shared/inventory';
 import type { EquipmentSlot } from '../../game-data/itemCatalogTypes';
 import { getItemCatalogEntry } from '../../game-data/itemCatalog';
 import { drawItemIconFrame, fetchItemIconImage } from '../../game-data/itemIconRegistry';
+import { itemSpriteHasAnimation } from '../../../shared/itemSprite';
 import { fetchCharacterInventory } from '../characterInventoryApi';
+import {
+    clearInventoryIconAnimations,
+    registerInventoryIconAnimation,
+} from './itemIconAnimator';
 import { onPlayPanelOpen } from './playHudPanels';
 
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
@@ -86,6 +91,10 @@ async function paintItemInSlot(container: HTMLElement, itemId: string, textClass
     canvas.hidden = false;
     textEl.hidden = true;
     textEl.textContent = '';
+
+    if (itemSpriteHasAnimation(entry.sprite)) {
+        registerInventoryIconAnimation(canvas, img, entry.sprite);
+    }
 }
 
 function clearSlotVisual(container: HTMLElement, textClass: string): void {
@@ -164,6 +173,7 @@ export async function refreshPlayHudInventory(): Promise<void> {
     try {
         const inventory = await fetchCharacterInventory(activeCharacterId);
         lastInventory = inventory;
+        clearInventoryIconAnimations();
         renderEquipment(inventory.equipment);
         renderBackpack(inventory.backpack);
         setInventoryMessage(false, null);

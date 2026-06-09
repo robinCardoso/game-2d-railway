@@ -1,8 +1,12 @@
 import { ENGINE_CONFIG } from '../engine/config';
 import { applyItemCatalogDocument } from '../game-data/itemCatalog';
 import { dispatchItemCatalogUpdated } from '../game-data/itemCatalogUi';
-import type { ItemCatalogEntry } from '../game-data/itemCatalogTypes';
-import { defaultItemIconUrl } from '../../shared/itemSprite';
+import type { ItemCatalogEntry, ItemSpriteCalibration } from '../game-data/itemCatalogTypes';
+import {
+    buildDefaultIdleAnimation,
+    defaultItemIconUrl,
+    resolveItemIconAnimationFrame,
+} from '../../shared/itemSprite';
 import { apiFetch } from '../shared/apiFetch';
 import { toast } from '../utils/popup';
 
@@ -12,6 +16,7 @@ let activeItem: ItemCatalogEntry | null = null;
 let loadedImage: HTMLImageElement | null = null;
 let onSavedCallback: (() => void) | null = null;
 let session: AbortController | null = null;
+let previewAnimFrameId = 0;
 
 function getInputs() {
     return {
@@ -27,10 +32,13 @@ function getInputs() {
         offsetY: document.getElementById('itemSpriteOffsetY') as HTMLInputElement | null,
         gapX: document.getElementById('itemSpriteGapX') as HTMLInputElement | null,
         gapY: document.getElementById('itemSpriteGapY') as HTMLInputElement | null,
+        animEnabled: document.getElementById('itemSpriteAnimEnabled') as HTMLInputElement | null,
+        animSpeedFps: document.getElementById('itemSpriteAnimSpeedFps') as HTMLInputElement | null,
+        animLoop: document.getElementById('itemSpriteAnimLoop') as HTMLInputElement | null,
     };
 }
 
-function readCalibrationFromForm(itemId: string) {
+function readCalibrationFromForm(itemId: string): ItemSpriteCalibration {
     const { frameWidth, frameHeight, gridCols, gridRows, offsetX, offsetY, gapX, gapY } = getInputs();
     const parse = (el: HTMLInputElement | null, fallback: number) => {
         const n = Number(el?.value);
@@ -40,17 +48,35 @@ function readCalibrationFromForm(itemId: string) {
         const n = Number(el?.value);
         return Number.isFinite(n) ? Math.floor(n) : 0;
     };
-    return {
+    const gridColsVal = Math.max(1, parse(gridCols, 1));
+    const gridRowsVal = Math.max(1, parse(gridRows, 1));
+    const { animEnabled, animSpeedFps, animLoop } = getInputs();
+    const speedFps = Number(animSpeedFps?.value);
+    const calibration: ItemSpriteCalibration = {
         iconUrl: defaultItemIconUrl(itemId),
         frameWidth: parse(frameWidth, TILE),
         frameHeight: parse(frameHeight, TILE),
-        gridCols: Math.max(1, parse(gridCols, 1)),
-        gridRows: Math.max(1, parse(gridRows, 1)),
+        gridCols: gridColsVal,
+        gridRows: gridRowsVal,
         offsetX: parseOpt(offsetX),
         offsetY: parseOpt(offsetY),
         gapX: parseOpt(gapX),
         gapY: parseOpt(gapY),
     };
+
+    if (animEnabled?.checked) {
+        const animations = buildDefaultIdleAnimation(
+            gridColsVal,
+            gridRowsVal,
+            Number.isFinite(speedFps) && speedFps > 0 ? speedFps : 8,
+            animLoop?.checked !== false
+        );
+        if (animations) {
+            calibration.animations = animations;
+        }
+    }
+
+    return calibration;
 }
 
 function fillFormFromItem(item: ItemCatalogEntry): void {
@@ -64,6 +90,18 @@ function fillFormFromItem(item: ItemCatalogEntry): void {
     if (offsetY) offsetY.value = String(sprite?.offsetY ?? 0);
     if (gapX) gapX.value = String(sprite?.gapX ?? 0);
     if (gapY) gapY.value = String(sprite?.gapY ?? 0);
+
+    const { animEnabled, animSpeedFps, animLoop } = getInputs();
+    const idle = sprite?.animations?.idle;
+    if (animEnabled) {
+        animEnabled.checked = Boolean(idle && idle.frames.length > 1);
+    }
+    if (animSpeedFps) {
+        animSpeedFps.value = String(idle?.speedFps ?? 8);
+    }
+    if (animLoop) {
+        animLoop.checked = idle?.loop !== false;
+    }
 }
 
 function redrawPreview(): void {
@@ -73,8 +111,12 @@ function redrawPreview(): void {
     if (!ctx || !activeItem) return;
 
     const cal = readCalibrationFromForm(activeItem.id);
-    const maxW = cal.offsetX + cal.gridCols * cal.frameWidth + (cal.gridCols - 1) * cal.gapX;
-    const maxH = cal.offsetY + cal.gridRows * cal.frameHeight + (cal.gridRows - 1) * cal.gapY;
+    const offsetX = cal.offsetX ?? 0;
+    const offsetY = cal.offsetY ?? 0;
+    const gapX = cal.gapX ?? 0;
+    const gapY = cal.gapY ?? 0;
+    const maxW = offsetX + cal.gridCols * cal.frameWidth + (cal.gridCols - 1) * gapX;
+    const maxH = offsetY + cal.gridRows * cal.frameHeight + (cal.gridRows - 1) * gapY;
     const scale = Math.min(1, 480 / Math.max(maxW, maxH, 1), 320 / Math.max(maxH, 1));
 
     canvas.width = Math.ceil(maxW * scale);
@@ -89,35 +131,57 @@ function redrawPreview(): void {
     ctx.lineWidth = 1;
     for (let row = 0; row < cal.gridRows; row++) {
         for (let col = 0; col < cal.gridCols; col++) {
-            const x = (cal.offsetX + col * (cal.frameWidth + cal.gapX)) * scale;
-            const y = (cal.offsetY + row * (cal.frameHeight + cal.gapY)) * scale;
+            const x = (offsetX + col * (cal.frameWidth + gapX)) * scale;
+            const y = (offsetY + row * (cal.frameHeight + gapY)) * scale;
             const w = cal.frameWidth * scale;
             const h = cal.frameHeight * scale;
             ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
         }
     }
 
-    const iconPreview = document.getElementById('itemSpriteIconPreview') as HTMLCanvasElement | null;
-    if (iconPreview) {
-        const pctx = iconPreview.getContext('2d');
-        if (pctx) {
-            iconPreview.width = TILE;
-            iconPreview.height = TILE;
-            pctx.imageSmoothingEnabled = false;
-            pctx.clearRect(0, 0, TILE, TILE);
-            pctx.drawImage(
-                loadedImage,
-                cal.offsetX,
-                cal.offsetY,
-                cal.frameWidth,
-                cal.frameHeight,
-                0,
-                0,
-                TILE,
-                TILE
-            );
-        }
+    scheduleIconPreviewAnimation();
+}
+
+function stopIconPreviewAnimation(): void {
+    if (previewAnimFrameId) {
+        cancelAnimationFrame(previewAnimFrameId);
+        previewAnimFrameId = 0;
     }
+}
+
+function scheduleIconPreviewAnimation(): void {
+    stopIconPreviewAnimation();
+    const iconPreview = document.getElementById('itemSpriteIconPreview') as HTMLCanvasElement | null;
+    if (!iconPreview || !loadedImage || !activeItem) return;
+
+    const drawFrame = (nowMs: number) => {
+        if (!activeItem || !loadedImage) return;
+        const cal = readCalibrationFromForm(activeItem.id);
+        const pctx = iconPreview.getContext('2d');
+        if (!pctx) return;
+
+        const frameIndex = resolveItemIconAnimationFrame(cal, nowMs);
+        const col = frameIndex % cal.gridCols;
+        const row = Math.floor(frameIndex / cal.gridCols);
+        const offX = cal.offsetX ?? 0;
+        const offY = cal.offsetY ?? 0;
+        const gX = cal.gapX ?? 0;
+        const gY = cal.gapY ?? 0;
+        const sx = offX + col * (cal.frameWidth + gX);
+        const sy = offY + row * (cal.frameHeight + gY);
+
+        iconPreview.width = TILE;
+        iconPreview.height = TILE;
+        pctx.imageSmoothingEnabled = false;
+        pctx.clearRect(0, 0, TILE, TILE);
+        pctx.drawImage(loadedImage, sx, sy, cal.frameWidth, cal.frameHeight, 0, 0, TILE, TILE);
+
+        if (cal.animations?.idle && cal.animations.idle.frames.length > 1) {
+            previewAnimFrameId = requestAnimationFrame(drawFrame);
+        }
+    };
+
+    previewAnimFrameId = requestAnimationFrame(drawFrame);
 }
 
 async function loadExistingIcon(item: ItemCatalogEntry): Promise<void> {
@@ -147,6 +211,7 @@ function imageToPngBase64(img: HTMLImageElement): string {
 }
 
 function closeModal(): void {
+    stopIconPreviewAnimation();
     session?.abort();
     session = null;
     const { modal, fileInput } = getInputs();
@@ -229,8 +294,13 @@ export function initItemSpriteCalibrator(): void {
         'itemSpriteOffsetY',
         'itemSpriteGapX',
         'itemSpriteGapY',
+        'itemSpriteAnimEnabled',
+        'itemSpriteAnimSpeedFps',
+        'itemSpriteAnimLoop',
     ]) {
-        document.getElementById(id)?.addEventListener('input', redrawPreview);
+        const el = document.getElementById(id);
+        el?.addEventListener('input', redrawPreview);
+        el?.addEventListener('change', redrawPreview);
     }
 }
 

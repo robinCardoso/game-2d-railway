@@ -2,10 +2,11 @@
 
 import {
     sanitizeItemSpriteCalibration,
+    type ItemSpriteAnimationClip,
     type ItemSpriteCalibration,
 } from '../../shared/itemSprite.js';
 
-export type { ItemSpriteCalibration };
+export type { ItemSpriteAnimationClip, ItemSpriteCalibration };
 
 export type EquipmentSlot =
     | 'head'

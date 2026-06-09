@@ -1483,6 +1483,15 @@
             <label>Offset Y <input type="number" id="itemSpriteOffsetY" value="0" style="width: 100%; margin-top: 2px; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px;" /></label>
             <label>Gap X <input type="number" id="itemSpriteGapX" value="0" style="width: 100%; margin-top: 2px; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px;" /></label>
             <label>Gap Y <input type="number" id="itemSpriteGapY" value="0" style="width: 100%; margin-top: 2px; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px;" /></label>
+            <label style="display: flex; align-items: center; gap: 6px; margin-top: 4px; cursor: pointer;">
+              <input type="checkbox" id="itemSpriteAnimEnabled" />
+              <span>Animar strip (grade com 2+ frames)</span>
+            </label>
+            <label>Anim FPS <input type="number" id="itemSpriteAnimSpeedFps" min="1" value="8" style="width: 100%; margin-top: 2px; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px;" /></label>
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+              <input type="checkbox" id="itemSpriteAnimLoop" checked />
+              <span>Loop</span>
+            </label>
             <span style="font-size: 9px; color: var(--text-dim); text-transform: uppercase; margin-top: 8px;">Preview inventário</span>
             <canvas id="itemSpriteIconPreview" width="32" height="32" style="image-rendering: pixelated; border: 1px dashed #6366f1; border-radius: 4px; background: #0f1115;"></canvas>
           </div>
