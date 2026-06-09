@@ -6,6 +6,7 @@ import { env } from './config/env.js';
 import { healthHandler } from './routes/health.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createCharactersRouter } from './routes/characters.js';
+import { createCharacterInventoryRouter } from './routes/characterInventory.js';
 import { createWsTicketRouter } from './routes/wsTicket.js';
 import { createStudioRouter } from './routes/studio/index.js';
 import { desktopVersionHandler } from './routes/desktopVersion.js';
@@ -79,6 +80,10 @@ export function createApp(getOnline: (() => number) | undefined, collision: MapC
     });
 
     app.use('/api/auth', createAuthRouter());
+    app.use(
+        '/api/characters/:characterId/inventory',
+        createCharacterInventoryRouter()
+    );
     app.use('/api/characters', createCharactersRouter((mapId) => collision.getMapSpawn(mapId)));
     app.use('/api/ws-ticket', createWsTicketRouter(collision));
     app.get('/api/desktop/version', desktopVersionHandler);

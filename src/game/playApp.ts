@@ -84,7 +84,10 @@ import type { CharacterRow } from '../shared/types';
 import { updateCharacterLocation, updateCharacterProgress } from '../shared/characterStore';
 import { fetchWsTicket, isServerWsTicketEnabled } from '../shared/wsTicketClient';
 import { updateCharacterStatsUi } from './ui/characterStatsUi';
-import { normalizeCharacterProgress } from './experience';
+import { updatePlayHudPing, updatePlayHudStatus } from './ui/playHudStatusUi';
+import { initPlayHudInventory } from './ui/playHudInventory';
+import { getExpProgress, normalizeCharacterProgress } from './experience';
+import { serverStateStore } from '../net/serverStateStore';
 import { shouldCelebrateSessionLevelUp } from './playProgress';
 import { getPlayBorderConfig, loadPlayBorderConfig } from './playBorderConfig';
 import { resetPlayCombatInput, tickPlayCombat, getPlayCombatHoverId, getPlayCombatTargetId, updatePlayCombatHover, handlePlayCombatTargetClick, clearPlayCombatTarget, type PlayCombatServerBridge } from './playCombat';
@@ -353,14 +356,28 @@ function resetPortalTriggerState(): void {
 }
 
 function updateActiveMapHud(): void {
-    if (!statusMapNameEl) return;
     const entry = currentMapId ? getMapById(currentMapId) : undefined;
     const baseName = entry?.name ?? currentMapId ?? '—';
-    if (isInsideMapInstance()) {
-        statusMapNameEl.textContent = `${baseName} · #${getActiveInstanceShortLabel()}`;
-    } else {
-        statusMapNameEl.textContent = baseName;
-    }
+    const label = isInsideMapInstance()
+        ? `${baseName} · #${getActiveInstanceShortLabel()}`
+        : baseName;
+    if (statusMapNameEl) statusMapNameEl.textContent = label;
+    const mobileMap = document.getElementById('statusMapNameMobile');
+    if (mobileMap) mobileMap.textContent = label;
+}
+
+function syncPlayHudVitals(): void {
+    if (!activeCharacter) return;
+    const progress = getExpProgress(activeCharacter.experience ?? 0, activeCharacter.level ?? 1);
+    updatePlayHudStatus({
+        health: player.health,
+        maxHealth: player.maxHealth,
+        mana: player.mana,
+        maxMana: player.maxMana,
+        xpCurrent: progress.currentInLevel,
+        xpRequired: progress.requiredForNext,
+    });
+    updatePlayHudPing(serverStateStore.lastPingMs);
 }
 
 function respawnEntities(): void {
@@ -943,6 +960,7 @@ function update(): void {
     }
 
     localPlayerFloats.tick(nowMs);
+    syncPlayHudVitals();
 }
 
 function getPlayBorderDrawContext() {
@@ -1503,7 +1521,13 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
     playSessionLevel = progress.level;
 
     if (playCharNameEl) playCharNameEl.textContent = character.name;
+    const mobileName = document.getElementById('playCharNameMobile');
+    if (mobileName) mobileName.textContent = character.name;
+    const panelName = document.getElementById('characterPanelName');
+    if (panelName) panelName.textContent = character.name;
     updateCharacterStatsUi(character);
+    initPlayHudInventory(character.id);
+    syncPlayHudVitals();
 
     const vocationId = (character.vocation as VocationId) || 'knight';
     const vocationConfig = getVocationById(vocationId);

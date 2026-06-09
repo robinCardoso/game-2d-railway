@@ -6,36 +6,16 @@
     display: none !important;
 }
 
-.play-stats-backdrop {
-    display: none;
-}
-
 @media (max-width: 768px) {
     .play-mobile-only {
-        display: inline-flex !important;
+        display: flex !important;
     }
 
     .play-desktop-only {
         display: none !important;
     }
 
-    .play-layout {
-        height: 100vh;
-        height: 100dvh;
-    }
-
-    .play-top-bar {
-        flex-wrap: nowrap;
-        gap: 8px;
-        padding:
-            calc(8px + env(safe-area-inset-top, 0px))
-            max(12px, env(safe-area-inset-right, 0px))
-            8px
-            max(12px, env(safe-area-inset-left, 0px));
-        min-height: 48px;
-    }
-
-    .play-top-bar__identity {
+    .play-hud-top--mobile-compact .play-hud-player-text {
         display: flex;
         flex-direction: column;
         gap: 2px;
@@ -43,11 +23,12 @@
         flex: 1;
     }
 
-    .play-top-bar__identity strong {
+    .play-hud-top--mobile-compact strong {
         font-size: 14px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        color: #f1f5f9;
     }
 
     .play-top-bar__map {
@@ -71,6 +52,8 @@
         display: inline-flex;
         align-items: center;
         font-size: 12px;
+        color: #818cf8;
+        text-decoration: none;
     }
 
     .play-top-link--compact {
@@ -78,6 +61,7 @@
     }
 
     .play-stats-toggle {
+        display: inline-flex;
         align-items: center;
         justify-content: center;
         min-height: 40px;
@@ -101,84 +85,7 @@
         color: #fff;
     }
 
-    .play-main-layout {
-        grid-template-columns: 1fr;
-        position: relative;
-    }
-
-    .play-stats-backdrop {
-        display: block;
-        position: fixed;
-        inset: 0;
-        z-index: 35;
-        border: 0;
-        padding: 0;
-        margin: 0;
-        background: rgba(0, 0, 0, 0.55);
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.25s ease;
-        cursor: pointer;
-    }
-
-    .play-layout.is-stats-open .play-stats-backdrop {
-        opacity: 1;
-        pointer-events: auto;
-    }
-
-    .sidebar {
-        position: fixed;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: 40;
-        max-height: min(74vh, 540px);
-        border-left: 0;
-        border-top: 1px solid #2d3139;
-        border-radius: 16px 16px 0 0;
-        transform: translateY(100%);
-        transition: transform 0.28s ease;
-        padding:
-            0.5rem 1rem
-            calc(1rem + env(safe-area-inset-bottom, 0px));
-        box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45);
-    }
-
-    .play-layout.is-stats-open .sidebar {
-        transform: translateY(0);
-    }
-
-    .play-sidebar-header.play-mobile-only {
-        display: flex !important;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 0.5rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    }
-
-    .play-sidebar-header .panel-title {
-        margin-bottom: 0;
-    }
-
-    .play-sidebar-close {
-        align-items: center;
-        justify-content: center;
-        width: 40px;
-        height: 40px;
-        border: 1px solid #3d4450;
-        border-radius: 8px;
-        background: #1e2229;
-        color: #e2e8f0;
-        font-size: 22px;
-        line-height: 1;
-        cursor: pointer;
-        padding: 0;
-    }
-
     .play-zoom-controls {
-        right: max(10px, env(safe-area-inset-right, 0px));
-        bottom: calc(12px + env(safe-area-inset-bottom, 0px));
         padding: 6px 8px;
         border-radius: 10px;
     }
@@ -193,15 +100,6 @@
     #playZoomLabel {
         min-width: 48px;
         font-size: 12px;
-    }
-
-    .level-up-banner {
-        top: calc(56px + env(safe-area-inset-top, 0px));
-        width: min(92%, 640px);
-    }
-
-    #gameCanvas {
-        touch-action: manipulation;
     }
 }
 

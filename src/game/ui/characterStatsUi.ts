@@ -27,7 +27,17 @@ export function updateCharacterStatsUi(
   const elExp = document.getElementById('statExp');
   const elExpBar = document.getElementById('statExpBarFill');
 
-  if (elVocation) elVocation.textContent = vocationId.toUpperCase();
+  const vocationLabel = vocationId.toUpperCase();
+  if (elVocation) elVocation.textContent = vocationLabel;
+
+  const elHudLevel = document.getElementById('playHudLevel');
+  const elCharVocation = document.getElementById('playCharVocation');
+  const elPanelName = document.getElementById('characterPanelName');
+  const elCharName = document.getElementById('playCharName');
+  if (elHudLevel) elHudLevel.textContent = String(level);
+  if (elCharVocation) elCharVocation.textContent = vocationLabel;
+  if (elPanelName && elCharName) elPanelName.textContent = elCharName.textContent ?? '—';
+
     if (elLevel) {
         elLevel.textContent = String(level);
         if (options?.flashLevel) {
@@ -47,5 +57,10 @@ export function updateCharacterStatsUi(
   }
   if (elExpBar) {
     elExpBar.style.width = `${expProgress.percent}%`;
+  }
+
+  const elHudXp = document.getElementById('playHudXpText');
+  if (elHudXp) {
+    elHudXp.textContent = `${expProgress.currentInLevel} / ${expProgress.requiredForNext} XP`;
   }
 }

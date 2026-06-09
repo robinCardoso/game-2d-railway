@@ -1,30 +1,25 @@
-const MOBILE_PLAY_MQ = '(max-width: 768px)';
+import { MOBILE_PLAY_MQ } from './playHudConstants';
+import { closePlayPanels, openPlayPanel } from './ui/playHudPanels';
 
 export function initPlayMobileHud(): void {
-    const layout = document.querySelector('.play-layout');
     const toggle = document.getElementById('playStatsToggle');
-    const closeBtn = document.getElementById('playStatsClose');
-    const backdrop = document.getElementById('playStatsBackdrop');
-    if (!layout || !toggle) return;
+    if (!toggle) return;
 
     const mq = window.matchMedia(MOBILE_PLAY_MQ);
 
-    const setOpen = (open: boolean): void => {
-        layout.classList.toggle('is-stats-open', open);
-        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-    };
-
-    const syncForViewport = (): void => {
-        if (!mq.matches) setOpen(false);
-    };
-
     toggle.addEventListener('click', () => {
         if (!mq.matches) return;
-        setOpen(!layout.classList.contains('is-stats-open'));
+        const panel = document.getElementById('characterPanel');
+        if (panel && !panel.hidden) {
+            closePlayPanels();
+        } else {
+            openPlayPanel('character');
+        }
     });
 
-    closeBtn?.addEventListener('click', () => setOpen(false));
-    backdrop?.addEventListener('click', () => setOpen(false));
+    const syncForViewport = (): void => {
+        if (!mq.matches) closePlayPanels();
+    };
 
     mq.addEventListener('change', syncForViewport);
     window.addEventListener('resize', syncForViewport);

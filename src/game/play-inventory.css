@@ -1,0 +1,121 @@
+.inventory-section-title {
+    margin: 0 0 10px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #6366f1;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.equipment-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 20px;
+    max-width: 240px;
+}
+
+.equipment-slot {
+    aspect-ratio: 1;
+    min-height: 52px;
+    border: 1px dashed #3d4450;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.02);
+    color: #64748b;
+    font-size: 9px;
+    cursor: default;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-family: inherit;
+}
+
+.equipment-slot[data-slot='head'] { grid-column: 2; }
+.equipment-slot[data-slot='amulet'] { grid-column: 1; grid-row: 2; }
+.equipment-slot[data-slot='body'] { grid-column: 2; grid-row: 2; }
+.equipment-slot[data-slot='ring'] { grid-column: 3; grid-row: 2; }
+.equipment-slot[data-slot='legs'] { grid-column: 2; grid-row: 3; }
+.equipment-slot[data-slot='feet'] { grid-column: 2; grid-row: 4; }
+
+.equipment-slot.has-item {
+    border-style: solid;
+    border-color: #4f46e5;
+    color: #e2e8f0;
+    background: rgba(99, 102, 241, 0.08);
+}
+
+.equipment-slot__label {
+    font-size: 8px;
+    color: #64748b;
+    margin-bottom: 2px;
+}
+
+.equipment-slot__item {
+    font-size: 9px;
+    font-weight: 600;
+    word-break: break-all;
+}
+
+.bag-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 6px;
+    margin-bottom: 16px;
+}
+
+@media (max-width: 768px) {
+    .bag-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+.bag-slot {
+    aspect-ratio: 1;
+    min-height: 44px;
+    border: 1px dashed #3d4450;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.02);
+    color: #94a3b8;
+    font-size: 9px;
+    cursor: default;
+    padding: 2px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: inherit;
+}
+
+.bag-slot.has-item {
+    border-style: solid;
+    border-color: #3d4450;
+    color: #e2e8f0;
+}
+
+.bag-slot__qty {
+    font-size: 8px;
+    color: #94a3b8;
+}
+
+.inventory-footer {
+    display: flex;
+    justify-content: space-between;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+.inventory-loading,
+.inventory-error {
+    font-size: 13px;
+    color: #94a3b8;
+    padding: 8px 0 16px;
+}
+
+.inventory-error {
+    color: #f87171;
+}

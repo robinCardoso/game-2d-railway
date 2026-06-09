@@ -1,0 +1,394 @@
+/**
+ * HUD desktop do Play — camada visual sobre o canvas (não altera engine).
+ */
+
+.play-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    background: #05070c;
+}
+
+.play-hud-top {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr) minmax(0, 1.2fr);
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: linear-gradient(180deg, #161922 0%, #12141a 100%);
+    border-bottom: 1px solid #2d3139;
+    flex-shrink: 0;
+    z-index: 20;
+}
+
+.play-hud-player {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.play-hud-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2px solid #3d4450;
+    background: #1e2229;
+    flex-shrink: 0;
+}
+
+.play-hud-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.play-hud-player-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.play-hud-player-text strong {
+    font-size: 14px;
+    color: #f1f5f9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.play-hud-player-text span {
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+.play-hud-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.hud-bar-row {
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: #cbd5e1;
+}
+
+.hud-bar {
+    height: 10px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.hud-bar-fill {
+    height: 100%;
+    width: 100%;
+    transition: width 0.2s ease;
+}
+
+.hud-bar-row--hp .hud-bar-fill {
+    background: linear-gradient(90deg, #b91c1c, #ef4444);
+}
+
+.hud-bar-row--mp .hud-bar-fill {
+    background: linear-gradient(90deg, #1d4ed8, #3b82f6);
+}
+
+.hud-bar-row strong {
+    font-size: 10px;
+    color: #e2e8f0;
+    white-space: nowrap;
+}
+
+.hud-xp-row {
+    font-size: 10px;
+    color: #94a3b8;
+    padding-left: 36px;
+}
+
+.play-hud-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.play-hud-action {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-width: 64px;
+    min-height: 44px;
+    padding: 4px 8px;
+    border: 1px solid #3d4450;
+    border-radius: 10px;
+    background: #1a1f28;
+    color: #c7d2fe;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.play-hud-action:hover {
+    background: #252b38;
+    border-color: #6366f1;
+    color: #fff;
+}
+
+.play-hud-action.is-active {
+    border-color: #6366f1;
+    background: #2a3148;
+    color: #fff;
+}
+
+.play-hud-account {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.play-hud-account .play-top-link {
+    color: #818cf8;
+    text-decoration: none;
+    font-size: 12px;
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+}
+
+.play-viewport {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    background: #05070c;
+}
+
+#canvasContainer {
+    position: absolute;
+    inset: 0;
+    container-type: inline-size;
+}
+
+#gameCanvas {
+    display: block;
+    touch-action: manipulation;
+}
+
+.play-map-status {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    z-index: 12;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: rgba(18, 20, 26, 0.9);
+    border: 1px solid #2d3139;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    font-size: 11px;
+    color: #94a3b8;
+    pointer-events: none;
+}
+
+.play-map-status strong {
+    display: block;
+    font-size: 12px;
+    color: #e2e8f0;
+    margin-bottom: 4px;
+}
+
+.play-map-status-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.play-ping {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #64748b;
+}
+
+.play-ping-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #22c55e;
+}
+
+.play-zoom-controls {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(18, 20, 26, 0.92);
+    border: 1px solid #2d3139;
+    border-radius: 8px;
+    padding: 4px 6px;
+    z-index: 12;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.play-zoom-controls button {
+    width: 30px;
+    height: 30px;
+    border: 1px solid #3d4450;
+    border-radius: 6px;
+    background: #1e2229;
+    color: #e2e8f0;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+}
+
+.play-zoom-controls button:hover:not(:disabled) {
+    background: #2a3140;
+    border-color: #6366f1;
+    color: #fff;
+}
+
+.play-zoom-controls button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+#playZoomLabel {
+    min-width: 42px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: bold;
+    color: #94a3b8;
+    user-select: none;
+}
+
+.level-up-banner {
+    position: absolute;
+    top: clamp(10px, 2.5vh, 24px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 25;
+    pointer-events: none;
+    text-align: center;
+    width: min(94%, 720px);
+    opacity: 0;
+    transition: opacity 0.45s ease, transform 0.45s ease;
+}
+
+.level-up-banner.is-visible {
+    opacity: 1;
+    animation: level-up-pop 0.55s ease-out;
+}
+
+.level-up-banner__text {
+    display: block;
+    font-family: 'Cinzel', 'Palatino Linotype', Palatino, Georgia, serif;
+    font-weight: 700;
+    font-size: clamp(1rem, 5.5cqi, 1.85rem);
+    line-height: 1.25;
+    color: #facc15;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-shadow:
+        0 0 18px rgba(250, 204, 21, 0.65),
+        0 0 4px rgba(255, 255, 255, 0.35),
+        0 2px 6px rgba(0, 0, 0, 0.95),
+        0 0 1px #000;
+}
+
+@keyframes level-up-pop {
+    0% { transform: translateX(-50%) translateY(-8px) scale(0.92); opacity: 0; }
+    70% { transform: translateX(-50%) translateY(0) scale(1.03); opacity: 1; }
+    100% { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
+}
+
+.play-panel-layer {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 45;
+}
+
+.play-panel-backdrop {
+    position: fixed;
+    inset: 0;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    background: rgba(0, 0, 0, 0.55);
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.play-panel-backdrop[hidden] {
+    display: none !important;
+}
+
+body.play-panel-open {
+    overflow: hidden;
+}
+
+/* Sidebar legada — só mobile via bottom sheet antigo; desktop oculta */
+.play-legacy-sidebar {
+    display: none;
+}
+
+@media (min-width: 769px) {
+    .play-hud-top--mobile-compact {
+        display: none;
+    }
+}
+
+@media (max-width: 768px) {
+    .play-hud-top--desktop {
+        display: none;
+    }
+
+    .play-hud-top--mobile-compact {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding:
+            calc(8px + env(safe-area-inset-top, 0px))
+            max(12px, env(safe-area-inset-right, 0px))
+            8px
+            max(12px, env(safe-area-inset-left, 0px));
+        background: #12141a;
+        border-bottom: 1px solid #2d3139;
+        min-height: 48px;
+        gap: 8px;
+    }
+
+    .play-map-status {
+        left: max(10px, env(safe-area-inset-left, 0px));
+        bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .play-zoom-controls {
+        right: max(10px, env(safe-area-inset-right, 0px));
+        bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .level-up-banner {
+        top: calc(56px + env(safe-area-inset-top, 0px));
+    }
+}

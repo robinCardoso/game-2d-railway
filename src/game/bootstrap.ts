@@ -4,9 +4,13 @@ import { track } from '../shared/analytics';
 import { enforceDesktopVersionGate, initDesktopClientShell } from '../ui/initDesktopClient';
 import { resumeWorldEntryOverlayIfPending } from '../world-entry/worldEntryOverlay';
 import { initPlayMobileHud } from './playMobileHud';
+import { initPlayHudPanels } from './ui/playHudPanels';
+import { initPlayHudSettings } from './ui/playHudSettings';
 import { startPlay, stopLocationAutosave } from './playApp';
 
 resumeWorldEntryOverlayIfPending();
+initPlayHudPanels();
+initPlayHudSettings();
 initPlayMobileHud();
 
 initDesktopClientShell();
@@ -21,12 +25,15 @@ async function goToCharacterSelect(e: Event): Promise<void> {
 document.getElementById('changeCharLink')?.addEventListener('click', (e) => void goToCharacterSelect(e));
 document.getElementById('changeCharLinkMobile')?.addEventListener('click', (e) => void goToCharacterSelect(e));
 
-document.getElementById('logoutPlay')?.addEventListener('click', async (e) => {
+async function logoutFromPlay(e: Event): Promise<void> {
     e.preventDefault();
     await stopLocationAutosave();
     await signOut();
     location.href = 'login.html';
-});
+}
+
+document.getElementById('logoutPlay')?.addEventListener('click', (e) => void logoutFromPlay(e));
+document.getElementById('logoutPlayMobile')?.addEventListener('click', (e) => void logoutFromPlay(e));
 
 const params = new URLSearchParams(location.search);
 const characterId = params.get('characterId');

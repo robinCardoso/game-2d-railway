@@ -6,6 +6,10 @@
     <title>Jogando — Elarion Online</title>
     <link rel="icon" type="image/png" href="/brand/icon-elarion.png" />
     <link rel="stylesheet" href="/src/style.css" />
+    <link rel="stylesheet" href="/src/game/play-desktop-hud.css" />
+    <link rel="stylesheet" href="/src/game/play-panels.css" />
+    <link rel="stylesheet" href="/src/game/play-inventory.css" />
+    <link rel="stylesheet" href="/src/game/play-settings.css" />
     <link rel="stylesheet" href="/src/game/play-mobile.css" />
     <link rel="stylesheet" href="/src/ui/player-flow-mobile.css" />
     <meta name="theme-color" content="#12141a" />
@@ -14,128 +18,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet" />
-    <style>
-      .play-top-bar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 8px 16px;
-        background: #12141a;
-        border-bottom: 1px solid #2d3139;
-        font-size: 13px;
-      }
-      .play-top-bar a { color: #818cf8; text-decoration: none; margin-left: 12px; }
-      #canvasContainer { flex: 1; position: relative; min-height: 0; container-type: inline-size; }
-      #gameCanvas { touch-action: manipulation; }
-      .level-up-banner {
-        position: absolute;
-        top: clamp(10px, 2.5vh, 24px);
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 25;
-        pointer-events: none;
-        text-align: center;
-        width: min(94%, 720px);
-        opacity: 0;
-        transition: opacity 0.45s ease, transform 0.45s ease;
-      }
-      .level-up-banner.is-visible {
-        opacity: 1;
-        animation: level-up-pop 0.55s ease-out;
-      }
-      .level-up-banner__text {
-        display: block;
-        font-family: 'Cinzel', 'Palatino Linotype', Palatino, Georgia, serif;
-        font-weight: 700;
-        font-size: clamp(1rem, 5.5cqi, 1.85rem);
-        line-height: 1.25;
-        color: #facc15;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        text-shadow:
-          0 0 18px rgba(250, 204, 21, 0.65),
-          0 0 4px rgba(255, 255, 255, 0.35),
-          0 2px 6px rgba(0, 0, 0, 0.95),
-          0 0 1px #000;
-      }
-      @keyframes level-up-pop {
-        0% { transform: translateX(-50%) translateY(-8px) scale(0.92); opacity: 0; }
-        70% { transform: translateX(-50%) translateY(0) scale(1.03); opacity: 1; }
-        100% { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
-      }
-      .play-layout { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
-      .play-top-bar__identity { display: flex; align-items: center; gap: 8px; min-width: 0; }
-      .play-top-bar__map::before { content: '· '; color: #64748b; }
-      .play-top-bar__actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-      .play-top-link { color: #818cf8; text-decoration: none; margin-left: 0; min-height: 32px; display: inline-flex; align-items: center; }
-      .play-sidebar-header { display: none; }
-      .play-main-layout { display: grid; grid-template-columns: 1fr 280px; flex-grow: 1; overflow: hidden; }
-      .sidebar { background-color: #15171c; border-left: 1px solid #2d3139; display: flex; flex-direction: column; padding: 1rem; gap: 1rem; overflow-y: auto; }
-      .stats-panel { background: rgba(255, 255, 255, 0.03); border-radius: 0.75rem; padding: 1rem; }
-      .panel-title { font-size: 11px; font-weight: bold; color: #6366f1; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
-      .info-row { display: flex; justify-content: space-between; font-size: 13px; padding-bottom: 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); margin-bottom: 8px; color: #e2e8f0; }
-      .info-label { color: #94a3b8; }
-      .xp-bar {
-        height: 8px;
-        background: rgba(255, 255, 255, 0.08);
-        border-radius: 999px;
-        overflow: hidden;
-        margin: 4px 0 10px;
-      }
-      #statExpBarFill {
-        height: 100%;
-        width: 0%;
-        background: linear-gradient(90deg, #6366f1, #22d3ee);
-        transition: width 0.25s ease;
-      }
-      .stat-level-flash {
-        color: #fbbf24;
-        text-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
-      }
-      .play-zoom-controls {
-        position: absolute;
-        right: 12px;
-        bottom: 12px;
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        background: rgba(18, 20, 26, 0.92);
-        border: 1px solid #2d3139;
-        border-radius: 8px;
-        padding: 4px 6px;
-        z-index: 10;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
-      }
-      .play-zoom-controls button {
-        width: 30px;
-        height: 30px;
-        border: 1px solid #3d4450;
-        border-radius: 6px;
-        background: #1e2229;
-        color: #e2e8f0;
-        font-size: 18px;
-        line-height: 1;
-        cursor: pointer;
-        padding: 0;
-      }
-      .play-zoom-controls button:hover:not(:disabled) {
-        background: #2a3140;
-        border-color: #6366f1;
-        color: #fff;
-      }
-      .play-zoom-controls button:disabled {
-        opacity: 0.35;
-        cursor: not-allowed;
-      }
-      #playZoomLabel {
-        min-width: 42px;
-        text-align: center;
-        font-size: 11px;
-        font-weight: bold;
-        color: #94a3b8;
-        user-select: none;
-      }
-    </style>
     <script>
       try {
         if (sessionStorage.getItem('worldEntryPending') === '1') {
@@ -149,7 +31,6 @@
         background: #05070c;
         overflow: hidden;
       }
-
       html.world-entry-pending .play-layout,
       html.world-entry-pending #loadingScreen {
         visibility: hidden;
@@ -158,42 +39,99 @@
   </head>
   <body>
     <div class="play-layout">
-      <header class="play-top-bar">
-        <div class="play-top-bar__identity">
-          <strong id="playCharName">—</strong>
-          <span class="play-top-bar__map" id="statusMapName">—</span>
+      <!-- Desktop HUD -->
+      <header class="play-hud-top play-hud-top--desktop">
+        <div class="play-hud-player">
+          <div class="play-hud-avatar">
+            <img id="playCharAvatar" src="/brand/icon-elarion.png" alt="" />
+          </div>
+          <div class="play-hud-player-text">
+            <strong id="playCharName">—</strong>
+            <span>
+              <span id="playCharVocation">—</span>
+              · Level <span id="playHudLevel">1</span>
+            </span>
+          </div>
+        </div>
+
+        <div class="play-hud-bars">
+          <div class="hud-bar-row hud-bar-row--hp">
+            <span>HP</span>
+            <div class="hud-bar"><div id="playHudHpFill" class="hud-bar-fill"></div></div>
+            <strong id="playHudHpText">—</strong>
+          </div>
+          <div class="hud-bar-row hud-bar-row--mp">
+            <span>MP</span>
+            <div class="hud-bar"><div id="playHudMpFill" class="hud-bar-fill"></div></div>
+            <strong id="playHudMpText">—</strong>
+          </div>
+          <div class="hud-xp-row"><span id="playHudXpText">—</span></div>
+        </div>
+
+        <div>
+          <nav class="play-hud-actions" aria-label="Ações do jogo">
+            <button type="button" class="play-hud-action" data-panel="character" aria-expanded="false">
+              <span>Personagem</span>
+            </button>
+            <button type="button" class="play-hud-action" data-panel="inventory" aria-expanded="false">
+              <span>Inventário</span>
+            </button>
+            <button type="button" class="play-hud-action" data-panel="map" aria-expanded="false">
+              <span>Mapa</span>
+            </button>
+            <button type="button" class="play-hud-action" data-panel="settings" aria-expanded="false">
+              <span>Config.</span>
+            </button>
+            <button type="button" class="play-hud-action" data-panel="chat" aria-expanded="false">
+              <span>Chat</span>
+            </button>
+          </nav>
+          <div class="play-hud-account">
+            <a href="#" id="changeCharLink" class="play-top-link">Trocar personagem</a>
+            <a href="#" id="logoutPlay" class="play-top-link">Sair</a>
+          </div>
+        </div>
+      </header>
+
+      <!-- Mobile compact top -->
+      <header class="play-hud-top--mobile-compact play-mobile-only">
+        <div class="play-hud-player-text">
+          <strong id="playCharNameMobile">—</strong>
+          <span class="play-top-bar__map" id="statusMapNameMobile">—</span>
         </div>
         <div class="play-top-bar__actions">
           <button
             type="button"
             id="playStatsToggle"
-            class="play-stats-toggle play-mobile-only"
+            class="play-stats-toggle"
             aria-expanded="false"
-            aria-controls="playSidebar"
+            aria-controls="characterPanel"
           >
             Atributos
           </button>
-          <span class="play-top-bar__coords play-desktop-only">
-            <span id="statusPos">0, 0</span> · Z <span id="statusZ">0</span>
-          </span>
-          <span id="posX" hidden></span><span id="posY" hidden></span><span id="posZ" hidden></span>
-          <a href="#" id="changeCharLink" class="play-top-link play-top-link--wide">Trocar personagem</a>
-          <a href="#" id="changeCharLinkMobile" class="play-top-link play-top-link--compact play-mobile-only">Chars</a>
-          <a href="#" id="logoutPlay" class="play-top-link">Sair</a>
+          <a href="#" id="changeCharLinkMobile" class="play-top-link play-top-link--compact">Chars</a>
+          <a href="#" id="logoutPlayMobile" class="play-top-link">Sair</a>
         </div>
       </header>
-      <div class="play-main-layout">
-        <button
-          type="button"
-          id="playStatsBackdrop"
-          class="play-stats-backdrop play-mobile-only"
-          aria-label="Fechar atributos"
-          tabindex="-1"
-        ></button>
+
+      <div class="play-viewport">
         <div id="canvasContainer">
           <canvas id="gameCanvas"></canvas>
           <div id="levelUpBanner" class="level-up-banner" hidden aria-live="polite">
             <span id="levelUpBannerText" class="level-up-banner__text"></span>
+          </div>
+          <div class="play-map-status" id="playMapStatus">
+            <strong id="statusMapName">—</strong>
+            <div class="play-map-status-row">
+              <span id="playCoordsWrap">
+                <span id="statusPos">0, 0</span>,
+                <span id="statusZ">Z 0</span>
+              </span>
+              <span class="play-ping">
+                <span class="play-ping-dot" aria-hidden="true"></span>
+                <span id="playPingText">—</span>
+              </span>
+            </div>
           </div>
           <div id="playZoomControls" class="play-zoom-controls" title="Zoom da câmera">
             <button type="button" id="playZoomOut" aria-label="Afastar">−</button>
@@ -201,36 +139,181 @@
             <button type="button" id="playZoomIn" aria-label="Aproximar">+</button>
           </div>
         </div>
-        <aside class="sidebar" id="playSidebar">
-          <div class="stats-panel">
-            <div class="play-sidebar-header play-mobile-only">
-              <div class="panel-title">Atributos</div>
-              <button
-                type="button"
-                id="playStatsClose"
-                class="play-sidebar-close"
-                aria-label="Fechar atributos"
-              >
-                ×
-              </button>
+      </div>
+
+      <!-- Painéis modais -->
+      <div class="play-panel-layer" aria-hidden="true">
+        <button
+          type="button"
+          id="playPanelBackdrop"
+          class="play-panel-backdrop"
+          hidden
+          aria-label="Fechar painel"
+        ></button>
+
+        <section
+          id="characterPanel"
+          class="play-panel play-panel--character"
+          data-panel-name="character"
+          hidden
+        >
+          <header class="play-panel-header">
+            <h2>Personagem</h2>
+            <button type="button" class="play-panel-close" data-close-panel aria-label="Fechar">×</button>
+          </header>
+          <div class="play-panel-body">
+            <div class="character-panel-summary">
+              <div class="character-panel-avatar">
+                <img id="characterPanelAvatar" src="/brand/icon-elarion.png" alt="" />
+              </div>
+              <div>
+                <strong id="characterPanelName">—</strong>
+                <span>
+                  <span id="statVocation">—</span>
+                  · Level <span id="statLevel">1</span>
+                </span>
+              </div>
             </div>
-            <div class="panel-title play-desktop-only">Atributos</div>
-            <div id="statsContainer">
-              <div class="info-row"><span class="info-label">Classe/Vocação:</span> <span id="statVocation">—</span></div>
-              <div class="info-row"><span class="info-label">Nível (Level):</span> <span id="statLevel">1</span></div>
-              <div class="info-row"><span class="info-label">Experiência:</span> <span id="statExp">0 / 100 XP</span></div>
-              <div class="xp-bar" aria-hidden="true"><div id="statExpBarFill"></div></div>
-              <div class="info-row"><span class="info-label">Melee:</span> <span id="statMelee">0</span></div>
-              <div class="info-row"><span class="info-label">Ataque Distância:</span> <span id="statDistance">0</span></div>
-              <div class="info-row"><span class="info-label">Ataque Mágico:</span> <span id="statMagic">0</span></div>
-              <div class="info-row"><span class="info-label">Defesa:</span> <span id="statDefense">0</span></div>
-              <div class="info-row"><span class="info-label">Vida Máxima:</span> <span id="statHealth">0</span></div>
-              <div class="info-row"><span class="info-label">Mana Máxima:</span> <span id="statMana">0</span></div>
+            <div class="character-panel-bars">
+              <div>HP máx. <strong id="statHealth">0</strong></div>
+              <div>MP máx. <strong id="statMana">0</strong></div>
+              <div>
+                XP <strong id="statExp">0 / 100 XP</strong>
+                <div class="stat-exp-bar" aria-hidden="true"><div id="statExpBarFill"></div></div>
+              </div>
+            </div>
+            <div class="character-stat-list">
+              <div><span>Melee</span><strong id="statMelee">0</strong></div>
+              <div><span>Distância</span><strong id="statDistance">0</strong></div>
+              <div><span>Magia</span><strong id="statMagic">0</strong></div>
+              <div><span>Defesa</span><strong id="statDefense">0</strong></div>
             </div>
           </div>
-        </aside>
+        </section>
+
+        <section
+          id="inventoryPanel"
+          class="play-panel play-panel--inventory"
+          data-panel-name="inventory"
+          hidden
+        >
+          <header class="play-panel-header">
+            <h2>Inventário</h2>
+            <button type="button" class="play-panel-close" data-close-panel aria-label="Fechar">×</button>
+          </header>
+          <div class="play-panel-body" id="inventoryPanelBody">
+            <p class="inventory-loading" id="inventoryLoading" hidden>Carregando…</p>
+            <p class="inventory-error" id="inventoryError" hidden></p>
+            <h3 class="inventory-section-title">Equipamento</h3>
+            <div class="equipment-grid" id="equipmentGrid">
+              <button type="button" class="equipment-slot" data-slot="head" disabled>
+                <span class="equipment-slot__label">Cabeça</span>
+              </button>
+              <button type="button" class="equipment-slot" data-slot="amulet" disabled>
+                <span class="equipment-slot__label">Amuleto</span>
+              </button>
+              <button type="button" class="equipment-slot" data-slot="body" disabled>
+                <span class="equipment-slot__label">Corpo</span>
+              </button>
+              <button type="button" class="equipment-slot" data-slot="ring" disabled>
+                <span class="equipment-slot__label">Anel</span>
+              </button>
+              <button type="button" class="equipment-slot" data-slot="legs" disabled>
+                <span class="equipment-slot__label">Pernas</span>
+              </button>
+              <button type="button" class="equipment-slot" data-slot="feet" disabled>
+                <span class="equipment-slot__label">Pés</span>
+              </button>
+            </div>
+            <h3 class="inventory-section-title">Bolsa</h3>
+            <div class="bag-grid" id="bagGrid"></div>
+            <footer class="inventory-footer">
+              <span id="inventoryGold">—</span>
+              <span id="inventoryCapacity">0 / 20</span>
+            </footer>
+          </div>
+        </section>
+
+        <section id="mapPanel" class="play-panel play-panel--map" data-panel-name="map" hidden>
+          <header class="play-panel-header">
+            <h2>Mapa</h2>
+            <button type="button" class="play-panel-close" data-close-panel aria-label="Fechar">×</button>
+          </header>
+          <div class="play-panel-body">
+            <p class="play-panel-placeholder">Minimapa em breve.</p>
+          </div>
+        </section>
+
+        <section id="settingsPanel" class="play-panel play-panel--settings" data-panel-name="settings" hidden>
+          <header class="play-panel-header">
+            <h2>Configurações</h2>
+            <button type="button" class="play-panel-close" data-close-panel aria-label="Fechar">×</button>
+          </header>
+          <div class="settings-tabs" role="tablist">
+            <button type="button" data-settings-tab="game" aria-selected="true">Jogo</button>
+            <button type="button" data-settings-tab="controls" aria-selected="false">Controles</button>
+            <button type="button" data-settings-tab="video" aria-selected="false">Vídeo</button>
+            <button type="button" data-settings-tab="audio" aria-selected="false">Áudio</button>
+            <button type="button" data-settings-tab="account" aria-selected="false">Conta</button>
+          </div>
+          <div class="play-panel-body">
+            <div class="settings-section" data-settings-section="game">
+              <label>
+                <span>Mostrar nomes dos jogadores</span>
+                <input type="checkbox" data-setting="showPlayerNames" checked />
+              </label>
+              <label>
+                <span>Mostrar nomes dos monstros</span>
+                <input type="checkbox" data-setting="showMonsterNames" checked />
+              </label>
+              <label>
+                <span>Mostrar barras de vida</span>
+                <input type="checkbox" data-setting="showHealthBars" checked />
+              </label>
+              <label>
+                <span>Mostrar dano flutuante</span>
+                <input type="checkbox" data-setting="showFloatingDamage" checked />
+              </label>
+              <label>
+                <span>Mostrar coordenadas</span>
+                <input type="checkbox" data-setting="showCoordinates" />
+              </label>
+              <label>
+                <span>Mostrar ping</span>
+                <input type="checkbox" data-setting="showPing" checked />
+              </label>
+            </div>
+            <div class="settings-section" data-settings-section="controls" hidden>
+              <p class="settings-placeholder">Controles — em breve.</p>
+            </div>
+            <div class="settings-section" data-settings-section="video" hidden>
+              <p class="settings-placeholder">Vídeo — em breve.</p>
+            </div>
+            <div class="settings-section" data-settings-section="audio" hidden>
+              <p class="settings-placeholder">Áudio — em breve.</p>
+            </div>
+            <div class="settings-section" data-settings-section="account" hidden>
+              <p class="settings-placeholder">Conta — em breve.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="chatPanel" class="play-panel play-panel--chat" data-panel-name="chat" hidden>
+          <header class="play-panel-header">
+            <h2>Chat</h2>
+            <button type="button" class="play-panel-close" data-close-panel aria-label="Fechar">×</button>
+          </header>
+          <div class="play-panel-body">
+            <p class="play-panel-placeholder">Chat em breve.</p>
+          </div>
+        </section>
       </div>
+
+      <span id="posX" hidden></span>
+      <span id="posY" hidden></span>
+      <span id="posZ" hidden></span>
     </div>
+
     <div id="loadingScreen" class="loading-screen">
       <div class="loading-spinner"></div>
       <p id="loadingMsg">Carregando mundo…</p>

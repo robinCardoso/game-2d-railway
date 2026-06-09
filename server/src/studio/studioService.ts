@@ -12,6 +12,7 @@ import type { CharacterSpriteConfig } from '../../../src/character/characterSpri
 import { sanitizeCreaturePresetEntry } from '../../../src/game-data/mobPresetTypes.js';
 import { sanitizeItemCatalogDocument, findUnknownLootItemIds } from '../../../src/game-data/itemCatalogTypes.js';
 import { paths } from '../config/paths.js';
+import { invalidateServerItemCatalogCache } from '../game/itemCatalogStore.js';
 import { refreshServerMapEntry } from '../mapRegistry.js';
 import type { MapCollisionStore } from '../MapCollisionStore.js';
 import {
@@ -809,6 +810,7 @@ export const VOCATIONS: Record<string, VocationConfig> = ${JSON.stringify(vocati
         const catalog = sanitizeItemCatalogDocument(body.catalog ?? body);
         fs.mkdirSync(path.dirname(paths.itemCatalogPath), { recursive: true });
         fs.writeFileSync(paths.itemCatalogPath, JSON.stringify(catalog, null, 2) + '\n');
+        invalidateServerItemCatalogCache();
         return { status: 200, body: { success: true, catalog } };
     }
 }
