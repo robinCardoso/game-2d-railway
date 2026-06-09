@@ -87,8 +87,8 @@ export class SpriteAnimationController {
         }
     }
 
-    setState(state: CharacterState) {
-        if (this.currentState !== state) {
+    setState(state: CharacterState, options?: { force?: boolean }) {
+        if (this.currentState !== state || options?.force) {
             this.currentState = state;
             this.currentFrameIndex = 0;
             this.lastFrameTime = 0;
@@ -96,7 +96,12 @@ export class SpriteAnimationController {
     }
 
     setDirection(dir: Direction) {
+        if (this.currentDirection === dir) return;
         this.currentDirection = dir;
+        if (this.currentState === 'attack' || this.currentState === 'cast') {
+            this.currentFrameIndex = 0;
+            this.lastFrameTime = 0;
+        }
     }
 
     hasAnimation(state: CharacterState, dir: Direction): boolean {

@@ -94,7 +94,7 @@
     "attack_right": {
       "row": 0,
       "frames": 1,
-      "speedFps": 1,
+      "speedFps": 5,
       "loop": false,
       "startFrame": 3
     },

@@ -266,6 +266,18 @@ function isAdjacentToPlayer(
     );
 }
 
+function resolvePredictedMeleeDamage(
+    character: CharacterRow,
+    characterSpeed: CharacterSpeedState,
+    target: GameEntity
+): number {
+    const vocationId = (character.vocation as VocationId) || 'knight';
+    const vocationConfig = getVocationById(vocationId);
+    const level = characterSpeed.level || character.level || 1;
+    const stats = calculateStatsForLevel(vocationConfig, level);
+    return calculateMeleeDamage(stats.melee, target.combatDefense).actual;
+}
+
 function resolveCombatTarget(npcs: GameEntity[]): GameEntity | null {
     if (!combatTarget || combatTarget.type !== 'monster') return null;
     const target = npcs.find((n) => n.id === combatTarget!.id);
@@ -294,16 +306,23 @@ function executeAttack(
     if (options.server?.multiplayerConfigured) {
         if (options.server.wsConnected) {
             options.server.sendAttack(target.id);
+            const predicted = resolvePredictedMeleeDamage(
+                options.character,
+                options.characterSpeed,
+                target
+            );
+            if (predicted > 0) {
+                options.callbacks.onDamage(target, predicted);
+            }
         }
         return;
     }
 
-    const vocationId = (options.character.vocation as VocationId) || 'knight';
-    const vocationConfig = getVocationById(vocationId);
-    const level = options.characterSpeed.level || options.character.level || 1;
-    const stats = calculateStatsForLevel(vocationConfig, level);
-    const damageResult = calculateMeleeDamage(stats.melee, target.combatDefense);
-    const damage = damageResult.actual;
+    const damage = resolvePredictedMeleeDamage(
+        options.character,
+        options.characterSpeed,
+        target
+    );
 
     target.combatHealth = Math.max(0, target.combatHealth - damage);
     options.callbacks.onDamage(target, damage);

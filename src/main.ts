@@ -520,7 +520,7 @@ export function respawnEntities() {
 }
 
 function triggerPlayerAttack() {
-    activeCharacterController.setState('attack');
+    activeCharacterController.setState('attack', { force: true });
     activeCharacterController.onAnimationEndCallback = () => {
         activeCharacterController.setState('idle');
     };

@@ -1,4 +1,5 @@
-export const FLOATING_DAMAGE_DURATION_MS = 1000;
+/** Duração do float de dano/XP — curto o bastante para não parecer “trava” entre hits. */
+export const FLOATING_DAMAGE_DURATION_MS = 550;
 export const FLOATING_DAMAGE_RISE_PX = 32;
 export const FLOATING_DAMAGE_MAX_STACK = 5;
 

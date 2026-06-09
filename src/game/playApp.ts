@@ -506,7 +506,7 @@ function triggerPlayAttackAnimation(): void {
         activeCharacterController.currentDirection
     );
     activeCharacterController.setDirection(facing);
-    activeCharacterController.setState('attack');
+    activeCharacterController.setState('attack', { force: true });
     activeCharacterController.onAnimationEndCallback = () => {
         if (gridMovement.stepping) {
             activeCharacterController.setState('walk');
@@ -1381,11 +1381,15 @@ function setupNetwork(
         },
         onCreatureDamaged: (msg) => {
             if (!currentMapId || msg.mapId !== currentMapId) return;
+            const isLocalAttacker =
+                Boolean(msg.attackerPlayerId) &&
+                msg.attackerPlayerId === gameNet?.getLocalPlayerId();
             serverCreatures.applyDamaged(
                 msg.creatureId,
                 msg.health,
                 msg.maxHealth,
-                msg.damage
+                msg.damage,
+                { showFloatingDamage: !isLocalAttacker }
             );
         },
         onCreatureDied: (msg) => {

@@ -206,13 +206,16 @@ export class ServerCreatureSync {
         creatureId: string,
         health: number,
         maxHealth: number,
-        damage: number
+        damage: number,
+        options?: { showFloatingDamage?: boolean }
     ): GameEntity | undefined {
         const entity = this.entities.get(creatureId);
         if (!entity) return undefined;
         entity.combatMaxHealth = maxHealth;
         entity.combatHealth = health;
-        entity.spawnFloatingDamage(damage, performance.now());
+        if (options?.showFloatingDamage !== false) {
+            entity.spawnFloatingDamage(damage, performance.now());
+        }
         const server = this.serverTiles.get(creatureId);
         const desync = creatureVisualDesyncPx(
             entity.worldX,
@@ -512,23 +515,21 @@ export class ServerCreatureSync {
                     entity.worldY = slide!.toY;
                     
                     if (slide!.queued && slide!.queued.length > 0) {
-                        const next = slide!.queued.shift()!;
+                        const { toX, toY, durationMs, direction } = slide!.queued.shift()!;
                         slide!.fromX = slide!.toX;
                         slide!.fromY = slide!.toY;
-                        slide!.toX = next.toX;
-                        slide!.toY = next.toY;
+                        slide!.toX = toX;
+                        slide!.toY = toY;
                         
                         // Always start the new animation from exactly 0% to prevent jumping/teleporting.
                         slide!.startedAtMs = nowMs;
                         
-                        slide!.durationMs = next.durationMs;
+                        slide!.durationMs = durationMs;
                         
                         // Catch up gracefully if backed up
                         if (slide!.queued.length > 0) {
                             slide!.durationMs /= 1.5;
                         }
-                        
-                        const direction = next.direction;
                         
                         faceFromWorldDeltaOrServer(
                             entity,
