@@ -1,4 +1,5 @@
 import './auth-pages.css';
+import '../ui/player-flow-mobile.css';
 import { resolveAuthNextRedirect } from '../shared/authNavigation';
 import { redirectIfAuthenticated, signIn } from '../shared/authGuard';
 import { isMockAuthEnabled } from '../shared/mockAuth';

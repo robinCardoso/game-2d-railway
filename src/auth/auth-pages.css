@@ -18,6 +18,7 @@
 body.auth-page {
     margin: 0;
     min-height: 100vh;
+    min-height: 100dvh;
     color: var(--eo-text);
     background: var(--eo-bg);
     font-family: Inter, system-ui, sans-serif;
@@ -38,6 +39,7 @@ body.auth-page--login {
 
 .auth-layout {
     min-height: 100vh;
+    min-height: 100dvh;
     display: grid;
     place-items: center;
     padding: clamp(18px, 4vw, 32px);
@@ -366,13 +368,136 @@ body.auth-page--login {
     color: rgba(216, 170, 79, 0.75);
 }
 
-@media (max-width: 520px) {
+@media (max-width: 768px) {
+    body.auth-page--login,
+    body.auth-page--register {
+        background-attachment: scroll;
+    }
+
+    .auth-layout {
+        align-items: flex-start;
+        place-items: stretch;
+        padding:
+            calc(16px + env(safe-area-inset-top, 0px))
+            max(16px, env(safe-area-inset-right, 0px))
+            calc(24px + env(safe-area-inset-bottom, 0px))
+            max(16px, env(safe-area-inset-left, 0px));
+    }
+
+    .auth-panel-wrap {
+        width: 100%;
+        max-width: 100%;
+        margin: auto 0;
+    }
+
     .auth-card {
-        padding: 32px 22px;
+        padding: 28px 18px 22px;
+        border-radius: 14px;
+    }
+
+    .auth-logo {
+        width: min(220px, 72vw);
+        margin-bottom: 14px;
+    }
+
+    .auth-heading {
+        margin-bottom: 18px;
+    }
+
+    .auth-heading h1,
+    .auth-heading h2 {
+        font-size: 1.08rem;
+        letter-spacing: 0.1em;
+    }
+
+    .auth-heading p {
+        font-size: 0.84rem;
+        margin-top: 8px;
+    }
+
+    .auth-field {
+        margin-bottom: 16px;
+    }
+
+    .auth-field input {
+        min-height: 48px;
+        padding: 0 14px;
+        border-radius: 8px;
+        font-size: 16px;
+    }
+
+    .auth-password input {
+        padding-right: 52px;
+    }
+
+    .auth-password__toggle {
+        width: 44px;
+        height: 44px;
+        right: 4px;
+    }
+
+    .auth-check {
+        min-height: 44px;
+        align-items: center;
+        font-size: 0.86rem;
+        margin: 10px 0 18px;
+    }
+
+    .auth-check input {
+        width: 18px;
+        height: 18px;
+        margin-top: 0;
+        flex-shrink: 0;
     }
 
     .auth-row {
         flex-direction: column;
         align-items: flex-start;
+        gap: 8px;
+        margin-bottom: 14px;
+    }
+
+    .game-button.auth-submit {
+        min-height: 52px;
+        font-size: 0.92rem;
+        letter-spacing: 0.1em;
+        border-radius: 8px;
+        margin-top: 6px;
+    }
+
+    .auth-links {
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        margin-top: 16px;
+        font-size: 0.9rem;
+    }
+
+    .auth-links__divider {
+        display: none;
+    }
+
+    .auth-links a,
+    .auth-muted-link {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 8px;
+    }
+
+    .auth-mock-hint {
+        font-size: 0.76rem;
+        margin-top: 12px;
+    }
+}
+
+@media (max-width: 520px) {
+    .auth-card {
+        padding: 24px 16px 20px;
+    }
+
+    .auth-card::before {
+        inset: 10px;
     }
 }

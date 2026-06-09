@@ -3,18 +3,23 @@ import { getCharacter } from '../shared/characterStore';
 import { track } from '../shared/analytics';
 import { enforceDesktopVersionGate, initDesktopClientShell } from '../ui/initDesktopClient';
 import { resumeWorldEntryOverlayIfPending } from '../world-entry/worldEntryOverlay';
+import { initPlayMobileHud } from './playMobileHud';
 import { startPlay, stopLocationAutosave } from './playApp';
 
 resumeWorldEntryOverlayIfPending();
+initPlayMobileHud();
 
 initDesktopClientShell();
 
 // Listeners cedo — evita navegação pelo href antes do save (durante carregamento do mapa).
-document.getElementById('changeCharLink')?.addEventListener('click', async (e) => {
+async function goToCharacterSelect(e: Event): Promise<void> {
     e.preventDefault();
     await stopLocationAutosave();
     location.href = 'characters.html';
-});
+}
+
+document.getElementById('changeCharLink')?.addEventListener('click', (e) => void goToCharacterSelect(e));
+document.getElementById('changeCharLinkMobile')?.addEventListener('click', (e) => void goToCharacterSelect(e));
 
 document.getElementById('logoutPlay')?.addEventListener('click', async (e) => {
     e.preventDefault();

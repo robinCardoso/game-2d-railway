@@ -87,6 +87,12 @@ export async function requireAuth(redirectTo = 'login.html'): Promise<AuthSessio
 
 export async function requireStudioAccess(): Promise<UserProfile> {
     await requireAuth();
+    const { isStudioMobileBlocked } = await import('../game/runtime/platform');
+    if (isStudioMobileBlocked()) {
+        alert('O Elarion Studio não está disponível em dispositivos móveis. Use um computador.');
+        location.href = 'characters.html';
+        throw new Error('Studio bloqueado em mobile');
+    }
     const profile = await getProfile();
     if (!profile?.canAccessStudio) {
         alert('Acesso ao GM Studio negado. Use conta gm@gm.dev ou habilite can_access_studio.');

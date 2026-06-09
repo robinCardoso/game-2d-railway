@@ -48,11 +48,11 @@
     "showInCreation": true
   },
   {
-    "id": "knight_64",
-    "name": "knight 64",
+    "id": "magao_bruto",
+    "name": "Magao Bruto",
     "vocationId": "knight",
-    "gender": "female",
-    "spriteSheetUrl": "tiles/characters/vocations/female/knight_64.png",
+    "gender": "male",
+    "spriteSheetUrl": "tiles/characters/monstros/trolls/magao_bruto.png",
     "showInCreation": true
   }
 ]

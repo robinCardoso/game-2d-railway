@@ -11,7 +11,7 @@
 
 import { app, BrowserWindow, ipcMain, powerSaveBlocker } from 'electron';
 import path from 'node:path';
-import { setupAutoUpdater } from './updater';
+import { registerUpdaterIpcHandlers, setupAutoUpdater } from './updater';
 
 let mainWindow: BrowserWindow | null = null;
 let powerSaveBlockerId: number | null = null;
@@ -81,6 +81,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+    registerUpdaterIpcHandlers();
     // Mantém o processo ativo mesmo minimizado — evita suspend do SO
     powerSaveBlockerId = powerSaveBlocker.start('prevent-app-suspension');
     createWindow();

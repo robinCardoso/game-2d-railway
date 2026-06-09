@@ -20,8 +20,10 @@
     "electron:check": "npm run build && npm run electron:compile",
     "electron:dev": "node scripts/free-dev-ports.mjs && npm run electron:compile && concurrently -k -n api,web,electron -c green,blue,cyan \"npm run dev --prefix server\" \"node scripts/wait-api-then-vite.mjs\" \"wait-on http://localhost:5173/index.html && cross-env NODE_ENV=development electron .\"",
     "electron:build": "node scripts/prepare-electron-release.mjs && npm run build && npm run electron:compile && node scripts/run-electron-builder.mjs",
-    "mobile:build": "npm run build && npx cap sync android",
-    "mobile:open:android": "npx cap open android"
+    "mobile:init": "node scripts/mobile-init.mjs",
+    "mobile:build": "tsc && vite build && npx cap sync android",
+    "mobile:open:android": "npx cap open android",
+    "mobile:run:android": "npx cap run android"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.4.0",

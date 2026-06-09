@@ -1,0 +1,70 @@
+/**
+ * Polish mobile compartilhado — fluxo do jogador (login → roster → criar → play).
+ * Complementa os CSS específicos de cada tela; não altera Studio.
+ */
+
+@media (max-width: 768px) {
+    html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+    }
+
+    body.roster-page,
+    body.create-character-page,
+    body.auth-page {
+        overscroll-behavior-y: none;
+    }
+
+    body.roster-page button,
+    body.roster-page a,
+    body.create-character-page button,
+    body.create-character-page a,
+    body.auth-page button,
+    body.auth-page a,
+    .play-layout button,
+    .play-layout a {
+        -webkit-tap-highlight-color: rgba(216, 170, 79, 0.18);
+    }
+
+    /* Loading do Play — tema escuro alinhado ao jogo */
+    body:has(.play-layout) #loadingScreen.loading-screen {
+        height: 100vh;
+        height: 100dvh;
+        padding:
+            env(safe-area-inset-top, 0px)
+            env(safe-area-inset-right, 0px)
+            env(safe-area-inset-bottom, 0px)
+            env(safe-area-inset-left, 0px);
+        background:
+            radial-gradient(circle at 50% 40%, rgba(53, 200, 255, 0.1), transparent 36%),
+            linear-gradient(180deg, #05070c 0%, #0c1018 100%);
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    body:has(.play-layout) #loadingScreen .loading-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid rgba(53, 200, 255, 0.2);
+        border-top-color: rgba(53, 200, 255, 0.95);
+        border-radius: 999px;
+        animation: player-flow-spin 900ms linear infinite;
+    }
+
+    body:has(.play-layout) #loadingMsg {
+        margin: 0;
+        color: #a9b1c3;
+        font-size: 0.82rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        text-align: center;
+        max-width: min(92vw, 320px);
+        line-height: 1.45;
+    }
+}
+
+@keyframes player-flow-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

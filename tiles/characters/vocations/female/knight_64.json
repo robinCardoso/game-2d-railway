@@ -1,8 +1,0 @@
-{
-  "name": "knight 64",
-  "spriteSheetUrl": "tiles/characters/vocations/female/knight_64.png",
-  "category": "vocations/female",
-  "vocation": "knight",
-  "gender": "female",
-  "showInCreation": true
-}

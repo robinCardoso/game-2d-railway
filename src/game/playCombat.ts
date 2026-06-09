@@ -330,6 +330,8 @@ function executeAttack(
 export function tickPlayCombat(options: {
     nowMs: number;
     stepping: boolean;
+    /** Tecla de movimento pressionada — não forçar face ao alvo enquanto o jogador anda. */
+    movementIntent?: boolean;
     npcs: GameEntity[];
     player: PlayCombatPlayer;
     character: CharacterRow;
@@ -347,7 +349,7 @@ export function tickPlayCombat(options: {
             return;
         }
 
-        if (!options.stepping) {
+        if (!options.stepping && !options.movementIntent) {
             options.callbacks.faceToward(target);
         }
 
@@ -379,7 +381,7 @@ export function tickPlayCombat(options: {
     const target = resolveCombatTarget(options.npcs);
     if (!target) return;
 
-    if (!options.stepping) {
+    if (!options.stepping && !options.movementIntent) {
         options.callbacks.faceToward(target);
     }
 

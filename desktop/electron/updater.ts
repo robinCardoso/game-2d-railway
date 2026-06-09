@@ -5,14 +5,54 @@ import type { AppUpdater } from 'electron-updater';
 const { autoUpdater } = require('electron-updater') as { autoUpdater: AppUpdater };
 
 let updateDownloaded = false;
+let ipcHandlersRegistered = false;
+
+/** Handlers IPC — registrados sempre (dev responde not-packaged sem erro no renderer). */
+export function registerUpdaterIpcHandlers(): void {
+    if (ipcHandlersRegistered) return;
+    ipcHandlersRegistered = true;
+
+    ipcMain.handle('updater:check', async () => {
+        if (!app.isPackaged) {
+            return { ok: false, reason: 'not-packaged' };
+        }
+        try {
+            await autoUpdater.checkForUpdates();
+            return { ok: true };
+        } catch (err) {
+            return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+        }
+    });
+
+    ipcMain.handle('updater:download', async () => {
+        if (!app.isPackaged) {
+            return { ok: false, reason: 'not-packaged' };
+        }
+        try {
+            void autoUpdater.downloadUpdate();
+            return { ok: true };
+        } catch (err) {
+            return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+        }
+    });
+
+    ipcMain.handle('updater:install', () => {
+        if (!app.isPackaged) {
+            return { ok: false, reason: 'not-packaged' };
+        }
+        if (!updateDownloaded) {
+            return { ok: false, reason: 'no-update-downloaded' };
+        }
+        autoUpdater.quitAndInstall(false, true);
+        return { ok: true };
+    });
+}
 
 export function setupAutoUpdater(mainWindow: BrowserWindow) {
-    // Apenas ativa se o app estiver empacotado (produção)
     if (!app.isPackaged) {
         return;
     }
 
-    // Configura download manual e impede instalar ao fechar para evitar quebras silenciosas
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = false;
 
@@ -57,39 +97,5 @@ export function setupAutoUpdater(mainWindow: BrowserWindow) {
             status: 'error',
             message: error.message
         });
-    });
-
-    // Registra os handlers IPC invocados pelo Preload / Renderer
-    ipcMain.handle('updater:check', async () => {
-        if (!app.isPackaged) {
-            return { ok: false, reason: 'not-packaged' };
-        }
-        try {
-            await autoUpdater.checkForUpdates();
-            return { ok: true };
-        } catch (err) {
-            return { ok: false, reason: err instanceof Error ? err.message : String(err) };
-        }
-    });
-
-    ipcMain.handle('updater:download', async () => {
-        if (!app.isPackaged) {
-            return { ok: false, reason: 'not-packaged' };
-        }
-        try {
-            void autoUpdater.downloadUpdate();
-            return { ok: true };
-        } catch (err) {
-            return { ok: false, reason: err instanceof Error ? err.message : String(err) };
-        }
-    });
-
-    ipcMain.handle('updater:install', () => {
-        if (!updateDownloaded) {
-            return { ok: false, reason: 'no-update-downloaded' };
-        }
-        // Inicia a instalação NSIS imediatamente, reiniciando o app de forma segura
-        autoUpdater.quitAndInstall(false, true);
-        return { ok: true };
     });
 }

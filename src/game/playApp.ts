@@ -1,5 +1,4 @@
 import '../style.css';
-import { resolveApiUrl } from '../shared/apiUrl';
 import {
     consumeWorldEntryFailsafeRelease,
     finishWorldEntryOverlay,
@@ -44,7 +43,9 @@ import { drawRegistryTile, isMapBorderTile } from '../engine/tileDraw';
 import { SpriteAnimationController } from '../character/spriteAnimation';
 import type { CharacterSpriteConfig } from '../character/spriteAnimation';
 import {
+    buildMovementKeyState,
     createGridMovementController,
+    hasMovementKeyInput,
     resetGridMovementInputState,
     setGridStepDuration,
     syncGridPlayerVisual,
@@ -918,6 +919,7 @@ function update(): void {
         tickPlayCombat({
             nowMs,
             stepping: gridMovement.stepping,
+            movementIntent: hasMovementKeyInput(buildMovementKeyState(keys)),
             npcs: playEntities,
             player,
             character: activeCharacter,

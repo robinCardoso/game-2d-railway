@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Elarion Online</string>
+    <string name="title_activity_main">Elarion Online</string>
+    <string name="package_name">com.robson.game2drailway</string>
+    <string name="custom_url_scheme">com.robson.game2drailway</string>
+</resources>

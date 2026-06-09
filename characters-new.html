@@ -2,10 +2,11 @@
 <html lang="pt-br">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Criar personagem — Elarion Online</title>
     <meta name="description" content="Crie seu personagem em Elarion Online." />
     <link rel="icon" type="image/png" href="/brand/icon-elarion.png" />
+    <meta name="theme-color" content="#05070c" />
   </head>
   <body class="create-character-page">
     <main class="create-shell">
@@ -37,17 +38,17 @@
         <div class="create-stepper" aria-label="Etapas de criação">
           <span class="create-stepper__item is-active" data-step-indicator="1">
             <strong>1</strong>
-            Nome
+            <span class="create-stepper__label">Nome</span>
           </span>
           <span class="create-stepper__line"></span>
           <span class="create-stepper__item" data-step-indicator="2">
             <strong>2</strong>
-            Vocação
+            <span class="create-stepper__label">Vocação</span>
           </span>
           <span class="create-stepper__line"></span>
           <span class="create-stepper__item" data-step-indicator="3">
             <strong>3</strong>
-            Confirmar
+            <span class="create-stepper__label">Confirmar</span>
           </span>
         </div>
 
@@ -55,6 +56,37 @@
         <p id="createError" class="create-error" hidden></p>
 
         <div class="create-layout">
+          <aside class="create-preview-panel" aria-label="Pré-visualização do personagem">
+            <div class="create-preview-frame">
+              <canvas
+                id="presetPreviewCanvas"
+                class="create-preview-canvas"
+                width="120"
+                height="120"
+              ></canvas>
+            </div>
+
+            <div class="create-preview-info">
+              <h2 id="previewName">Novo herói</h2>
+              <div>
+                <span>Vocação</span>
+                <strong id="previewVocation">-</strong>
+              </div>
+              <div>
+                <span>Gênero</span>
+                <strong id="previewGender">-</strong>
+              </div>
+              <div>
+                <span>Visual</span>
+                <strong id="previewOutfit">-</strong>
+              </div>
+              <div class="create-preview-info__world">
+                <span>Mundo inicial</span>
+                <strong>Rookgaard</strong>
+              </div>
+            </div>
+          </aside>
+
           <section class="create-form-panel">
             <section id="step1" class="create-step">
               <h2>Nome do personagem</h2>
@@ -76,7 +108,7 @@
 
               <div class="create-actions">
                 <a class="game-button game-button--secondary" href="characters.html">Voltar</a>
-                <button id="next1" class="game-button" type="button">Próximo</button>
+                <button id="next1" class="game-button create-primary-btn" type="button">Próximo</button>
               </div>
             </section>
 
@@ -125,7 +157,7 @@
                 <button id="backToStep1" class="game-button game-button--secondary" type="button">
                   Voltar
                 </button>
-                <button id="next2" class="game-button" type="button">Próximo</button>
+                <button id="next2" class="game-button create-primary-btn" type="button">Próximo</button>
               </div>
             </section>
 
@@ -142,41 +174,12 @@
                 <button id="backToStep2" class="game-button game-button--secondary" type="button">
                   Voltar
                 </button>
-                <button id="confirmCreate" class="game-button" type="button">Criar e voltar</button>
+                <button id="confirmCreate" class="game-button create-primary-btn" type="button">
+                  Criar e voltar
+                </button>
               </div>
             </section>
           </section>
-
-          <aside class="create-preview-panel">
-            <div class="create-preview-frame">
-              <canvas
-                id="presetPreviewCanvas"
-                class="create-preview-canvas"
-                width="120"
-                height="120"
-              ></canvas>
-            </div>
-
-            <div class="create-preview-info">
-              <h2 id="previewName">Novo herói</h2>
-              <div>
-                <span>Vocação</span>
-                <strong id="previewVocation">-</strong>
-              </div>
-              <div>
-                <span>Gênero</span>
-                <strong id="previewGender">-</strong>
-              </div>
-              <div>
-                <span>Visual</span>
-                <strong id="previewOutfit">-</strong>
-              </div>
-              <div>
-                <span>Mundo inicial</span>
-                <strong>Rookgaard</strong>
-              </div>
-            </div>
-          </aside>
         </div>
       </section>
     </main>

@@ -1,6 +1,5 @@
 import { apiFetch } from './apiFetch';
 import { isApiAuthEnabled } from './authClient';
-import { resolveApiUrl } from './apiUrl';
 import {
     isMockAuthEnabled,
     mockCreateCharacter,

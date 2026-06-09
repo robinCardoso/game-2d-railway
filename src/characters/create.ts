@@ -1,4 +1,5 @@
 import './create-character.css';
+import '../ui/player-flow-mobile.css';
 import { requireAuth } from '../shared/authGuard';
 import { createCharacter, validateCharacterName } from '../shared/characterStore';
 import { track } from '../shared/analytics';

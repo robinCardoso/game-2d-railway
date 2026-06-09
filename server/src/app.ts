@@ -22,12 +22,35 @@ const MIME_TYPES: Record<string, string> = {
     '.json': 'application/json',
 };
 
+/** Origens padrão do WebView Capacitor (androidScheme https → https://localhost). */
+const CAPACITOR_WEBVIEW_ORIGINS = [
+    'https://localhost',
+    'http://localhost',
+    'capacitor://localhost',
+    'ionic://localhost',
+] as const;
+
+function buildAllowedCorsOrigins(): Set<string> {
+    const origins = new Set<string>();
+    if (env.clientOrigin) origins.add(env.clientOrigin);
+    for (const extra of env.clientExtraOrigins) origins.add(extra);
+    for (const cap of CAPACITOR_WEBVIEW_ORIGINS) origins.add(cap);
+    return origins;
+}
+
 export function createApp(getOnline: (() => number) | undefined, collision: MapCollisionStore): Express {
     const app = express();
 
-    if (env.clientOrigin) {
+    const allowedCorsOrigins = buildAllowedCorsOrigins();
+    if (allowedCorsOrigins.size > 0) {
         app.use((req, res, next) => {
-            res.setHeader('Access-Control-Allow-Origin', env.clientOrigin!);
+            const requestOrigin = req.headers.origin;
+            if (requestOrigin && allowedCorsOrigins.has(requestOrigin)) {
+                res.setHeader('Access-Control-Allow-Origin', requestOrigin);
+                res.setHeader('Vary', 'Origin');
+            } else if (!requestOrigin && env.clientOrigin) {
+                res.setHeader('Access-Control-Allow-Origin', env.clientOrigin);
+            }
             res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
             res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
             if (req.method === 'OPTIONS') {

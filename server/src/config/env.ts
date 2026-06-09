@@ -25,6 +25,11 @@ export const env = {
     allowClientProgressSync: process.env.ALLOW_CLIENT_PROGRESS_SYNC === 'true',
     studioMockGm: process.env.STUDIO_MOCK_GM === 'true',
     clientOrigin: process.env.CLIENT_ORIGIN?.trim() || null,
+    /** Origens extras (vírgula) — ex.: domínio customizado além do Railway. */
+    clientExtraOrigins: (process.env.CLIENT_EXTRA_ORIGINS ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
     isProduction: process.env.NODE_ENV === 'production',
     /** Versão mínima do cliente desktop (Electron) permitida a jogar. */
     desktopMinVersion: process.env.DESKTOP_MIN_VERSION?.trim() || '0.1.0',

@@ -249,6 +249,20 @@ export function buildMovementKeyState(keys: Record<string, boolean>): MovementKe
     };
 }
 
+/** True se alguma tecla de movimento (WASD/setas/diagonais) está ativa. */
+export function hasMovementKeyInput(keys: MovementKeyState): boolean {
+    return (
+        keys.north ||
+        keys.south ||
+        keys.east ||
+        keys.west ||
+        keys.northwest ||
+        keys.northeast ||
+        keys.southwest ||
+        keys.southeast
+    );
+}
+
 function updateChordHoldTiming(
     ctrl: GridMovementController,
     keys: MovementKeyState,

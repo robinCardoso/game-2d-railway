@@ -2,10 +2,15 @@
 <html lang="pt-br">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Jogando — Elarion Online</title>
     <link rel="icon" type="image/png" href="/brand/icon-elarion.png" />
     <link rel="stylesheet" href="/src/style.css" />
+    <link rel="stylesheet" href="/src/game/play-mobile.css" />
+    <link rel="stylesheet" href="/src/ui/player-flow-mobile.css" />
+    <meta name="theme-color" content="#12141a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet" />
@@ -58,7 +63,12 @@
         70% { transform: translateX(-50%) translateY(0) scale(1.03); opacity: 1; }
         100% { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
       }
-      .play-layout { display: flex; flex-direction: column; height: 100vh; }
+      .play-layout { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+      .play-top-bar__identity { display: flex; align-items: center; gap: 8px; min-width: 0; }
+      .play-top-bar__map::before { content: '· '; color: #64748b; }
+      .play-top-bar__actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+      .play-top-link { color: #818cf8; text-decoration: none; margin-left: 0; min-height: 32px; display: inline-flex; align-items: center; }
+      .play-sidebar-header { display: none; }
       .play-main-layout { display: grid; grid-template-columns: 1fr 280px; flex-grow: 1; overflow: hidden; }
       .sidebar { background-color: #15171c; border-left: 1px solid #2d3139; display: flex; flex-direction: column; padding: 1rem; gap: 1rem; overflow-y: auto; }
       .stats-panel { background: rgba(255, 255, 255, 0.03); border-radius: 0.75rem; padding: 1rem; }
@@ -149,15 +159,37 @@
   <body>
     <div class="play-layout">
       <header class="play-top-bar">
-        <span><strong id="playCharName">—</strong> · <span id="statusMapName">—</span></span>
-        <span>
-          <span id="statusPos">0, 0</span> · Z <span id="statusZ">0</span>
+        <div class="play-top-bar__identity">
+          <strong id="playCharName">—</strong>
+          <span class="play-top-bar__map" id="statusMapName">—</span>
+        </div>
+        <div class="play-top-bar__actions">
+          <button
+            type="button"
+            id="playStatsToggle"
+            class="play-stats-toggle play-mobile-only"
+            aria-expanded="false"
+            aria-controls="playSidebar"
+          >
+            Atributos
+          </button>
+          <span class="play-top-bar__coords play-desktop-only">
+            <span id="statusPos">0, 0</span> · Z <span id="statusZ">0</span>
+          </span>
           <span id="posX" hidden></span><span id="posY" hidden></span><span id="posZ" hidden></span>
-          <a href="#" id="changeCharLink">Trocar personagem</a>
-          <a href="#" id="logoutPlay">Sair</a>
-        </span>
+          <a href="#" id="changeCharLink" class="play-top-link play-top-link--wide">Trocar personagem</a>
+          <a href="#" id="changeCharLinkMobile" class="play-top-link play-top-link--compact play-mobile-only">Chars</a>
+          <a href="#" id="logoutPlay" class="play-top-link">Sair</a>
+        </div>
       </header>
       <div class="play-main-layout">
+        <button
+          type="button"
+          id="playStatsBackdrop"
+          class="play-stats-backdrop play-mobile-only"
+          aria-label="Fechar atributos"
+          tabindex="-1"
+        ></button>
         <div id="canvasContainer">
           <canvas id="gameCanvas"></canvas>
           <div id="levelUpBanner" class="level-up-banner" hidden aria-live="polite">
@@ -169,9 +201,20 @@
             <button type="button" id="playZoomIn" aria-label="Aproximar">+</button>
           </div>
         </div>
-        <aside class="sidebar">
+        <aside class="sidebar" id="playSidebar">
           <div class="stats-panel">
-            <div class="panel-title">Atributos</div>
+            <div class="play-sidebar-header play-mobile-only">
+              <div class="panel-title">Atributos</div>
+              <button
+                type="button"
+                id="playStatsClose"
+                class="play-sidebar-close"
+                aria-label="Fechar atributos"
+              >
+                ×
+              </button>
+            </div>
+            <div class="panel-title play-desktop-only">Atributos</div>
             <div id="statsContainer">
               <div class="info-row"><span class="info-label">Classe/Vocação:</span> <span id="statVocation">—</span></div>
               <div class="info-row"><span class="info-label">Nível (Level):</span> <span id="statLevel">1</span></div>

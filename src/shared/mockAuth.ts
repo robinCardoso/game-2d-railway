@@ -3,7 +3,6 @@ import type { Gender, VocationId } from '../../shared/types/character';
 import { createDefaultCharacterConfig } from '../character/characterSerializer';
 import { MAX_CHARACTERS_PER_ACCOUNT } from './types';
 import { DEFAULT_GAME_CONFIG } from '../game-data/default/game.config';
-import { resolveApiUrl } from './apiUrl';
 import {
     createMockPasswordSalt,
     hashMockPassword,

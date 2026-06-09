@@ -1,6 +1,7 @@
 import {
     buildMovementKeyState,
     getActiveStepFacing,
+    hasMovementKeyInput,
     primeMovementFacingKeys,
     resetGridMovementInputState,
     resolveSpriteDirection,
@@ -101,10 +102,12 @@ export const PlayerMovement: PlayerMovementController = {
         });
 
         // 2. Sprite — face travada durante deslize; teclas novas só após concluir
+        const hasMoveIntent = hasMovementKeyInput(keyState);
+        const standingStill = !gridMovement.stepping && !hasMoveIntent;
         const combatLocksFacing =
-            activeCharacterController.currentState === 'attack' ||
+            (activeCharacterController.currentState === 'attack' && standingStill) ||
             activeCharacterController.currentState === 'cast' ||
-            getPlayCombatTargetId() !== null;
+            (getPlayCombatTargetId() !== null && standingStill);
         const lockedFacing = getActiveStepFacing(gridMovement);
         const spriteDir = lockedFacing ?? resolveSpriteDirection(gridMovement, keys);
         if (spriteDir && !combatLocksFacing) {

@@ -41,3 +41,15 @@ export function isDesktopRuntime(): boolean {
 export function isMobileRuntime(): boolean {
     return detectRuntimePlatform() === 'capacitor';
 }
+
+/**
+ * Studio (editor de mapas/sprites) não é suportado em mobile — app nativo nem browser em telefone.
+ */
+export function isStudioMobileBlocked(): boolean {
+    if (isMobileRuntime()) return true;
+    try {
+        return window.matchMedia('(max-width: 768px) and (pointer: coarse)').matches;
+    } catch {
+        return false;
+    }
+}

@@ -2,13 +2,14 @@
 <html lang="pt-br">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Selecionar personagem — Elarion Online</title>
     <meta
       name="description"
       content="Selecione seu personagem e entre no mundo de Elarion Online."
     />
     <link rel="icon" type="image/png" href="/brand/icon-elarion.png" />
+    <meta name="theme-color" content="#05070c" />
   </head>
   <body class="roster-page">
     <main class="roster-shell">
@@ -51,25 +52,6 @@
         <div id="rosterLoading" class="roster-loading">Carregando seus personagens...</div>
 
         <div class="roster-layout">
-          <section class="roster-list-panel" aria-label="Lista de personagens">
-            <div class="roster-list-header">
-              <div>
-                <strong>Personagens</strong>
-                <span>Selecione um personagem</span>
-              </div>
-
-              <a id="rosterCreateBtn" class="roster-create-small" href="characters-new.html" hidden>+ Novo</a>
-            </div>
-
-            <div id="emptyState" class="roster-empty" hidden>
-              <h2>Sua jornada ainda não começou.</h2>
-              <p>Crie seu primeiro personagem e descubra os reinos de Elarion.</p>
-              <a class="game-button" href="characters-new.html">Criar personagem</a>
-            </div>
-
-            <div id="charGrid" class="roster-character-list"></div>
-          </section>
-
           <aside class="roster-preview-panel" aria-label="Personagem selecionado">
             <div id="noSelectionState" class="roster-no-selection">
               <h2>Nenhum personagem selecionado</h2>
@@ -116,21 +98,59 @@
               </div>
 
               <div class="roster-actions">
-                <button id="enterWorldBtn" class="game-button" type="button" disabled>
+                <button
+                  id="enterWorldBtn"
+                  class="game-button roster-enter-btn"
+                  type="button"
+                  disabled
+                >
                   Entrar no mundo
                 </button>
 
                 <button
                   id="deleteCharBtn"
-                  class="game-button game-button--danger"
+                  class="game-button game-button--danger roster-delete-btn"
                   type="button"
                   disabled
                 >
-                  Excluir
+                  Excluir personagem
                 </button>
               </div>
             </div>
           </aside>
+
+          <section class="roster-list-panel" aria-label="Lista de personagens">
+            <div class="roster-list-header">
+              <div>
+                <strong class="roster-list-header__title">
+                  <span class="roster-list-header__title-desktop">Personagens</span>
+                  <span class="roster-list-header__title-mobile">Outros personagens</span>
+                </strong>
+                <span class="roster-list-header__hint roster-list-header__hint--desktop">
+                  Selecione um personagem
+                </span>
+                <span class="roster-list-header__hint roster-list-header__hint--mobile">
+                  Toque para selecionar
+                </span>
+              </div>
+
+              <a id="rosterCreateBtn" class="roster-create-small" href="characters-new.html" hidden>
+                + Novo
+              </a>
+            </div>
+
+            <div id="emptyState" class="roster-empty" hidden>
+              <h2>Sua jornada ainda não começou.</h2>
+              <p>Crie seu primeiro personagem e descubra os reinos de Elarion.</p>
+              <a class="game-button roster-empty-create" href="characters-new.html">Criar personagem</a>
+            </div>
+
+            <div id="charGrid" class="roster-character-list"></div>
+
+            <a class="roster-create-mobile" href="characters-new.html" hidden id="rosterCreateMobile">
+              + Novo personagem
+            </a>
+          </section>
         </div>
       </section>
     </main>

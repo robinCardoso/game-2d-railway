@@ -82,7 +82,8 @@
       "row": 0,
       "frames": 1,
       "speedFps": 5,
-      "loop": false
+      "loop": false,
+      "startFrame": 0
     },
     "attack_left": {
       "row": 1,
@@ -127,5 +128,5 @@
       "loop": false
     }
   },
-  "updatedAt": "2026-06-09T01:36:23.817Z"
+  "updatedAt": "2026-06-09T02:08:41.818Z"
 }

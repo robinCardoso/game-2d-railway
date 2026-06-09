@@ -329,10 +329,18 @@ npm run electron:build  # dist/ + NSIS installer
 
 ### Capacitor (Android)
 
+**Node ≥ 22** (Capacitor CLI 8). Ver [docs/mobile-android-test.md](./mobile-android-test.md).
+
 ```bash
-npm run mobile:build
-npm run mobile:open:android
+npm run mobile:init          # uma vez — cap add android
+npm run mobile:build         # vite build + cap sync (usa .env.production)
+npm run mobile:open:android  # Android Studio
+npm run mobile:run:android   # CLI direto no device/emulador
 ```
+
+Variáveis obrigatórias no build: `VITE_API_BASE_URL`, `VITE_WS_BASE_URL` (ver `.env.production`).
+
+CORS: o servidor aceita origens do WebView Capacitor (`https://localhost`, etc.) além de `CLIENT_ORIGIN`. Opcional: `CLIENT_EXTRA_ORIGINS` (vírgula) para domínios extras.
 
 Requer `@capacitor/app` para lifecycle (`appStateChange` → resync ao voltar do background).
 

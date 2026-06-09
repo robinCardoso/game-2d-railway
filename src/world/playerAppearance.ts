@@ -1,7 +1,6 @@
 import type { PlayerAppearance } from '../../shared/protocol';
 import type { CharacterSpriteConfig, Direction } from '../character/spriteAnimation';
 import type { CharacterRow } from '../shared/types';
-import { resolveApiUrl } from '../shared/apiUrl';
 
 const DEFAULT_APPEARANCE: PlayerAppearance = {
     outfitId: 'knight',

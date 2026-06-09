@@ -1,4 +1,5 @@
 import './roster.css';
+import '../ui/player-flow-mobile.css';
 import { requireAuth, signOut, getProfile } from '../shared/authGuard';
 import { enforceDesktopVersionGate, initDesktopClientShell } from '../ui/initDesktopClient';
 import {
@@ -26,6 +27,7 @@ const errEl = document.getElementById('rosterError') as HTMLElement;
 const grid = document.getElementById('charGrid') as HTMLElement;
 const empty = document.getElementById('emptyState') as HTMLElement;
 const createBtn = document.getElementById('rosterCreateBtn') as HTMLAnchorElement | null;
+const createMobileBtn = document.getElementById('rosterCreateMobile') as HTMLAnchorElement | null;
 const enterBtn = document.getElementById('enterWorldBtn') as HTMLButtonElement;
 const deleteBtn = document.getElementById('deleteCharBtn') as HTMLButtonElement;
 const emailEl = document.getElementById('accountEmail') as HTMLElement;
@@ -46,7 +48,8 @@ const selectedPreviewCanvas = document.getElementById('selectedPreviewCanvas') a
 emailEl.textContent = session.email;
 
 const profile = await getProfile();
-if (!profile?.canAccessStudio) {
+const { isStudioMobileBlocked } = await import('../game/runtime/platform');
+if (!profile?.canAccessStudio || isStudioMobileBlocked()) {
     studioLink.style.display = 'none';
 }
 
@@ -129,6 +132,7 @@ function renderGrid(): void {
     const hasCharacters = characters.length > 0;
     empty.hidden = hasCharacters;
     if (createBtn) createBtn.hidden = !hasCharacters;
+    if (createMobileBtn) createMobileBtn.hidden = !hasCharacters;
 
     if (!hasCharacters) {
         enterBtn.disabled = true;

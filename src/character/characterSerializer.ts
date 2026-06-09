@@ -4,7 +4,7 @@ import type { CharacterSpriteConfig } from './spriteAnimation';
 export function createDefaultCharacterConfig(): CharacterSpriteConfig {
     return {
         name: 'Default Warrior',
-        spriteSheetUrl: 'tiles/characters/knight.png', // Fallback básico
+        spriteSheetUrl: 'tiles/characters/vocations/male/knight.png',
         frameWidth: 64,
         frameHeight: 64,
         defaultDirection: 'down',

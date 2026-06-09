@@ -1,4 +1,5 @@
 import './auth-pages.css';
+import '../ui/player-flow-mobile.css';
 import { redirectIfAuthenticated, signUp } from '../shared/authGuard';
 import { track } from '../shared/analytics';
 import { initDesktopClientShell } from '../ui/initDesktopClient';
