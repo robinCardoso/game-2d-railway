@@ -86,6 +86,7 @@ import { fetchWsTicket, isServerWsTicketEnabled } from '../shared/wsTicketClient
 import { updateCharacterStatsUi } from './ui/characterStatsUi';
 import { updatePlayHudPing, updatePlayHudStatus } from './ui/playHudStatusUi';
 import { initPlayHudInventory } from './ui/playHudInventory';
+import { getPlayRenderOptions } from './ui/playHudSettings';
 import { getExpProgress, normalizeCharacterProgress } from './experience';
 import { serverStateStore } from '../net/serverStateStore';
 import { shouldCelebrateSessionLevelUp } from './playProgress';
@@ -1124,6 +1125,8 @@ function draw(): void {
             ? remoteSprites.buildRemoteDepthEntries(gameNet.getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId()))
             : [];
 
+        const renderOpts = getPlayRenderOptions();
+
         const depthDrawables = [
             ...collectItemDepthDrawables({
                 z,
@@ -1147,7 +1150,9 @@ function draw(): void {
                 nowMs
             ),
             ...collectNpcDepthDrawables(getPlayEntities(), z, camState, TILE_SIZE_SCREEN, {
-                drawNames: true,
+                showMonsterNames: renderOpts.showMonsterNames,
+                showHealthBars: renderOpts.showHealthBars,
+                showFloatingDamage: renderOpts.showFloatingDamage,
                 highlightEntityId: getPlayCombatHoverId(),
                 nowMs,
             }),
@@ -1155,7 +1160,14 @@ function draw(): void {
 
         if (remoteEntries.length > 0) {
             depthDrawables.push(
-                ...collectRemoteDepthDrawables(remoteEntries, z, camState, TILE_SIZE_SCREEN, nowMs)
+                ...collectRemoteDepthDrawables(
+                    remoteEntries,
+                    z,
+                    camState,
+                    TILE_SIZE_SCREEN,
+                    nowMs,
+                    renderOpts
+                )
             );
         }
 
@@ -1175,6 +1187,8 @@ function draw(): void {
             maxHealth: player.maxHealth,
             mana: player.mana,
             maxMana: player.maxMana,
+            showPlayerNames: renderOpts.showPlayerNames,
+            showHealthBars: renderOpts.showHealthBars,
         });
         if (localDrawable) depthDrawables.push(localDrawable);
 
@@ -1183,6 +1197,7 @@ function draw(): void {
         drawDepthSorted(ctx, depthDrawables);
 
         if (
+            renderOpts.showFloatingDamage &&
             z === player.worldZ &&
             activeCharacterController?.isLoaded &&
             activeCharacterController.image

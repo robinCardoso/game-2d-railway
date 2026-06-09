@@ -40,6 +40,23 @@ export function setPlaySetting(key: PlaySettingKey, value: boolean): void {
     applyPlaySettings();
 }
 
+/** Preferências que afetam o render do canvas (lidas a cada frame no Play). */
+export interface PlayRenderOptions {
+    showPlayerNames: boolean;
+    showMonsterNames: boolean;
+    showHealthBars: boolean;
+    showFloatingDamage: boolean;
+}
+
+export function getPlayRenderOptions(): PlayRenderOptions {
+    return {
+        showPlayerNames: getPlaySetting('showPlayerNames'),
+        showMonsterNames: getPlaySetting('showMonsterNames'),
+        showHealthBars: getPlaySetting('showHealthBars'),
+        showFloatingDamage: getPlaySetting('showFloatingDamage'),
+    };
+}
+
 function applyPlaySettings(): void {
     const coordsWrap = document.getElementById('playCoordsWrap');
     const mapStatus = document.getElementById('playMapStatus');

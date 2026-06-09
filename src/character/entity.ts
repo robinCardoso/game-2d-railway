@@ -204,7 +204,12 @@ export class GameEntity {
         return rect;
     }
 
-    draw(ctx: CanvasRenderingContext2D, camera: { x: number, y: number }, tileSize: number) {
+    draw(
+        ctx: CanvasRenderingContext2D,
+        camera: { x: number; y: number },
+        tileSize: number,
+        options?: { showFloatingDamage?: boolean }
+    ) {
         if (!this.animController.isLoaded || !this.animController.image) return;
         const rect = this.getDrawSourceRect();
         const drawScale = this.animController.config.drawScale ?? 1;
@@ -229,13 +234,15 @@ export class GameEntity {
             placement.drawW, placement.drawH
         );
 
-        drawFloatingDamages(
-            ctx,
-            this.floatingDamages,
-            placement.drawX + placement.drawW / 2,
-            placement.drawY,
-            performance.now()
-        );
+        if (options?.showFloatingDamage !== false) {
+            drawFloatingDamages(
+                ctx,
+                this.floatingDamages,
+                placement.drawX + placement.drawW / 2,
+                placement.drawY,
+                performance.now()
+            );
+        }
 
         // Balão de fala (NPC) — não usar para dano/XP de combate
         if (this.dialogueText) {

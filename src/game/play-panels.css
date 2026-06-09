@@ -7,6 +7,18 @@
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
     pointer-events: auto;
     color: #e2e8f0;
+    animation: play-panel-in 0.22s ease-out;
+}
+
+@keyframes play-panel-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .play-panel[hidden] {
@@ -42,11 +54,16 @@
     line-height: 1;
     cursor: pointer;
     padding: 0;
+    transition: background 0.15s, border-color 0.15s, transform 0.12s ease;
 }
 
 .play-panel-close:hover {
     border-color: #6366f1;
     background: #2a3140;
+}
+
+.play-panel-close:active {
+    transform: scale(0.94);
 }
 
 .play-panel-body {

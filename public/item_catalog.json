@@ -1,3 +1,28 @@
 {
-  "items": []
+  "items": [
+    {
+      "id": "boots_of_haste",
+      "name": "Boots of Haste",
+      "category": "equipment",
+      "slot": "feet",
+      "speedBonus": 20,
+      "description": "Botas encantadas que aceleram a corrida.",
+      "implemented": true
+    },
+    {
+      "id": "gold_coin",
+      "name": "Gold Coin",
+      "category": "loot",
+      "description": "Moeda de ouro.",
+      "implemented": true
+    },
+    {
+      "id": "leather_boots",
+      "name": "Leather Boots",
+      "category": "equipment",
+      "slot": "feet",
+      "description": "Botas simples de couro.",
+      "implemented": true
+    }
+  ]
 }

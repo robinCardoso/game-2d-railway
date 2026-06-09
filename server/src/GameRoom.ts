@@ -18,7 +18,9 @@ import { canAdjacentStep } from '../../shared/tileWalkable.js';
 import type { MapCollisionStore } from './MapCollisionStore.js';
 import type { MapInstanceStore } from './MapInstanceStore.js';
 import { isInstancedMap, getServerMapEntry } from './mapRegistry.js';
+import { createEmptyEquipment, type CharacterEquipmentState } from '../../shared/inventory.js';
 import { processAttack } from './combat/combat.js';
+import { getCharacterInventory } from './db/repositories/inventory.repo.js';
 import { verifyEnterTicket } from './enterTicket.js';
 import {
     clearSteppingDest,
@@ -88,6 +90,8 @@ interface ConnectedPlayer {
     maxMana: number;
     lastAttackAtMs: number;
     lastMoveRejectionSentAtMs: number;
+    /** Equipamento carregado do PostgreSQL no join (autoritativo no servidor). */
+    equipment: CharacterEquipmentState;
     socket: WebSocket;
 }
 
@@ -283,6 +287,21 @@ export class GameRoom {
         this.sendPositionCorrection(player);
     }
 
+    private async hydratePlayerEquipment(player: ConnectedPlayer): Promise<void> {
+        if (!player.characterId || !player.accountId) return;
+        try {
+            const inventory = await getCharacterInventory(player.characterId, player.accountId);
+            if (inventory) {
+                player.equipment = inventory.equipment;
+            }
+        } catch (err) {
+            console.warn(
+                `[GameRoom] falha ao carregar equipamento de ${player.characterId}:`,
+                err
+            );
+        }
+    }
+
     private persistPlayerPosition(player: ConnectedPlayer, immediate = false): void {
         if (!player.characterId || !player.accountId) return;
         const loc = {
@@ -473,6 +492,7 @@ export class GameRoom {
             mana: 50,
             maxMana: 50,
             lastAttackAtMs: 0,
+            equipment: createEmptyEquipment(),
             socket,
         };
 
@@ -500,6 +520,10 @@ export class GameRoom {
         this.players.set(id, player);
         this.socketToPlayerId.set(socket, id);
         this.instances.trackPlayer(instanceId, id);
+
+        if (characterId && accountId) {
+            void this.hydratePlayerEquipment(player);
+        }
 
         const platformLog = msg.platform ? `[${msg.platform}]` : '[web/unknown]';
         const versionLog = msg.clientBuildVersion ? `v${msg.clientBuildVersion}` : 'v?';

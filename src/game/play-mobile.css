@@ -77,6 +77,12 @@
         text-transform: uppercase;
         cursor: pointer;
         font-family: inherit;
+        transition: background 0.15s, border-color 0.15s, transform 0.12s ease;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    }
+
+    .play-stats-toggle:active {
+        transform: scale(0.96);
     }
 
     .play-stats-toggle[aria-expanded='true'] {

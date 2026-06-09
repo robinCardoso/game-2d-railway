@@ -388,14 +388,20 @@ export function collectNpcDepthDrawables(
     camera: DepthSortCamera,
     tileSize: number,
     options?: {
+        /** @deprecated use showMonsterNames */
         drawNames?: boolean;
+        showMonsterNames?: boolean;
+        showHealthBars?: boolean;
+        showFloatingDamage?: boolean;
         highlightEntityId?: string | null;
         nowMs?: number;
     }
 ): DepthDrawable[] {
     const drawables: DepthDrawable[] = [];
     const zoom = camera.zoom ?? 1;
-    const drawNames = options?.drawNames ?? true;
+    const showMonsterNames = options?.showMonsterNames ?? options?.drawNames ?? true;
+    const showHealthBars = options?.showHealthBars ?? true;
+    const showFloatingDamage = options?.showFloatingDamage ?? true;
     const highlightEntityId = options?.highlightEntityId ?? null;
     const nowMs = options?.nowMs ?? 0;
 
@@ -428,7 +434,7 @@ export function collectNpcDepthDrawables(
             sortY,
             sortX,
             draw: (drawCtx) => {
-                npc.draw(drawCtx, camera, tileSize);
+                npc.draw(drawCtx, camera, tileSize, { showFloatingDamage });
 
                 const placement = npc.getDrawPlacement({ ...camera, zoom }, tileSize);
 
@@ -454,13 +460,13 @@ export function collectNpcDepthDrawables(
                     );
                 }
 
-                if (!drawNames || isCorpse) return;
+                if (!showMonsterNames || isCorpse) return;
 
                 const { x, y: nameY } = nameTagPosition(placement);
 
                 drawOutlinedEntityName(drawCtx, npc.name, x, nameY, ENTITY_NAME_COLORS.creature);
 
-                if (npc.type === 'monster' && npc.combatMaxHealth > 0) {
+                if (showHealthBars && npc.type === 'monster' && npc.combatMaxHealth > 0) {
                     drawEntityHealthBar(
                         drawCtx,
                         x,
@@ -575,10 +581,18 @@ export function collectRemoteDepthDrawables(
     z: number,
     camera: DepthSortCamera,
     tileSize: number,
-    nowMs?: number
+    nowMs?: number,
+    render?: {
+        showPlayerNames?: boolean;
+        showHealthBars?: boolean;
+        showFloatingDamage?: boolean;
+    }
 ): DepthDrawable[] {
     const drawables: DepthDrawable[] = [];
     const zoom = camera.zoom ?? 1;
+    const showPlayerNames = render?.showPlayerNames ?? true;
+    const showHealthBars = render?.showHealthBars ?? true;
+    const showFloatingDamage = render?.showFloatingDamage ?? true;
 
     for (const remote of remotes) {
         if (remote.z !== z) continue;
@@ -617,16 +631,20 @@ export function collectRemoteDepthDrawables(
                         placement.drawH
                     );
 
-                    const { x, y } = nameTagPosition(placement);
-                    drawOutlinedEntityName(drawCtx, remote.name, x, y, ENTITY_NAME_COLORS.remotePlayer);
-                    
-                    const rMaxHp = remote.maxHealth ?? 100;
-                    const rHp = remote.health ?? rMaxHp;
-                    const rMaxMp = remote.maxMana ?? 50;
-                    const rMp = remote.mana ?? rMaxMp;
-                    drawEntityHealthAndManaBar(drawCtx, x, y + 6, rHp, rMaxHp, rMp, rMaxMp);
+                    if (showPlayerNames) {
+                        const { x, y } = nameTagPosition(placement);
+                        drawOutlinedEntityName(drawCtx, remote.name, x, y, ENTITY_NAME_COLORS.remotePlayer);
 
-                    if (remote.floatingDamages && remote.floatingDamages.length > 0) {
+                        if (showHealthBars) {
+                            const rMaxHp = remote.maxHealth ?? 100;
+                            const rHp = remote.health ?? rMaxHp;
+                            const rMaxMp = remote.maxMana ?? 50;
+                            const rMp = remote.mana ?? rMaxMp;
+                            drawEntityHealthAndManaBar(drawCtx, x, y + 6, rHp, rMaxHp, rMp, rMaxMp);
+                        }
+                    }
+
+                    if (showFloatingDamage && remote.floatingDamages && remote.floatingDamages.length > 0) {
                         const anchorCenterX = placement.drawX + placement.drawW / 2;
                         const anchorTopY = placement.drawY;
                         drawFloatingDamages(drawCtx, remote.floatingDamages, anchorCenterX, anchorTopY, nowMs ?? performance.now());
@@ -656,29 +674,33 @@ export function collectRemoteDepthDrawables(
                 drawCtx.strokeRect(rx + 10, ry + 10, tileSize - 20, tileSize - 20);
 
                 const nameY = ry - 4;
-                drawOutlinedEntityName(
-                    drawCtx,
-                    remote.name,
-                    rx + tileSize / 2,
-                    nameY,
-                    ENTITY_NAME_COLORS.remotePlayer
-                );
+                if (showPlayerNames) {
+                    drawOutlinedEntityName(
+                        drawCtx,
+                        remote.name,
+                        rx + tileSize / 2,
+                        nameY,
+                        ENTITY_NAME_COLORS.remotePlayer
+                    );
 
-                const rMaxHp = remote.maxHealth ?? 100;
-                const rHp = remote.health ?? rMaxHp;
-                const rMaxMp = remote.maxMana ?? 50;
-                const rMp = remote.mana ?? rMaxMp;
-                drawEntityHealthAndManaBar(
-                    drawCtx,
-                    rx + tileSize / 2,
-                    nameY + 6,
-                    rHp,
-                    rMaxHp,
-                    rMp,
-                    rMaxMp
-                );
+                    if (showHealthBars) {
+                        const rMaxHp = remote.maxHealth ?? 100;
+                        const rHp = remote.health ?? rMaxHp;
+                        const rMaxMp = remote.maxMana ?? 50;
+                        const rMp = remote.mana ?? rMaxMp;
+                        drawEntityHealthAndManaBar(
+                            drawCtx,
+                            rx + tileSize / 2,
+                            nameY + 6,
+                            rHp,
+                            rMaxHp,
+                            rMp,
+                            rMaxMp
+                        );
+                    }
+                }
 
-                if (remote.floatingDamages && remote.floatingDamages.length > 0) {
+                if (showFloatingDamage && remote.floatingDamages && remote.floatingDamages.length > 0) {
                     const anchorCenterX = rx + tileSize / 2;
                     const anchorTopY = ry;
                     drawFloatingDamages(drawCtx, remote.floatingDamages, anchorCenterX, anchorTopY, nowMs ?? performance.now());
@@ -708,6 +730,8 @@ export interface LocalPlayerDepthOptions {
     maxHealth?: number;
     mana?: number;
     maxMana?: number;
+    showPlayerNames?: boolean;
+    showHealthBars?: boolean;
 }
 
 export function collectLocalPlayerDepthDrawable(
@@ -731,6 +755,8 @@ export function collectLocalPlayerDepthDrawable(
         maxHealth,
         mana,
         maxMana,
+        showPlayerNames = true,
+        showHealthBars = true,
     } = options;
 
     if (worldZ !== z) return null;
@@ -766,19 +792,21 @@ export function collectLocalPlayerDepthDrawable(
                     placement.drawH
                 );
 
-                const { x, y } = nameTagPosition(placement);
-                drawOutlinedEntityName(drawCtx, name, x, y, ENTITY_NAME_COLORS.localPlayer);
+                if (showPlayerNames) {
+                    const { x, y } = nameTagPosition(placement);
+                    drawOutlinedEntityName(drawCtx, name, x, y, ENTITY_NAME_COLORS.localPlayer);
 
-                if (maxHealth && maxHealth > 0) {
-                    drawEntityHealthAndManaBar(
-                        drawCtx,
-                        x,
-                        y + 6,
-                        health ?? maxHealth,
-                        maxHealth,
-                        mana ?? maxMana ?? 0,
-                        maxMana ?? 0
-                    );
+                    if (showHealthBars && maxHealth && maxHealth > 0) {
+                        drawEntityHealthAndManaBar(
+                            drawCtx,
+                            x,
+                            y + 6,
+                            health ?? maxHealth,
+                            maxHealth,
+                            mana ?? maxMana ?? 0,
+                            maxMana ?? 0
+                        );
+                    }
                 }
             },
         };
