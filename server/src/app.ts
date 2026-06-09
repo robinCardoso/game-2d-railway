@@ -7,6 +7,8 @@ import { healthHandler } from './routes/health.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createCharactersRouter } from './routes/characters.js';
 import { createCharacterInventoryRouter } from './routes/characterInventory.js';
+import { createCharacterSpellSlotsRouter } from './routes/characterSpellSlots.js';
+import { createCharacterSpellsRouter } from './routes/characterSpells.js';
 import { createWsTicketRouter } from './routes/wsTicket.js';
 import { createStudioRouter } from './routes/studio/index.js';
 import { desktopVersionHandler } from './routes/desktopVersion.js';
@@ -110,6 +112,14 @@ export function createApp(getOnline: (() => number) | undefined, collision: MapC
     app.use(
         '/api/characters/:characterId/inventory',
         createCharacterInventoryRouter()
+    );
+    app.use(
+        '/api/characters/:characterId/spell-slots',
+        createCharacterSpellSlotsRouter()
+    );
+    app.use(
+        '/api/characters/:characterId/spells',
+        createCharacterSpellsRouter()
     );
     app.use('/api/characters', createCharactersRouter((mapId) => collision.getMapSpawn(mapId)));
     app.use('/api/ws-ticket', createWsTicketRouter(collision));

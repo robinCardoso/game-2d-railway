@@ -26,7 +26,13 @@ import { createEmptyEquipment, type CharacterEquipmentState } from '../../shared
 import { processAttack } from './combat/combat.js';
 import { isDatabaseConfigured } from './db/pool.js';
 import { getCharacterInventory } from './db/repositories/inventory.repo.js';
+import {
+    getCharacterSpellSlots,
+    replaceCharacterSpellSlots,
+} from './db/repositories/spellSlots.repo.js';
+import { syncEligibleLearnedSpells } from './db/repositories/characterSpells.repo.js';
 import { loadServerItemCatalog } from './game/itemCatalogStore.js';
+import { loadServerSpellCatalog } from './game/serverSpellCatalog.js';
 import { verifyEnterTicket } from './enterTicket.js';
 import {
     clearSteppingDest,
@@ -46,6 +52,13 @@ import { ZoneType } from '../../src/engine/zones.js';
 import { env } from './config/env.js';
 import { shouldAcceptClientProgressSync } from '../../shared/progressSyncPolicy.js';
 import { isPlayerInAttackRange, resolvePlayerAttackProfile } from '../../shared/playerAttack.js';
+import { listEquippedSpellIds, type SpellBarState } from '../../shared/spellBar.js';
+import { computeEligibleSpellIds } from '../../shared/characterSpells.js';
+import {
+    resolveSpellBarOrDefaults,
+    validateCharacterSpellBar,
+} from '../../shared/spellSlots.js';
+import { resolveServerPlayerStepDurationMs } from './game/playerMovement.js';
 import {
     buildPlayerChatBroadcast,
     buildServerChatBroadcast,
@@ -113,6 +126,10 @@ interface ConnectedPlayer {
     lastMoveRejectionSentAtMs: number;
     /** Equipamento carregado do PostgreSQL no join (autoritativo no servidor). */
     equipment: CharacterEquipmentState;
+    /** Magias nos slots F1–F3 (carregadas do PostgreSQL no join). */
+    spellBar: SpellBarState;
+    /** Magias aprendidas (PostgreSQL + desbloqueio automático por level). */
+    learnedSpellIds: string[];
     socket: WebSocket;
     chatRateLimit: ChatRateLimitState;
 }
@@ -259,6 +276,49 @@ export class GameRoom {
         player.maxHealth = stats.health;
         player.maxMana = stats.mana;
         player.mana = Math.min(player.mana, player.maxMana);
+        player.health = Math.min(player.health, player.maxHealth);
+        this.sendPlayerResources(player);
+    }
+
+    private sendPlayerResources(player: ConnectedPlayer): void {
+        this.send(player.socket, {
+            type: 'player_resources',
+            v: PROTOCOL_VERSION,
+            playerId: player.id,
+            health: player.health,
+            maxHealth: player.maxHealth,
+            mana: player.mana,
+            maxMana: player.maxMana,
+        });
+    }
+
+    private spellCastErrorMessage(code?: string): string {
+        switch (code) {
+            case 'SPELL_NOT_EQUIPPED':
+                return 'Esta magia não está equipada nos seus slots.';
+            case 'SPELL_NOT_LEARNED':
+                return 'Você ainda não aprendeu esta magia.';
+            case 'SPELL_NOT_ALLOWED_FOR_VOCATION':
+            case 'VOCATION_BLOCKED':
+                return 'Sua vocação não pode usar esta magia.';
+            case 'SPELL_LEVEL_TOO_LOW':
+            case 'LEVEL_TOO_LOW':
+                return 'Level insuficiente para esta magia.';
+            case 'NOT_ENOUGH_MANA':
+                return 'Mana insuficiente.';
+            case 'SPELL_COOLDOWN':
+                return 'Aguarde o cooldown da magia.';
+            case 'GROUP_COOLDOWN':
+                return 'Aguarde o cooldown do grupo de magias.';
+            case 'OUT_OF_RANGE':
+                return 'Alvo fora de alcance.';
+            case 'CREATURE_NOT_FOUND':
+                return 'Alvo inválido.';
+            case 'SPELL_NOT_IMPLEMENTED':
+                return 'Magia ainda não disponível.';
+            default:
+                return 'Não foi possível conjurar a magia.';
+        }
     }
 
     private isWalkable(mapId: string, tileX: number, tileY: number, z: number): boolean {
@@ -339,6 +399,69 @@ export class GameRoom {
         }
     }
 
+    private async syncPlayerLearnedSpells(player: ConnectedPlayer): Promise<void> {
+        const vocationId = (player.appearance.vocationId || 'knight') as VocationId;
+        const catalog = loadServerSpellCatalog();
+        if (!isDatabaseConfigured() || !player.characterId || !player.accountId) {
+            player.learnedSpellIds = computeEligibleSpellIds(catalog, vocationId, player.level);
+            return;
+        }
+        try {
+            const learned = await syncEligibleLearnedSpells(
+                player.characterId,
+                player.accountId,
+                vocationId,
+                player.level,
+                catalog
+            );
+            player.learnedSpellIds = learned ?? computeEligibleSpellIds(catalog, vocationId, player.level);
+        } catch (err) {
+            console.warn(
+                `[GameRoom] falha ao sincronizar magias aprendidas de ${player.characterId}:`,
+                err
+            );
+            player.learnedSpellIds = computeEligibleSpellIds(catalog, vocationId, player.level);
+        }
+    }
+
+    private async hydratePlayerSpellBar(player: ConnectedPlayer): Promise<void> {
+        if (!player.characterId || !player.accountId) return;
+        const vocationId = (player.appearance.vocationId || 'knight') as VocationId;
+        await this.syncPlayerLearnedSpells(player);
+        if (!isDatabaseConfigured()) {
+            player.spellBar = resolveSpellBarOrDefaults({}, vocationId);
+            return;
+        }
+        try {
+            const stored =
+                (await getCharacterSpellSlots(player.characterId, player.accountId)) ?? {};
+            const bar = resolveSpellBarOrDefaults(stored, vocationId);
+            player.spellBar = bar;
+
+            if (!stored.slot1 && !stored.slot2 && !stored.slot3) {
+                const catalog = loadServerSpellCatalog();
+                const validated = validateCharacterSpellBar(bar, catalog, {
+                    vocationId,
+                    level: player.level,
+                    learnedSpellIds: player.learnedSpellIds,
+                });
+                if (validated.ok) {
+                    await replaceCharacterSpellSlots(
+                        player.characterId,
+                        player.accountId,
+                        validated.value
+                    );
+                }
+            }
+        } catch (err) {
+            console.warn(
+                `[GameRoom] falha ao carregar spell bar de ${player.characterId}:`,
+                err
+            );
+            player.spellBar = resolveSpellBarOrDefaults({}, vocationId);
+        }
+    }
+
     private persistPlayerPosition(player: ConnectedPlayer, immediate = false): void {
         if (!player.characterId || !player.accountId) return;
         const loc = {
@@ -385,6 +508,9 @@ export class GameRoom {
                 break;
             case 'cast_spell':
                 this.handleCastSpell(socket, msg);
+                break;
+            case 'spell_bar_sync':
+                this.handleSpellBarSync(socket, msg);
                 break;
             case 'progress_sync':
                 this.handleProgressSync(socket, msg);
@@ -593,6 +719,8 @@ export class GameRoom {
             spellCooldownUntil: {},
             groupCooldownUntil: {},
             equipment: createEmptyEquipment(),
+            spellBar: resolveSpellBarOrDefaults({}, appearance.vocationId),
+            learnedSpellIds: [],
             socket,
             chatRateLimit: createChatRateLimitState(),
         };
@@ -624,6 +752,7 @@ export class GameRoom {
 
         if (characterId && accountId) {
             void this.hydratePlayerEquipment(player);
+            void this.hydratePlayerSpellBar(player);
         }
 
         const platformLog = msg.platform ? `[${msg.platform}]` : '[web/unknown]';
@@ -647,6 +776,7 @@ export class GameRoom {
             players: others,
             creatures: creatureSnapshots,
         });
+        this.sendPlayerResources(player);
 
         if (
             msg.tileX !== joinTileX ||
@@ -815,10 +945,12 @@ export class GameRoom {
                 from.z !== to.z;
             if (tileChanged) {
                 const now = Date.now();
-                const stepMs =
+                const claimedStep =
                     parseStepDurationMs(msg.stepDurationMs) ??
                     player.lastStepDurationMs ??
                     MIN_SERVER_STEP_DURATION_MS;
+                const serverFloorStep = resolveServerPlayerStepDurationMs(player);
+                const stepMs = Math.max(claimedStep, serverFloorStep);
                 const claimedMin = Math.round(stepMs * MOVE_RATE_LIMIT_TOLERANCE);
                 const floorMin = Math.round(
                     MIN_SERVER_STEP_DURATION_MS * MOVE_RATE_LIMIT_TOLERANCE
@@ -952,8 +1084,13 @@ export class GameRoom {
         const clientExp = Math.max(0, Math.floor(msg.experience));
         if (clientExp <= player.experience) return;
 
+        const prevLevel = player.level;
         player.experience = clientExp;
         player.level = getLevelFromExp(clientExp);
+        if (player.level !== prevLevel) {
+            this.recalcPlayerMaxHealth(player);
+            void this.syncPlayerLearnedSpells(player);
+        }
 
         this.send(player.socket, {
             type: 'player_progress',
@@ -1139,6 +1276,7 @@ export class GameRoom {
                 damage: damageResult.finalDamage,
                 attackerPlayerId: player.id,
             });
+            this.sendPlayerResources(targetPlayer);
 
             this.persistPlayerPosition(targetPlayer);
 
@@ -1209,6 +1347,7 @@ export class GameRoom {
 
                 this.sendPositionCorrection(targetPlayer);
                 this.persistPlayerPosition(targetPlayer, true);
+                this.sendPlayerResources(targetPlayer);
             }
             return;
         }
@@ -1258,6 +1397,7 @@ export class GameRoom {
             const gain = applyExperienceGain(player.experience, outcome.died.xpReward);
             player.experience = gain.experience;
             player.level = gain.level;
+            void this.syncPlayerLearnedSpells(player);
 
             this.send(player.socket, {
                 type: 'player_progress',
@@ -1293,7 +1433,15 @@ export class GameRoom {
         if (this.roomKey(player) !== room) return;
 
         const spell = this.spellCatalog.getSpell(msg.spellId);
-        if (!spell) return;
+        if (!spell) {
+            this.send(player.socket, {
+                type: 'error',
+                v: PROTOCOL_VERSION,
+                code: 'SPELL_NOT_FOUND',
+                message: 'Magia desconhecida.',
+            });
+            return;
+        }
 
         const vocationId = (player.appearance.vocationId || 'knight') as VocationId;
         const vocationConfig = this.vocations.get(vocationId);
@@ -1312,17 +1460,28 @@ export class GameRoom {
                 mana: player.mana,
                 spellCooldownUntil: player.spellCooldownUntil,
                 groupCooldownUntil: player.groupCooldownUntil,
+                equippedSpellIds: listEquippedSpellIds(player.spellBar),
+                learnedSpellIds: player.learnedSpellIds,
             },
             msg.creatureId,
             now,
             vocationConfig
         );
 
-        if (!outcome.ok) return;
+        if (!outcome.ok) {
+            this.send(player.socket, {
+                type: 'error',
+                v: PROTOCOL_VERSION,
+                code: outcome.code ?? 'SPELL_CAST_FAILED',
+                message: this.spellCastErrorMessage(outcome.code),
+            });
+            return;
+        }
 
         if (outcome.newMana !== undefined) player.mana = outcome.newMana;
         if (outcome.spellCooldownUntil) player.spellCooldownUntil = outcome.spellCooldownUntil;
         if (outcome.groupCooldownUntil) player.groupCooldownUntil = outcome.groupCooldownUntil;
+        this.sendPlayerResources(player);
 
         if (outcome.damaged) {
             this.broadcastToRoom(room, outcome.damaged);
@@ -1334,6 +1493,8 @@ export class GameRoom {
             const gain = applyExperienceGain(player.experience, outcome.died.xpReward);
             player.experience = gain.experience;
             player.level = gain.level;
+            this.recalcPlayerMaxHealth(player);
+            void this.syncPlayerLearnedSpells(player);
 
             this.send(player.socket, {
                 type: 'player_progress',
@@ -1352,6 +1513,45 @@ export class GameRoom {
                     experience: gain.experience,
                 });
             }
+        }
+    }
+
+    private handleSpellBarSync(
+        socket: WebSocket,
+        msg: Extract<ClientMessage, { type: 'spell_bar_sync' }>
+    ): void {
+        const playerId = this.socketToPlayerId.get(socket);
+        if (!playerId) return;
+        const player = this.players.get(playerId);
+        if (!player) return;
+
+        const catalogDoc = loadServerSpellCatalog();
+        const validated = validateCharacterSpellBar(msg, catalogDoc, {
+            vocationId: player.appearance.vocationId || 'knight',
+            level: player.level,
+            learnedSpellIds: player.learnedSpellIds,
+        });
+        if (!validated.ok) {
+            console.warn(
+                `[GameRoom] spell_bar_sync rejeitado para ${player.name}:`,
+                validated.errors.join('; ')
+            );
+            return;
+        }
+
+        player.spellBar = validated.value;
+
+        if (player.characterId && player.accountId && isDatabaseConfigured()) {
+            void replaceCharacterSpellSlots(
+                player.characterId,
+                player.accountId,
+                validated.value
+            ).catch((err) => {
+                console.warn(
+                    `[GameRoom] falha ao persistir spell bar de ${player.characterId}:`,
+                    err
+                );
+            });
         }
     }
 

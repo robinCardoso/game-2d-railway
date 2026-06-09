@@ -117,7 +117,11 @@ import {
     type PlayCombatServerBridge,
 } from './playCombat';
 import { loadSpellCatalog } from '../game-data/spellCatalog';
-import { initPlaySpellBar } from './ui/playSpellBar';
+import { getPlaySpellBarState, initPlaySpellBar, loadPlaySpellBarFromServer, setPlaySpellBarSyncHandler } from './ui/playSpellBar';
+import {
+    initPlayLearnedSpells,
+    loadPlayLearnedSpellsFromServer,
+} from './playLearnedSpells';
 import {
     initPlayCombatHub,
     setPlayCombatHubBridge,
@@ -785,6 +789,13 @@ function applyPlayProgressUpdate(
     if (leveledUp) {
         refreshPlayerMovementSpeed(performance.now());
         refreshPlaySpellModal();
+        if (activeCharacter) {
+            void loadPlayLearnedSpellsFromServer(
+                activeCharacter.id,
+                activeCharacter.vocation,
+                level
+            ).then(() => refreshPlaySpellModal());
+        }
     }
     scheduleProgressSave(leveledUp);
 }
@@ -1443,6 +1454,10 @@ function setupNetwork(
 
     const chatHandlers = createPlayChatNetHandlers();
 
+    setPlaySpellBarSyncHandler(() => {
+        gameNet?.sendSpellBarSync(getPlaySpellBarState());
+    });
+
     gameNet = new GameNetClient({
         url,
         getEnterTicket: () => ticket,
@@ -1462,6 +1477,7 @@ function setupNetwork(
             steppingDestTileY: gridMovement.stepping ? gridMovement.destTileY : undefined,
             level: activeCharacter?.level,
             experience: activeCharacter?.experience,
+            spellBar: getPlaySpellBarState(),
         }),
         isMovementStepping: () => gridMovement.stepping,
         onPositionCorrection: (pos) => {
@@ -1497,6 +1513,20 @@ function setupNetwork(
         onServerError: ({ code, message, retryAfterMs }) => {
             chatHandlers.onServerError({ code, message, retryAfterMs });
             if (code === 'NO_PVP_MAP') {
+                toast.info(message);
+                return;
+            }
+            if (
+                code === 'SPELL_NOT_EQUIPPED' ||
+                code === 'SPELL_NOT_ALLOWED_FOR_VOCATION' ||
+                code === 'SPELL_LEVEL_TOO_LOW' ||
+                code === 'NOT_ENOUGH_MANA' ||
+                code === 'SPELL_COOLDOWN' ||
+                code === 'GROUP_COOLDOWN' ||
+                code === 'OUT_OF_RANGE' ||
+                code === 'SPELL_CAST_FAILED' ||
+                code === 'SPELL_NOT_FOUND'
+            ) {
                 toast.info(message);
             }
         },
@@ -1565,6 +1595,17 @@ function setupNetwork(
                 leveledUp: msg.leveledUp,
             });
         },
+        onPlayerResources: (msg) => {
+            if (msg.playerId !== gameNet?.getLocalPlayerId()) return;
+            player.health = msg.health;
+            player.maxHealth = msg.maxHealth;
+            player.mana = msg.mana;
+            player.maxMana = msg.maxMana;
+            syncPlayHudVitals();
+            if (activeCharacter) {
+                updateCharacterStatsUi(activeCharacter, { flashLevel: false });
+            }
+        },
         onPlayerDamaged: (msg) => {
             const now = performance.now();
             const myPlayerId = gameNet?.getLocalPlayerId();
@@ -1593,6 +1634,9 @@ function setupNetwork(
             if (msg.playerId === myPlayerId) {
                 player.health = msg.health;
                 player.maxHealth = msg.maxHealth;
+                player.mana = msg.mana ?? player.mana;
+                player.maxMana = msg.maxMana ?? player.maxMana;
+                syncPlayHudVitals();
                 if (activeCharacter) {
                     updateCharacterStatsUi(activeCharacter, { flashLevel: false });
                 }
@@ -1647,15 +1691,21 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
 
     await loadRuntimeVocations();
     await loadSpellCatalog();
-    initPlaySpellBar(character.id, character.vocation);
-    refreshPlayCombatHubSpells();
-    bindPlaySpellModalCharacter(character);
 
     const progress = normalizeCharacterProgress(character.experience, character.level);
     character.experience = progress.experience;
     character.level = progress.level;
     characterSpeed.level = progress.level;
     playSessionLevel = progress.level;
+
+    initPlaySpellBar(character.id, character.vocation);
+    initPlayLearnedSpells(character.vocation, progress.level);
+    await Promise.all([
+        loadPlaySpellBarFromServer(character.id, character.vocation),
+        loadPlayLearnedSpellsFromServer(character.id, character.vocation, progress.level),
+    ]);
+    refreshPlayCombatHubSpells();
+    bindPlaySpellModalCharacter(character);
 
     if (playCharNameEl) playCharNameEl.textContent = character.name;
     const mobileName = document.getElementById('playCharNameMobile');

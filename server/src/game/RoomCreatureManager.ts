@@ -276,6 +276,7 @@ export class RoomCreatureManager {
             mana: number;
             spellCooldownUntil: Record<string, number>;
             groupCooldownUntil: Record<string, number>;
+            equippedSpellIds: string[];
         },
         creatureId: string,
         nowMs: number,

@@ -14,6 +14,10 @@ export interface SpellCastAttacker {
     mana: number;
     spellCooldownUntil: Record<string, number>;
     groupCooldownUntil: Record<string, number>;
+    /** IDs equipados nos slots F1–F3 — cast só permitido se spell.id estiver aqui. */
+    equippedSpellIds: string[];
+    /** Magias aprendidas pelo personagem (PostgreSQL). Vazio = modo legado sem DB. */
+    learnedSpellIds: string[];
 }
 
 export interface SpellCastCreature {
@@ -48,10 +52,19 @@ export function validateAndResolveSpellCast(
 ): SpellCastResult {
     if (!spell.implemented) return { ok: false, code: 'SPELL_NOT_IMPLEMENTED' };
     if (!vocationConfig) return { ok: false, code: 'INVALID_VOCATION' };
-    if (attacker.level < spell.minLevel) return { ok: false, code: 'LEVEL_TOO_LOW' };
+    if (!attacker.equippedSpellIds.includes(spell.id)) {
+        return { ok: false, code: 'SPELL_NOT_EQUIPPED' };
+    }
+    if (
+        attacker.learnedSpellIds.length > 0 &&
+        !attacker.learnedSpellIds.includes(spell.id)
+    ) {
+        return { ok: false, code: 'SPELL_NOT_LEARNED' };
+    }
+    if (attacker.level < spell.minLevel) return { ok: false, code: 'SPELL_LEVEL_TOO_LOW' };
     const vocation = String(attacker.vocationId).toLowerCase();
     if (spell.vocations.length > 0 && !spell.vocations.includes(vocation)) {
-        return { ok: false, code: 'VOCATION_BLOCKED' };
+        return { ok: false, code: 'SPELL_NOT_ALLOWED_FOR_VOCATION' };
     }
     if (attacker.mana < spell.manaCost) return { ok: false, code: 'NOT_ENOUGH_MANA' };
 

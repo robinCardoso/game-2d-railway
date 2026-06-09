@@ -39,6 +39,7 @@ export interface GameNetClientOptions {
         steppingDestTileY?: number;
         level?: number;
         experience?: number;
+        spellBar?: { slot1?: string; slot2?: string; slot3?: string };
     };
     onStatusChange?: (status: NetStatus) => void;
     /** Servidor atribuiu instanceId (dungeon instanciada). */
@@ -112,6 +113,13 @@ export interface GameNetClientOptions {
         leveledUp?: boolean;
         health?: number;
         maxHealth?: number;
+    }) => void;
+    onPlayerResources?: (payload: {
+        playerId: string;
+        health: number;
+        maxHealth: number;
+        mana: number;
+        maxMana: number;
     }) => void;
     onPlayerDamaged?: (payload: {
         playerId: string;
@@ -238,6 +246,21 @@ export class GameNetClient {
             v: PROTOCOL_VERSION,
             level: Math.max(1, Math.floor(level)),
             experience: Math.max(0, Math.floor(experience)),
+        });
+    }
+
+    sendSpellBarSync(spellBar: {
+        slot1?: string;
+        slot2?: string;
+        slot3?: string;
+    }): void {
+        if (!this.isConnected()) return;
+        this.send({
+            type: 'spell_bar_sync',
+            v: PROTOCOL_VERSION,
+            slot1: spellBar.slot1,
+            slot2: spellBar.slot2,
+            slot3: spellBar.slot3,
         });
     }
 
@@ -487,6 +510,7 @@ export class GameNetClient {
             experience: state.experience,
             platform: detectRuntimePlatform(),
             clientBuildVersion: getClientRuntimeConfig().buildVersion,
+            spellBar: state.spellBar,
         });
     }
 
@@ -705,6 +729,17 @@ export class GameNetClient {
                         leveledUp: msg.leveledUp,
                         health: msg.health,
                         maxHealth: msg.maxHealth,
+                    });
+                }
+                break;
+            case 'player_resources':
+                if (msg.playerId === this.localPlayerId) {
+                    this.options.onPlayerResources?.({
+                        playerId: msg.playerId,
+                        health: msg.health,
+                        maxHealth: msg.maxHealth,
+                        mana: msg.mana,
+                        maxMana: msg.maxMana,
                     });
                 }
                 break;

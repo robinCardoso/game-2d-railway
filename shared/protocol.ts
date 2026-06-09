@@ -5,6 +5,7 @@
 
 import { isChatPlayerChannel, parseChatSendText } from './chatConfig.js';
 import { buildRoomKey } from './roomKey.js';
+import { parseSpellBar } from './spellBar.js';
 import type { ChatChannel, ChatMessageKind, ChatPlayerChannel } from './chatConfig.js';
 import type { Gender } from './types/character.js';
 
@@ -26,7 +27,8 @@ export type ClientMessage =
     | ResyncRequestMessage
     | PingMessage
     | LeaveMessage
-    | ChatSendMessage;
+    | ChatSendMessage
+    | SpellBarSyncMessage;
 
 export type ServerMessage =
     | WelcomeMessage
@@ -48,6 +50,7 @@ export type ServerMessage =
     | PlayerDiedMessage
     | PlayerRespawnedMessage
     | AttackMissMessage
+    | PlayerResourcesMessage
     | ChatBroadcastMessage;
 
 export interface PlayerAppearance {
@@ -119,6 +122,16 @@ export interface JoinMessage {
     platform?: 'web' | 'electron' | 'capacitor' | 'unknown';
     /** Versão do build do cliente (ex.: '0.1.0'). */
     clientBuildVersion?: string;
+    /** Magias equipadas nos slots F1–F3 (validação de cast no servidor). */
+    spellBar?: { slot1?: string; slot2?: string; slot3?: string };
+}
+
+export interface SpellBarSyncMessage {
+    type: 'spell_bar_sync';
+    v: number;
+    slot1?: string;
+    slot2?: string;
+    slot3?: string;
 }
 
 export interface AttackMessage {
@@ -336,6 +349,17 @@ export interface PlayerProgressMessage {
     maxHealth?: number;
 }
 
+/** HP/MP autoritativos — sincroniza HUD após cast, dano, cura, level up. */
+export interface PlayerResourcesMessage {
+    type: 'player_resources';
+    v: number;
+    playerId: string;
+    health: number;
+    maxHealth: number;
+    mana: number;
+    maxMana: number;
+}
+
 export interface StateSyncMessage {
     type: 'state_sync';
     v: number;
@@ -502,6 +526,18 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
                 appearance: parsePlayerAppearance(m.appearance),
                 level: parseOptionalPositiveInt(m.level),
                 experience: parseOptionalNonNegativeInt(m.experience),
+                platform:
+                    m.platform === 'web' ||
+                    m.platform === 'electron' ||
+                    m.platform === 'capacitor' ||
+                    m.platform === 'unknown'
+                        ? m.platform
+                        : undefined,
+                clientBuildVersion:
+                    typeof m.clientBuildVersion === 'string'
+                        ? m.clientBuildVersion.slice(0, 32)
+                        : undefined,
+                spellBar: parseSpellBar(m.spellBar),
             };
         case 'move':
             return {
@@ -575,6 +611,12 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
             };
         case 'leave':
             return { type: 'leave', v: PROTOCOL_VERSION };
+        case 'spell_bar_sync':
+            return {
+                type: 'spell_bar_sync',
+                v: PROTOCOL_VERSION,
+                ...parseSpellBar(m),
+            };
         case 'chat_send': {
             const channel = typeof m.channel === 'string' ? m.channel : '';
             if (!isChatPlayerChannel(channel)) return null;

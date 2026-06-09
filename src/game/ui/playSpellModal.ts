@@ -1,6 +1,7 @@
 import { getSpellCatalogEntries } from '../../game-data/spellCatalog';
 import type { SpellDefinition, SpellGroup } from '../../game-data/spellCatalogTypes';
 import type { CharacterRow } from '../../shared/types';
+import { isPlaySpellLearned } from '../playLearnedSpells';
 import {
     equipSpellToSlot,
     getPlaySpellBarState,
@@ -39,12 +40,9 @@ function spellAppliesToVocation(spell: SpellDefinition, vocation: string): boole
     return spell.vocations.includes(vocation.toLowerCase());
 }
 
-function isSpellUnlocked(spell: SpellDefinition, character: CharacterRow): boolean {
+function isSpellUnlocked(spell: SpellDefinition, _character: CharacterRow): boolean {
     if (!spell.implemented) return false;
-    const level = character.level ?? 1;
-    if (level < spell.minLevel) return false;
-    const vocation = (character.vocation || 'knight').toLowerCase();
-    return spellAppliesToVocation(spell, vocation);
+    return isPlaySpellLearned(spell.id);
 }
 
 function damageTypeLabel(spell: SpellDefinition): string {
@@ -266,10 +264,15 @@ function equipSelectedSpell(): void {
     const spell = getSpellByIdLocal(selectedSpellId);
     if (!spell || !isSpellUnlocked(spell, activeCharacter)) return;
 
-    equipSpellToSlot(selectedSpellId, targetSlot);
-    refreshPlayCombatHubSpells();
-    renderAll();
-    toast.show(`${spell.name} equipada no slot ${targetSlot}.`, 'success');
+    void equipSpellToSlot(selectedSpellId, targetSlot)
+        .then(() => {
+            refreshPlayCombatHubSpells();
+            renderAll();
+            toast.show(`${spell.name} equipada no slot ${targetSlot}.`, 'success');
+        })
+        .catch(() => {
+            toast.show('Não foi possível equipar a magia.', 'error');
+        });
 }
 
 export function openPlaySpellModal(): void {

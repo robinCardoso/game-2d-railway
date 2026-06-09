@@ -1,68 +1,55 @@
 import { getSpellById } from '../../game-data/spellCatalog';
 import type { SpellDefinition } from '../../game-data/spellCatalogTypes';
+import {
+    defaultSpellBarForVocation,
+    type SpellBarState,
+} from '../../../shared/spellBar';
+import {
+    fetchCharacterSpellSlots,
+    saveCharacterSpellSlots,
+} from '../characterSpellSlotsApi';
 
 export type SpellBarSlot = 1 | 2 | 3;
 
-export interface SpellBarState {
-    slot1?: string;
-    slot2?: string;
-    slot3?: string;
+export type { SpellBarState };
+
+let onSpellBarChanged: (() => void) | null = null;
+
+export function setPlaySpellBarSyncHandler(handler: (() => void) | null): void {
+    onSpellBarChanged = handler;
 }
 
-const DEFAULT_BAR_MAGE: SpellBarState = {
-    slot1: 'mock_energy_strike',
-    slot2: 'mock_fire_bolt',
-    slot3: 'mock_void_touch',
-};
-
-const DEFAULT_BAR_KNIGHT: SpellBarState = {
-    slot1: 'knight_brutal_strike',
-    slot2: 'knight_ground_slam',
-    slot3: 'knight_front_sweep',
-};
-
-function defaultBarForVocation(vocation: string | undefined): SpellBarState {
-    if ((vocation || 'knight').toLowerCase() === 'knight') {
-        return { ...DEFAULT_BAR_KNIGHT };
-    }
-    return { ...DEFAULT_BAR_MAGE };
+function notifySpellBarChanged(): void {
+    onSpellBarChanged?.();
 }
 
 let characterId: string | null = null;
-let barState: SpellBarState = { ...DEFAULT_BAR_KNIGHT };
+let barState: SpellBarState = defaultSpellBarForVocation('knight');
 
-function storageKey(id: string): string {
-    return `play.spellBar.${id}`;
-}
-
-function readBar(id: string, vocation?: string): SpellBarState {
-    const defaults = defaultBarForVocation(vocation);
-    try {
-        const raw = localStorage.getItem(storageKey(id));
-        if (!raw) return defaults;
-        const parsed = JSON.parse(raw) as SpellBarState;
-        return {
-            slot1: typeof parsed.slot1 === 'string' ? parsed.slot1 : defaults.slot1,
-            slot2: typeof parsed.slot2 === 'string' ? parsed.slot2 : defaults.slot2,
-            slot3: typeof parsed.slot3 === 'string' ? parsed.slot3 : defaults.slot3,
-        };
-    } catch {
-        return defaults;
-    }
-}
-
-function saveBar(): void {
-    if (!characterId) return;
-    try {
-        localStorage.setItem(storageKey(characterId), JSON.stringify(barState));
-    } catch {
-        /* ignore */
-    }
+function applyBarState(next: SpellBarState): void {
+    barState = { ...next };
+    notifySpellBarChanged();
 }
 
 export function initPlaySpellBar(activeCharacterId: string, vocation?: string): void {
     characterId = activeCharacterId;
-    barState = readBar(activeCharacterId, vocation);
+    barState = defaultSpellBarForVocation(vocation);
+    notifySpellBarChanged();
+}
+
+/** Carrega slots autoritativos do PostgreSQL (fallback: defaults por vocação). */
+export async function loadPlaySpellBarFromServer(
+    activeCharacterId: string,
+    vocation?: string
+): Promise<void> {
+    characterId = activeCharacterId;
+    try {
+        const spellBar = await fetchCharacterSpellSlots(activeCharacterId);
+        applyBarState(spellBar);
+    } catch (err) {
+        console.warn('[playSpellBar] falha ao carregar do servidor, usando defaults:', err);
+        applyBarState(defaultSpellBarForVocation(vocation));
+    }
 }
 
 export function getPlaySpellBarState(): Readonly<SpellBarState> {
@@ -81,9 +68,22 @@ export function getSpellForSlot(slot: SpellBarSlot): SpellDefinition | undefined
     return getSpellById(id);
 }
 
-export function equipSpellToSlot(spellId: string, slot: SpellBarSlot): void {
-    if (slot === 1) barState.slot1 = spellId;
-    else if (slot === 2) barState.slot2 = spellId;
-    else barState.slot3 = spellId;
-    saveBar();
+export async function equipSpellToSlot(spellId: string, slot: SpellBarSlot): Promise<void> {
+    const next: SpellBarState = { ...barState };
+    if (slot === 1) next.slot1 = spellId;
+    else if (slot === 2) next.slot2 = spellId;
+    else next.slot3 = spellId;
+
+    if (!characterId) {
+        applyBarState(next);
+        return;
+    }
+
+    try {
+        const saved = await saveCharacterSpellSlots(characterId, next);
+        applyBarState(saved);
+    } catch (err) {
+        console.error('[playSpellBar] falha ao salvar slot:', err);
+        throw err;
+    }
 }

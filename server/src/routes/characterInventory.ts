@@ -51,7 +51,10 @@ export function createCharacterInventoryRouter(): Router {
             const authReq = req as AuthenticatedRequest;
             const { characterId } = req.params as CharacterInventoryParams;
             const catalog = loadServerItemCatalog();
-            const parsed = validateCharacterInventory(req.body, catalog);
+            const previous =
+                (await getCharacterInventoryOrEmpty(characterId, authReq.auth!.sub)) ??
+                emptyInventoryDocument();
+            const parsed = validateCharacterInventory(req.body, catalog, { previous });
             if (!parsed.ok) {
                 res.status(400).json({ error: 'Inventário inválido.', details: parsed.errors });
                 return;
