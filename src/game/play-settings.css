@@ -52,6 +52,23 @@
     accent-color: #6366f1;
 }
 
+.settings-select {
+    min-width: 88px;
+    padding: 6px 10px;
+    border: 1px solid #3d4450;
+    border-radius: 8px;
+    background: #1e2229;
+    color: #e2e8f0;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.settings-select:focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 2px;
+}
+
 .settings-placeholder {
     color: #64748b;
     font-size: 13px;

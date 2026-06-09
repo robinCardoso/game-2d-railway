@@ -124,6 +124,8 @@ function readDraftFromForm(): ItemCatalogEntry | null {
         .value as ItemCategory;
     const slot = (document.getElementById('itemSlotSelect') as HTMLSelectElement).value;
     const speedRaw = (document.getElementById('itemSpeedBonusInput') as HTMLInputElement).value;
+    const attackRaw = (document.getElementById('itemAttackBonusInput') as HTMLInputElement | null)?.value ?? '';
+    const defenseRaw = (document.getElementById('itemDefenseBonusInput') as HTMLInputElement | null)?.value ?? '';
     const description = (document.getElementById('itemDescriptionInput') as HTMLInputElement).value.trim();
     const implemented = (document.getElementById('itemImplementedCheck') as HTMLInputElement).checked;
 
@@ -133,6 +135,8 @@ function readDraftFromForm(): ItemCatalogEntry | null {
         category,
         slot: category === 'equipment' ? slot : undefined,
         speedBonus: speedRaw === '' ? undefined : Number(speedRaw),
+        attackBonus: attackRaw === '' ? undefined : Number(attackRaw),
+        defenseBonus: defenseRaw === '' ? undefined : Number(defenseRaw),
         description,
         implemented,
     });
@@ -256,6 +260,14 @@ function selectItem(id: string | null): void {
     (document.getElementById('itemSlotSelect') as HTMLSelectElement).value = item.slot ?? 'feet';
     (document.getElementById('itemSpeedBonusInput') as HTMLInputElement).value =
         item.speedBonus !== undefined ? String(item.speedBonus) : '';
+    const attackInput = document.getElementById('itemAttackBonusInput') as HTMLInputElement | null;
+    if (attackInput) {
+        attackInput.value = item.attackBonus !== undefined ? String(item.attackBonus) : '';
+    }
+    const defenseInput = document.getElementById('itemDefenseBonusInput') as HTMLInputElement | null;
+    if (defenseInput) {
+        defenseInput.value = item.defenseBonus !== undefined ? String(item.defenseBonus) : '';
+    }
     (document.getElementById('itemDescriptionInput') as HTMLInputElement).value =
         item.description ?? '';
     (document.getElementById('itemImplementedCheck') as HTMLInputElement).checked = item.implemented;
@@ -267,6 +279,10 @@ function resetForm(): void {
     (document.getElementById('itemCategorySelect') as HTMLSelectElement).value = 'loot';
     (document.getElementById('itemSlotSelect') as HTMLSelectElement).value = 'feet';
     (document.getElementById('itemSpeedBonusInput') as HTMLInputElement).value = '';
+    const attackInput = document.getElementById('itemAttackBonusInput') as HTMLInputElement | null;
+    if (attackInput) attackInput.value = '';
+    const defenseInput = document.getElementById('itemDefenseBonusInput') as HTMLInputElement | null;
+    if (defenseInput) defenseInput.value = '';
     (document.getElementById('itemDescriptionInput') as HTMLInputElement).value = '';
     (document.getElementById('itemImplementedCheck') as HTMLInputElement).checked = false;
     syncSlotFieldVisibility();
@@ -276,9 +292,13 @@ function syncSlotFieldVisibility(): void {
     const category = (document.getElementById('itemCategorySelect') as HTMLSelectElement)?.value;
     const slotWrap = document.getElementById('itemSlotWrap');
     const speedWrap = document.getElementById('itemSpeedWrap');
+    const attackWrap = document.getElementById('itemAttackWrap');
+    const defenseWrap = document.getElementById('itemDefenseWrap');
     const isEquipment = category === 'equipment';
     if (slotWrap) slotWrap.style.display = isEquipment ? 'block' : 'none';
     if (speedWrap) speedWrap.style.display = isEquipment ? 'block' : 'none';
+    if (attackWrap) attackWrap.style.display = isEquipment ? 'block' : 'none';
+    if (defenseWrap) defenseWrap.style.display = isEquipment ? 'block' : 'none';
 
     const slotSelect = document.getElementById('itemSlotSelect') as HTMLSelectElement | null;
     if (slotSelect && slotSelect.options.length === 0) {

@@ -18,9 +18,14 @@ import { canAdjacentStep } from '../../shared/tileWalkable.js';
 import type { MapCollisionStore } from './MapCollisionStore.js';
 import type { MapInstanceStore } from './MapInstanceStore.js';
 import { isInstancedMap, getServerMapEntry } from './mapRegistry.js';
+import {
+    calculateEquipmentAttackBonus,
+    calculateEquipmentDefenseBonus,
+} from '../../shared/equipmentBonuses.js';
 import { createEmptyEquipment, type CharacterEquipmentState } from '../../shared/inventory.js';
 import { processAttack } from './combat/combat.js';
 import { getCharacterInventory } from './db/repositories/inventory.repo.js';
+import { loadServerItemCatalog } from './game/itemCatalogStore.js';
 import { verifyEnterTicket } from './enterTicket.js';
 import {
     clearSteppingDest,
@@ -285,6 +290,17 @@ export class GameRoom {
             message,
         });
         this.sendPositionCorrection(player);
+    }
+
+    private resolvePlayerEquipmentBonuses(player: ConnectedPlayer): {
+        attackBonus: number;
+        defenseBonus: number;
+    } {
+        const catalog = loadServerItemCatalog();
+        return {
+            attackBonus: calculateEquipmentAttackBonus(player.equipment, catalog),
+            defenseBonus: calculateEquipmentDefenseBonus(player.equipment, catalog),
+        };
     }
 
     private async hydratePlayerEquipment(player: ConnectedPlayer): Promise<void> {
@@ -1000,6 +1016,9 @@ export class GameRoom {
             const targetVocationConfig = this.vocations.get(targetVocationId);
             const targetStats = targetVocationConfig ? calculateStatsForLevel(targetVocationConfig, targetPlayer.level) : { defense: 5 };
 
+            const attackerBonuses = this.resolvePlayerEquipmentBonuses(player);
+            const targetBonuses = this.resolvePlayerEquipmentBonuses(targetPlayer);
+
             const damageResult = processAttack(
                 {
                     id: player.id,
@@ -1015,7 +1034,12 @@ export class GameRoom {
                     defense: targetStats.defense || 5,
                 },
                 attackProfile.attackType,
-                vocationConfig
+                vocationConfig,
+                1.0,
+                {
+                    attackerAttackBonus: attackerBonuses.attackBonus,
+                    targetDefenseBonus: targetBonuses.defenseBonus,
+                }
             );
 
             player.lastAttackAtMs = now;
@@ -1104,6 +1128,8 @@ export class GameRoom {
             return;
         }
 
+        const attackerBonuses = this.resolvePlayerEquipmentBonuses(player);
+
         const outcome = this.creatures.processAttack(
             room,
             {
@@ -1114,6 +1140,7 @@ export class GameRoom {
                 level: player.level,
                 vocationId,
                 lastAttackAtMs: player.lastAttackAtMs,
+                attackBonus: attackerBonuses.attackBonus,
             },
             msg.creatureId,
             Date.now(),

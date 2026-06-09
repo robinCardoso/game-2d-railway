@@ -1,4 +1,12 @@
+import {
+    PLAY_DEFAULT_ZOOM,
+    PLAY_DEFAULT_ZOOM_CHANGED_EVENT,
+    PLAY_ZOOM_STEPS,
+    snapPlayZoom,
+} from '../playZoom';
+
 const STORAGE_PREFIX = 'elarion.play.';
+const DEFAULT_ZOOM_KEY = 'defaultZoom';
 
 export type PlaySettingKey =
     | 'showPlayerNames'
@@ -46,6 +54,37 @@ export interface PlayRenderOptions {
     showMonsterNames: boolean;
     showHealthBars: boolean;
     showFloatingDamage: boolean;
+}
+
+export function getPlayDefaultZoom(): number {
+    try {
+        const raw = localStorage.getItem(`${STORAGE_PREFIX}${DEFAULT_ZOOM_KEY}`);
+        if (raw === null) return PLAY_DEFAULT_ZOOM;
+        const parsed = parseFloat(raw);
+        if (!Number.isFinite(parsed) || parsed <= 0) return PLAY_DEFAULT_ZOOM;
+        return snapPlayZoom(parsed);
+    } catch {
+        return PLAY_DEFAULT_ZOOM;
+    }
+}
+
+export function setPlayDefaultZoom(zoom: number): void {
+    const snapped = snapPlayZoom(zoom);
+    try {
+        localStorage.setItem(`${STORAGE_PREFIX}${DEFAULT_ZOOM_KEY}`, String(snapped));
+    } catch {
+        /* ignore */
+    }
+    window.dispatchEvent(
+        new CustomEvent(PLAY_DEFAULT_ZOOM_CHANGED_EVENT, { detail: snapped })
+    );
+}
+
+export function getPlayZoomStepOptions(): ReadonlyArray<{ value: number; label: string }> {
+    return PLAY_ZOOM_STEPS.map((step) => ({
+        value: step,
+        label: `${Math.round(step * 100)}%`,
+    }));
 }
 
 export function getPlayRenderOptions(): PlayRenderOptions {
@@ -96,6 +135,25 @@ export function initPlayHudSettings(): void {
             });
         });
     });
+
+    const zoomSelect = document.getElementById('playDefaultZoomSelect') as HTMLSelectElement | null;
+    if (zoomSelect) {
+        if (!zoomSelect.options.length) {
+            for (const opt of getPlayZoomStepOptions()) {
+                const option = document.createElement('option');
+                option.value = String(opt.value);
+                option.textContent = opt.label;
+                zoomSelect.appendChild(option);
+            }
+        }
+        zoomSelect.value = String(getPlayDefaultZoom());
+        zoomSelect.addEventListener('change', () => {
+            const next = parseFloat(zoomSelect.value);
+            if (Number.isFinite(next)) {
+                setPlayDefaultZoom(next);
+            }
+        });
+    }
 
     applyPlaySettings();
 }

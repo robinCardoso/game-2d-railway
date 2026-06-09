@@ -27,21 +27,29 @@ export interface DamageResult {
 /**
  * Validates and executes combat damage on the server.
  */
+export interface CombatEquipmentModifiers {
+  attackerAttackBonus?: number;
+  targetDefenseBonus?: number;
+}
+
 export function processAttack(
   attacker: CombatAttacker,
   target: CombatTarget,
   attackType: 'melee' | 'distance' | 'magic',
   vocationConfig: VocationConfig,
-  spellMultiplier: number = 1.0
+  spellMultiplier: number = 1.0,
+  equipment?: CombatEquipmentModifiers
 ): DamageResult {
   // 1. Calculate the attacker's server-authoritative stats for their level using the passed configuration
   const stats = calculateStatsForLevel(vocationConfig, attacker.level);
+  const attackBonus = equipment?.attackerAttackBonus ?? 0;
+  const defenseValue = target.defense + (equipment?.targetDefenseBonus ?? 0);
 
   let damageResult;
   if (attackType === 'melee') {
-    damageResult = calculateMeleeDamage(stats.melee, target.defense);
+    damageResult = calculateMeleeDamage(stats.melee + attackBonus, defenseValue);
   } else if (attackType === 'distance') {
-    damageResult = calculateDistanceDamage(stats.distanceAttack, target.defense);
+    damageResult = calculateDistanceDamage(stats.distanceAttack + attackBonus, defenseValue);
   } else {
     damageResult = calculateMagicDamage(stats.magicAttack, spellMultiplier);
   }

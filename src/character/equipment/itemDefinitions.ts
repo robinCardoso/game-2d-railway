@@ -17,6 +17,8 @@ export interface ItemDefinition {
     name: string;
     slot: EquipmentSlot;
     speedBonus?: number;
+    attackBonus?: number;
+    defenseBonus?: number;
     description?: string;
     implemented: boolean;
 }
@@ -28,6 +30,8 @@ function toDefinition(entry: ItemCatalogEntry): ItemDefinition | null {
         name: entry.name,
         slot: entry.slot,
         speedBonus: entry.speedBonus,
+        attackBonus: entry.attackBonus,
+        defenseBonus: entry.defenseBonus,
         description: entry.description,
         implemented: entry.implemented,
     };

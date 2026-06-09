@@ -26,6 +26,10 @@ export interface ItemCatalogEntry {
     /** Obrigatório quando `category === 'equipment'`. */
     slot?: EquipmentSlot;
     speedBonus?: number;
+    /** Bônus somado ao skill de ataque (melee/distance) no combate. */
+    attackBonus?: number;
+    /** Bônus somado à defesa do alvo no combate. */
+    defenseBonus?: number;
     description?: string;
     /**
      * false = só cadastro (Studio/loot); ainda sem sprite, inventário ou drop no Play.
@@ -71,18 +75,20 @@ export function sanitizeItemCatalogEntry(raw: unknown): ItemCatalogEntry | null 
         slot = 'feet';
     }
 
-    const speedRaw = row.speedBonus;
-    const speedBonus =
-        speedRaw === undefined || speedRaw === null || speedRaw === ''
-            ? undefined
-            : Number(speedRaw);
+    const parseOptionalInt = (raw: unknown): number | undefined => {
+        if (raw === undefined || raw === null || raw === '') return undefined;
+        const n = Number(raw);
+        return Number.isFinite(n) ? Math.floor(n) : undefined;
+    };
 
     return {
         id,
         name,
         category,
         slot: category === 'equipment' ? slot : undefined,
-        speedBonus: Number.isFinite(speedBonus) ? Math.floor(speedBonus as number) : undefined,
+        speedBonus: parseOptionalInt(row.speedBonus),
+        attackBonus: parseOptionalInt(row.attackBonus),
+        defenseBonus: parseOptionalInt(row.defenseBonus),
         description: typeof row.description === 'string' ? row.description.trim() : undefined,
         implemented: row.implemented === true,
     };

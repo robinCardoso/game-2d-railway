@@ -119,6 +119,8 @@ export function initPlayHudInventory(characterId: string): void {
     const goldEl = document.getElementById('inventoryGold');
     if (goldEl) goldEl.textContent = '—';
 
+    void refreshPlayHudInventory();
+
     onPlayPanelOpen((name) => {
         if (name === 'inventory') {
             void refreshPlayHudInventory();

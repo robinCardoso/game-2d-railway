@@ -73,6 +73,7 @@ export interface CombatAttackContext {
     level: number;
     vocationId: VocationId;
     lastAttackAtMs: number;
+    attackBonus?: number;
 }
 
 export interface CombatAttackOutcome {
@@ -210,7 +211,9 @@ export class RoomCreatureManager {
                 defense: creature.defense,
             },
             attackProfile.attackType,
-            vocationConfig
+            vocationConfig,
+            1.0,
+            { attackerAttackBonus: attacker.attackBonus ?? 0 }
         );
 
         creature.health = Math.max(0, creature.health - result.finalDamage);

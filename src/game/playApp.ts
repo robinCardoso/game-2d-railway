@@ -86,7 +86,13 @@ import { fetchWsTicket, isServerWsTicketEnabled } from '../shared/wsTicketClient
 import { updateCharacterStatsUi } from './ui/characterStatsUi';
 import { updatePlayHudPing, updatePlayHudStatus } from './ui/playHudStatusUi';
 import { initPlayHudInventory } from './ui/playHudInventory';
-import { getPlayRenderOptions } from './ui/playHudSettings';
+import { getPlayDefaultZoom, getPlayRenderOptions } from './ui/playHudSettings';
+import {
+    PLAY_DEFAULT_ZOOM_CHANGED_EVENT,
+    PLAY_ZOOM_SESSION_KEY,
+    PLAY_ZOOM_STEPS,
+    snapPlayZoom,
+} from './playZoom';
 import { getExpProgress, normalizeCharacterProgress } from './experience';
 import { serverStateStore } from '../net/serverStateStore';
 import { shouldCelebrateSessionLevelUp } from './playProgress';
@@ -140,8 +146,6 @@ const player = {
 };
 const camera = { x: 0, y: 0, zoom: 1.0 };
 
-const PLAY_ZOOM_STEPS = [0.75, 1, 1.25, 1.5, 2, 2.5, 3] as const;
-const PLAY_ZOOM_STORAGE_KEY = 'game2d_camera_zoom';
 const keys: Record<string, boolean> = {};
 const gridMovement = createGridMovementController();
 const npcs: GameEntity[] = [];
@@ -1001,13 +1005,11 @@ function updatePlayZoomUi(): void {
 }
 
 function setPlayZoom(nextZoom: number): void {
-    const clamped = PLAY_ZOOM_STEPS.reduce((best, step) =>
-        Math.abs(step - nextZoom) < Math.abs(best - nextZoom) ? step : best
-    );
+    const clamped = snapPlayZoom(nextZoom);
     camera.zoom = clamped;
     updatePlayZoomUi();
     try {
-        localStorage.setItem(PLAY_ZOOM_STORAGE_KEY, String(clamped));
+        localStorage.setItem(PLAY_ZOOM_SESSION_KEY, String(clamped));
     } catch {
         /* ignore */
     }
@@ -1029,12 +1031,14 @@ function stepPlayZoom(delta: 1 | -1): void {
 
 function setupPlayZoomControls(): void {
     try {
-        const saved = localStorage.getItem(PLAY_ZOOM_STORAGE_KEY);
+        const saved = localStorage.getItem(PLAY_ZOOM_SESSION_KEY);
         if (saved) {
             const parsed = parseFloat(saved);
             if (!Number.isNaN(parsed) && parsed > 0) {
                 setPlayZoom(parsed);
             }
+        } else {
+            setPlayZoom(getPlayDefaultZoom());
         }
     } catch {
         /* ignore */
@@ -1043,6 +1047,13 @@ function setupPlayZoomControls(): void {
 
     document.getElementById('playZoomIn')?.addEventListener('click', () => stepPlayZoom(1));
     document.getElementById('playZoomOut')?.addEventListener('click', () => stepPlayZoom(-1));
+
+    window.addEventListener(PLAY_DEFAULT_ZOOM_CHANGED_EVENT, (event) => {
+        const detail = (event as CustomEvent<number>).detail;
+        if (typeof detail === 'number' && detail > 0) {
+            setPlayZoom(detail);
+        }
+    });
 }
 
 function draw(): void {

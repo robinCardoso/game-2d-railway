@@ -17,11 +17,29 @@
       "implemented": true
     },
     {
+      "id": "leather_armor",
+      "name": "Leather Armor",
+      "category": "equipment",
+      "slot": "body",
+      "defenseBonus": 3,
+      "description": "Armadura leve de couro.",
+      "implemented": true
+    },
+    {
       "id": "leather_boots",
       "name": "Leather Boots",
       "category": "equipment",
       "slot": "feet",
       "description": "Botas simples de couro.",
+      "implemented": true
+    },
+    {
+      "id": "warrior_ring",
+      "name": "Warrior Ring",
+      "category": "equipment",
+      "slot": "ring",
+      "attackBonus": 2,
+      "description": "Anel que fortalece o golpe.",
       "implemented": true
     }
   ]

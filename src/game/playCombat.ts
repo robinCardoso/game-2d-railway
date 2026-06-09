@@ -9,6 +9,10 @@ import type { CharacterSpeedState } from '../character/movementSpeed';
 import { applyExperienceGain } from './experience';
 import { beginCreatureDeath } from './creatureDeathLifecycle';
 import { isPlayerInAttackRange, resolvePlayerAttackProfile } from '../../shared/playerAttack';
+import { calculateEquipmentAttackBonus } from '../../shared/equipmentBonuses';
+import { createEmptyEquipment } from '../../shared/inventory';
+import { getItemCatalog } from '../game-data/itemCatalog';
+import { getLastPlayInventory } from './ui/playHudInventory';
 
 const DEFAULT_ATTACK_COOLDOWN_MS = 550;
 
@@ -266,6 +270,11 @@ function isAdjacentToPlayer(
     );
 }
 
+function resolvePlayEquipmentAttackBonus(): number {
+    const equipment = getLastPlayInventory()?.equipment ?? createEmptyEquipment();
+    return calculateEquipmentAttackBonus(equipment, getItemCatalog());
+}
+
 function resolvePredictedMeleeDamage(
     character: CharacterRow,
     characterSpeed: CharacterSpeedState,
@@ -275,7 +284,8 @@ function resolvePredictedMeleeDamage(
     const vocationConfig = getVocationById(vocationId);
     const level = characterSpeed.level || character.level || 1;
     const stats = calculateStatsForLevel(vocationConfig, level);
-    return calculateMeleeDamage(stats.melee, target.combatDefense).actual;
+    const attackBonus = resolvePlayEquipmentAttackBonus();
+    return calculateMeleeDamage(stats.melee + attackBonus, target.combatDefense).actual;
 }
 
 function resolveCombatTarget(npcs: GameEntity[]): GameEntity | null {
