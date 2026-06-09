@@ -1,6 +1,6 @@
 export type SpellGroup = 'attack' | 'healing' | 'support';
 
-export type SpellDamageType = 'magic' | 'melee' | 'healing';
+export type SpellDamageType = 'magic' | 'melee' | 'distance' | 'healing';
 
 export interface SpellDamageConfig {
     type: SpellDamageType;
@@ -71,11 +71,11 @@ export function sanitizeSpellCatalogDocument(raw: unknown): SpellCatalogDocument
             damage:
                 row.damage && typeof row.damage === 'object'
                     ? {
-                          type:
-                              (row.damage as SpellDamageConfig).type === 'melee' ||
-                              (row.damage as SpellDamageConfig).type === 'healing'
-                                  ? (row.damage as SpellDamageConfig).type
-                                  : 'magic',
+                          type: (() => {
+                              const t = (row.damage as SpellDamageConfig).type;
+                              if (t === 'melee' || t === 'healing' || t === 'distance') return t;
+                              return 'magic';
+                          })(),
                           multiplier: Math.max(0, Number((row.damage as SpellDamageConfig).multiplier) || 1),
                           formula:
                               (row.damage as SpellDamageConfig).formula === 'level_magic'

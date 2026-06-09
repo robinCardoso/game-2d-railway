@@ -1,4 +1,4 @@
-import type { SpellBarState } from '../../shared/spellBar.js';
+import type { SpellBarState } from '../../../../shared/spellBar.js';
 import { getPool } from '../pool.js';
 import { getCharacterForAccount } from './characters.repo.js';
 

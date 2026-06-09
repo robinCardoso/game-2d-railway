@@ -7,7 +7,7 @@ import type { SpellDefinition, SpellGroup } from '../game-data/spellCatalogTypes
 import type { VocationId } from '../../shared/types/character';
 import type { CharacterRow } from '../shared/types';
 import type { CharacterSpeedState } from '../character/movementSpeed';
-import { isPlayerInAttackRange, resolvePlayerAttackProfile } from '../../shared/playerAttack';
+import { isPlayerInAttackRange, resolvePlayerAttackProfile, type PlayerAttackProfile, type PlayerAttackType } from '../../shared/playerAttack';
 import { calculateEquipmentAttackBonus } from '../../shared/equipmentBonuses';
 import { createEmptyEquipment } from '../../shared/inventory';
 import { getItemCatalog } from '../game-data/itemCatalog';
@@ -29,10 +29,14 @@ const groupCooldownUntil: Partial<Record<SpellGroup, number>> = {};
 const slotCooldownUntil: Partial<Record<SpellBarSlot, number>> = {};
 const slotCooldownDuration: Partial<Record<SpellBarSlot, number>> = {};
 
+const SPELL_BAR_SLOTS: SpellBarSlot[] = [1, 2, 3];
+
 export function resetPlaySpellCooldowns(): void {
     for (const key of Object.keys(groupCooldownUntil)) delete groupCooldownUntil[key as SpellGroup];
-    for (const key of Object.keys(slotCooldownUntil)) delete slotCooldownUntil[key as SpellBarSlot];
-    for (const key of Object.keys(slotCooldownDuration)) delete slotCooldownDuration[key as SpellBarSlot];
+    for (const slot of SPELL_BAR_SLOTS) {
+        delete slotCooldownUntil[slot];
+        delete slotCooldownDuration[slot];
+    }
 }
 
 export function getSpellSlotCooldownProgress(
@@ -86,9 +90,9 @@ function resolveSpellDamage(
     return 0;
 }
 
-function spellRangeProfile(spell: SpellDefinition, vocationId: VocationId) {
+function spellRangeProfile(spell: SpellDefinition, vocationId: VocationId): PlayerAttackProfile {
     const profile = resolvePlayerAttackProfile(vocationId, getVocationById(vocationId));
-    const attackType =
+    const attackType: PlayerAttackType =
         spell.damage?.type === 'melee'
             ? 'melee'
             : spell.damage?.type === 'distance'
@@ -119,7 +123,7 @@ export function tryCastSpellFromSlot(
 ): boolean {
     const spell = getSpellForSlot(slot);
     if (!spell) {
-        toast('Slot vazio — equipe uma magia no painel Personagem.');
+        toast.info('Slot vazio — equipe uma magia no painel Personagem.');
         return false;
     }
 
@@ -128,19 +132,19 @@ export function tryCastSpellFromSlot(
 
     const blockReason = canUseSpell(spell, options.character, options.characterSpeed, options.nowMs);
     if (blockReason) {
-        toast(blockReason);
+        toast.info(blockReason);
         return false;
     }
 
     if (options.playerMana.current < spell.manaCost) {
-        toast('Mana insuficiente.');
+        toast.info('Mana insuficiente.');
         return false;
     }
 
     const combatTarget = getPlayCombatTarget();
     if (spell.requiresTarget) {
         if (!combatTarget || combatTarget.type !== 'monster') {
-            toast('Selecione um monstro como alvo.');
+            toast.info('Selecione um monstro como alvo.');
             return false;
         }
     }
@@ -149,7 +153,7 @@ export function tryCastSpellFromSlot(
         ? resolveMonsterTarget(options.npcs, combatTarget.id)
         : null;
     if (spell.requiresTarget && !target) {
-        toast('Alvo inválido.');
+        toast.info('Alvo inválido.');
         return false;
     }
 
@@ -167,7 +171,7 @@ export function tryCastSpellFromSlot(
                 spellRangeProfile(spell, vocationId)
             )
         ) {
-            toast('Alvo fora de alcance.');
+            toast.info('Alvo fora de alcance.');
             return false;
         }
     }

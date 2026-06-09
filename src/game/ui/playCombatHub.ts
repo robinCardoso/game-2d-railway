@@ -78,11 +78,11 @@ export function initPlayCombatHub(): void {
             if (!bridge) return;
             const spell = getSpellForSlot(slot);
             if (!spell) {
-                toast('Equipe uma magia no painel Personagem.');
+                toast.info('Equipe uma magia no painel Personagem.');
                 return;
             }
             if (!spell.implemented) {
-                toast('Magias — sistema em desenvolvimento.');
+                toast.info('Magias — sistema em desenvolvimento.');
                 return;
             }
             const cd = getSpellSlotCooldownProgress(slot, bridge.nowMs());

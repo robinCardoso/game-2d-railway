@@ -20,7 +20,7 @@ import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
 import { MONSTER_RESPAWN_MS } from '../../../shared/creatureDeath.js';
 import type { VocationId } from '../../../shared/types/character.js';
 import { processAttack } from '../combat/combat.js';
-import { validateAndResolveSpellCast } from '../combat/spellCast.js';
+import { validateAndResolveSpellCast, type SpellCastAttacker } from '../combat/spellCast.js';
 import { isPlayerInAttackRange, resolvePlayerAttackProfile } from '../../../shared/playerAttack.js';
 import type { SpellDefinition } from '../../../src/game-data/spellCatalogTypes.js';
 import type { VocationConfig } from '../../../src/engine/character/calculateStats.js';
@@ -266,18 +266,7 @@ export class RoomCreatureManager {
     processSpellCast(
         room: string,
         spell: SpellDefinition,
-        attacker: {
-            playerId: string;
-            tileX: number;
-            tileY: number;
-            z: number;
-            level: number;
-            vocationId: VocationId;
-            mana: number;
-            spellCooldownUntil: Record<string, number>;
-            groupCooldownUntil: Record<string, number>;
-            equippedSpellIds: string[];
-        },
+        attacker: SpellCastAttacker,
         creatureId: string,
         nowMs: number,
         vocationConfig: VocationConfig | undefined

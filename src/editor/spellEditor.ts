@@ -254,7 +254,7 @@ function defaultSpellForVocation(vocationId: string): SpellDefinition {
 
 function startNewSpell(): void {
     if (filterVocation === 'all') {
-        toast('Selecione uma vocação no filtro acima antes de criar a magia.');
+        toast.info('Selecione uma vocação no filtro acima antes de criar a magia.');
         const select = getFormEl<HTMLSelectElement>('spellVocationFilter');
         select?.focus();
         return;
@@ -277,11 +277,11 @@ async function reloadSpells(): Promise<void> {
 async function saveCatalog(): Promise<void> {
     const entry = readForm();
     if (!entry) {
-        toast('ID e nome são obrigatórios.');
+        toast.error('ID e nome são obrigatórios.');
         return;
     }
     if (!/^[a-z0-9_]+$/.test(entry.id)) {
-        toast('ID inválido — use apenas a-z, 0-9 e underscore.');
+        toast.error('ID inválido — use apenas a-z, 0-9 e underscore.');
         return;
     }
     const idx = spells.findIndex((s) => s.id === entry.id);
@@ -297,7 +297,7 @@ async function saveCatalog(): Promise<void> {
     if (!res.ok) throw new Error('Falha ao salvar catálogo.');
     applySpellCatalogDocument({ spells });
     renderSpellList();
-    toast('Catálogo de magias salvo.');
+    toast.success('Catálogo de magias salvo.');
 }
 
 export function refreshSpellEditorPanel(): void {
@@ -321,12 +321,12 @@ export function initSpellEditor(): void {
 
     getFormEl<HTMLButtonElement>('spellNewBtn')?.addEventListener('click', startNewSpell);
     getFormEl<HTMLButtonElement>('spellSaveBtn')?.addEventListener('click', () => {
-        void saveCatalog().catch((err) => toast(String(err)));
+        void saveCatalog().catch((err) => toast.error(String(err)));
     });
 
     getFormEl<HTMLButtonElement>('spellAddVocationBtn')?.addEventListener('click', () => {
         if (filterVocation === 'all') {
-            toast('Selecione uma vocação no filtro para adicionar ao compartilhamento.');
+            toast.info('Selecione uma vocação no filtro para adicionar ao compartilhamento.');
             return;
         }
         const chip = getFormEl<HTMLDivElement>('spellVocationChips')?.querySelector<HTMLButtonElement>(
@@ -334,7 +334,7 @@ export function initSpellEditor(): void {
         );
         chip?.classList.add('is-on');
         updateSharedHint();
-        toast(`${vocationLabel(filterVocation)} adicionada à magia.`);
+        toast.success(`${vocationLabel(filterVocation)} adicionada à magia.`);
     });
 
     const uploadBtn = getFormEl<HTMLButtonElement>('spellUploadIconBtn');
@@ -344,7 +344,7 @@ export function initSpellEditor(): void {
         const file = fileInput.files?.[0];
         const spellId = getFormEl<HTMLInputElement>('spellIdInput')?.value.trim();
         if (!file || !spellId) {
-            toast('Defina o ID da magia antes do upload.');
+            toast.error('Defina o ID da magia antes do upload.');
             return;
         }
         const reader = new FileReader();
@@ -362,9 +362,9 @@ export function initSpellEditor(): void {
                         const iconEl = getFormEl<HTMLInputElement>('spellIconInput');
                         if (iconEl) iconEl.value = body.iconUrl;
                     }
-                    toast('Ícone salvo.');
+                    toast.success('Ícone salvo.');
                 })
-                .catch((err) => toast(String(err)));
+                .catch((err) => toast.error(String(err)));
         };
         reader.readAsDataURL(file);
         fileInput.value = '';

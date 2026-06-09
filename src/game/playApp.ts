@@ -123,7 +123,6 @@ import {
     loadPlayLearnedSpellsFromServer,
 } from './playLearnedSpells';
 import {
-    initPlayCombatHub,
     setPlayCombatHubBridge,
     tickPlayCombatHub,
     refreshPlayCombatHubSpells,
@@ -150,8 +149,8 @@ import { ResyncController } from '../net/resyncController';
 import type { ClientDiagnosticsController } from './debug/clientDiagnostics';
 import { createClientDiagnostics } from './debug/clientDiagnostics';
 import { createLocalPlayerFloatingText } from './localPlayerFloatingText';
-import { toast } from '../utils/popup';
 import { getSpriteTilePlacement } from '../character/spriteDraw';
+import type { PlayMinimapEntity } from './ui/playHudMinimap';
 
 const TILE_SIZE_SCREEN = ENGINE_CONFIG.TILE_SIZE;
 let TILE_TYPES = buildTileRegistry();
@@ -626,7 +625,7 @@ function tryPlaySpellSlot(slot: SpellBarSlot): void {
 function tryPlayBasicAttack(): void {
     if (!activeCharacter) return;
     if (!getPlayCombatTarget()) {
-        toast('Selecione um alvo (clique direito no monstro).');
+        toast.info('Selecione um alvo (clique direito no monstro).');
         return;
     }
     const nowMs = performance.now();
@@ -641,7 +640,7 @@ function tryPlayBasicAttack(): void {
         remotes: getRemoteTargetables(),
     });
     if (!ok && getPlayCombatTarget()) {
-        toast('Aguarde o cooldown ou aproxime-se do alvo.');
+        toast.info('Aguarde o cooldown ou aproxime-se do alvo.');
     }
 }
 
@@ -1787,7 +1786,7 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
         spawn,
     });
     setPlayMinimapFrameProvider(() => {
-        const entities = getPlayEntities().flatMap((entity) => {
+        const entities: PlayMinimapEntity[] = getPlayEntities().flatMap((entity) => {
             if (entity.type !== 'monster' && entity.type !== 'npc') return [];
             const foot = entity.getFootTile(TILE_SIZE_SCREEN);
             return [

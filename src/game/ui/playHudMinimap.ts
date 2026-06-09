@@ -1,5 +1,5 @@
 import type { WorldMap } from '../../engine';
-import type { LayerMap } from '../../engine/types';
+import type { LayerMap } from '../../engine/mapPaintLayers';
 
 /** Resolução interna alta — exibido menor via CSS para borda circular mais suave. */
 const MINIMAP_CANVAS_SIZE = 192;

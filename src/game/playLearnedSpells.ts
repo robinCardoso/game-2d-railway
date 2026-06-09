@@ -1,6 +1,7 @@
 import { fetchCharacterLearnedSpells } from './characterSpellsApi';
 import { computeEligibleSpellIds } from '../../shared/characterSpells';
-import { getSpellCatalogEntries } from '../../game-data/spellCatalog';
+import { getSpellCatalogEntries } from '../game-data/spellCatalog';
+import type { SpellCatalogDocument } from '../game-data/spellCatalogTypes';
 
 let learnedSpellIds: string[] = [];
 let fallbackVocation: string | undefined;
@@ -36,7 +37,7 @@ export function refreshPlayLearnedSpellsFallback(level: number, vocation?: strin
 }
 
 function applyLocalEligibleFallback(vocation?: string, level = 1): void {
-    const catalog = { spells: getSpellCatalogEntries() };
+    const catalog: SpellCatalogDocument = { spells: [...getSpellCatalogEntries()] };
     learnedSpellIds = computeEligibleSpellIds(catalog, vocation || 'knight', level);
 }
 
