@@ -351,6 +351,19 @@ export class GameNetClient {
     }
 
     /** Chamar após movimento ou troca de mapa no loop do jogo. */
+    /**
+     * Reenvia o tile atual após `MOVEMENT_TOO_FAST` (servidor não manda `position_correction`).
+     */
+    forceResyncPosition(): void {
+        if (!this.isConnected()) return;
+        this.lastSynced = {
+            ...this.lastSynced,
+            tileX: -1,
+            tileY: -1,
+            z: -999,
+        };
+    }
+
     syncPositionIfChanged(): void {
         if (!this.isConnected()) return;
 
@@ -645,6 +658,9 @@ export class GameNetClient {
                 break;
             case 'error':
                 console.warn(`[GameNet] ${msg.code}: ${msg.message}`);
+                if (msg.code === 'MOVEMENT_TOO_FAST') {
+                    this.forceResyncPosition();
+                }
                 this.options.onServerError?.({
                     code: msg.code,
                     message: msg.message,

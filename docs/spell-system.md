@@ -9,7 +9,8 @@ Arquitetura inspirada no Tibia 8.6: **catálogo editável** (metadados) separado
 | `public/spell_catalog.json` | Fonte de verdade das magias |
 | `src/game-data/spellCatalogTypes.ts` | Schema + sanitização |
 | `src/game-data/spellCatalog.ts` | Loader no client |
-| `tiles/effects/spells/icons/{id}.png` | Ícones 32×32 (fora do tile registry) |
+| `tiles/effects/spells/icons/{id}.png` | Ícones 32×32 da hotbar (fora do tile registry) |
+| `scripts/generate-spell-icon-sprites.mjs` | Placeholders + atualiza `icon` no catálogo |
 
 ## Play
 
@@ -51,6 +52,20 @@ Implementação: `shared/protocol.ts`, `gameNetClient.sendCastSpell`, `GameRoom.
 - Painel flyout **Magias** (`data-panel="spells"`)
 - `src/editor/spellEditor.ts`
 - APIs: `GET /api/get-spell-catalog`, `POST /api/save-spell-catalog`, `POST /api/save-spell-icon`
+
+### Ícones da hotbar (PNG)
+
+| Ação | Resultado |
+|------|-----------|
+| **Upload no Studio** | `POST /api/save-spell-icon` grava `tiles/effects/spells/icons/{spellId}.png` no volume (`DATA_ROOT`) e atualiza `icon` no catálogo |
+| **Versionar no git** | Commit dos PNG em `tiles/effects/spells/icons/` — o deploy Railway faz seed de `tiles/effects/**` para o volume |
+| **Placeholders locais** | `npm run generate:spell-icons` — gera PNG 32×32 por entrada do catálogo e define `icon: "/tiles/effects/spells/icons/{id}.png"` |
+
+Campo `icon` no JSON: sempre URL absoluta servida pelo Express, ex. `/tiles/effects/spells/icons/knight_brutal_strike.png`.
+
+**Produção:** catálogo editado no Studio fica no volume; ícones só aparecem se o PNG existir no volume (upload) ou vier do repo no deploy. Após criar magia nova, faça upload do ícone ou rode `generate:spell-icons` + commit + redeploy.
+
+SVGs em `public/ui/play-hud/combat/` são fallback legado (`slot_empty.svg`); magias novas devem usar PNG.
 
 ## VFX de conjuração (`castEffect`)
 

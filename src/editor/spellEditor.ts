@@ -2,6 +2,7 @@ import './spellEditor.css';
 import { applySpellCatalogDocument, loadSpellCatalog } from '../game-data/spellCatalog';
 import type { SpellDefinition, SpellGroup } from '../game-data/spellCatalogTypes';
 import type { SpellDamageType } from '../game-data/spellCatalogTypes';
+import { resolveSpellIconPath, spellIconPngPath } from '../game-data/spellCatalogTypes';
 import { apiFetch } from '../shared/apiFetch';
 import { toast } from '../utils/popup';
 
@@ -129,7 +130,10 @@ function readForm(): SpellDefinition | null {
         description: getFormEl<HTMLTextAreaElement>('spellDescInput')?.value ?? '',
         words: undefined,
         group,
-        icon: getFormEl<HTMLInputElement>('spellIconInput')?.value || '/ui/play-hud/combat/slot_empty.svg',
+        icon: resolveSpellIconPath(
+            id,
+            getFormEl<HTMLInputElement>('spellIconInput')?.value
+        ),
         manaCost: Math.max(0, Number(getFormEl<HTMLInputElement>('spellManaInput')?.value) || 0),
         cooldownMs: Math.max(0, Number(getFormEl<HTMLInputElement>('spellCdInput')?.value) || 1000),
         groupCooldownMs: Math.max(
@@ -239,7 +243,7 @@ function defaultSpellForVocation(vocationId: string): SpellDefinition {
         name: '',
         description: '',
         group: 'attack',
-        icon: '/ui/play-hud/combat/slot_empty.svg',
+        icon: spellIconPngPath(`${vocationId}_nova_magia`),
         manaCost: vocationId === 'knight' ? 8 : 15,
         cooldownMs: 2000,
         groupCooldownMs: 2000,
