@@ -1,5 +1,6 @@
 import type { ItemCatalogDocument } from '../src/game-data/itemCatalogTypes.js';
-import { BACKPACK_SLOT_COUNT, type CharacterInventoryDocument } from './inventory.js';
+import { type CharacterInventoryDocument } from './inventory.js';
+import { cloneBags, findSequentialSlot } from './inventoryBags.js';
 import type { LootGrant } from './mobLoot.js';
 
 export interface AutolootApplyResult {
@@ -16,22 +17,13 @@ function isGrantableItem(
     return Boolean(entry && entry.implemented !== false);
 }
 
-function findBackpackRow(
-    backpack: CharacterInventoryDocument['backpack'],
-    itemId: string
-): number {
-    return backpack.findIndex((row) => row.itemId === itemId);
-}
-
-function nextFreeSlotIndex(backpack: CharacterInventoryDocument['backpack']): number | null {
-    const used = new Set(backpack.map((row) => row.slotIndex));
-    for (let i = 0; i < BACKPACK_SLOT_COUNT; i++) {
-        if (!used.has(i)) return i;
+function sortBags(bags: CharacterInventoryDocument['bags']): void {
+    for (const bag of bags) {
+        bag.sort((a, b) => a.slotIndex - b.slotIndex);
     }
-    return null;
 }
 
-/** Adiciona loot à mochila (stack por itemId; equipamento não auto-equipa). */
+/** Adiciona loot nas bolsas liberadas (stack + slot novo, ordem 1→N). */
 export function applyAutolootGrants(
     inventory: CharacterInventoryDocument,
     grants: LootGrant[],
@@ -39,7 +31,8 @@ export function applyAutolootGrants(
 ): AutolootApplyResult {
     const next: CharacterInventoryDocument = {
         equipment: { ...inventory.equipment },
-        backpack: inventory.backpack.map((row) => ({ ...row })),
+        bags: cloneBags(inventory.bags),
+        unlockedBagSlots: inventory.unlockedBagSlots,
     };
 
     const granted: LootGrant[] = [];
@@ -52,27 +45,32 @@ export function applyAutolootGrants(
 
         let remaining = quantity;
 
-        const existingIndex = findBackpackRow(next.backpack, itemId);
-        if (existingIndex >= 0) {
-            next.backpack[existingIndex].quantity += remaining;
-            granted.push({ itemId, quantity: remaining });
-            remaining = 0;
-        }
-
         while (remaining > 0) {
-            const slotIndex = nextFreeSlotIndex(next.backpack);
-            if (slotIndex === null) {
+            const target = findSequentialSlot(next.bags, itemId, next.unlockedBagSlots);
+            if (!target) {
                 overflow.push({ itemId, quantity: remaining });
                 break;
             }
-            const stackQty = remaining;
-            next.backpack.push({ slotIndex, itemId, quantity: stackQty });
-            granted.push({ itemId, quantity: stackQty });
-            remaining = 0;
+
+            if (target.kind === 'stack') {
+                const bag = next.bags[target.bagIndex];
+                bag[target.rowIndex].quantity += remaining;
+                granted.push({ itemId, quantity: remaining });
+                remaining = 0;
+            } else {
+                const stackQty = remaining;
+                next.bags[target.bagIndex].push({
+                    slotIndex: target.slotIndex,
+                    itemId,
+                    quantity: stackQty,
+                });
+                granted.push({ itemId, quantity: stackQty });
+                remaining = 0;
+            }
         }
     }
 
-    next.backpack.sort((a, b) => a.slotIndex - b.slotIndex);
+    sortBags(next.bags);
 
     return { inventory: next, granted, overflow };
 }

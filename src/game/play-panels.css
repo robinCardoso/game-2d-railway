@@ -149,6 +149,11 @@
         width: min(860px, calc(100vw - 44px));
         max-height: min(640px, calc(100dvh - 110px));
     }
+
+    .play-panel--inventory {
+        width: min(780px, calc(100vw - 44px));
+        max-height: min(640px, calc(100dvh - 110px));
+    }
 }
 
 @media (max-width: 768px) {

@@ -8,7 +8,7 @@ Quando um mob morre, **cada jogador elegível** recebe:
 
 - **XP cheio** (`scaleMobKillXpReward`) — não divide entre o grupo
 - **Roll independente** da tabela `loot` do preset (`rollMobLoot` por jogador)
-- **Autoloot** direto na mochila (`grantMobAutoloot`)
+- **Autoloot** direto nas bolsas liberadas (`grantMobAutoloot`) — preenchimento sequencial 1→2→3 (até 5 quando desbloqueadas)
 
 O `killerPlayerId` em `creature_died` permanece **apenas para UI** (float de XP no cliente).
 
@@ -49,7 +49,8 @@ Arquivos:
 | [`server/src/game/grantAutoloot.ts`](../server/src/game/grantAutoloot.ts) | Roll + persistência PG |
 | [`server/src/gameRoom/handlers/creatureKillRewards.ts`](../server/src/gameRoom/handlers/creatureKillRewards.ts) | Orquestra XP + loot por elegível |
 | [`shared/mobLoot.ts`](../shared/mobLoot.ts) | `rollMobLoot` |
-| [`shared/inventoryAutoloot.ts`](../shared/inventoryAutoloot.ts) | Empilha na mochila |
+| [`shared/inventoryAutoloot.ts`](../shared/inventoryAutoloot.ts) | Empilha nas bolsas liberadas (sequencial) |
+| [`shared/inventoryBags.ts`](../shared/inventoryBags.ts) | Helpers 5 bolsas × 50 slots, `unlockedBagSlots` |
 
 ## Catálogo e presets
 
@@ -61,11 +62,17 @@ Arquivos:
 
 - Random de loot **só no servidor** — nunca no `draw()` do cliente
 - `implemented: false` bloqueia drop (validação em `applyAutolootGrants`)
+- **5 bolsas** independentes (`bags[0..4]`), **50 slots** cada; padrão **3 liberadas** (`unlockedBagSlots: 3`); bolsas 4–5 bloqueadas até compra futura
+- Autoloot enche bolsa 1, depois 2, depois 3 (só nas liberadas); overflow se todas cheias
 - Dev sem PostgreSQL: inventário em memória (`devInventoryStore.ts`) por `characterId`
 - **Railway `DATA_ROOT`:** volume pode ter `item_catalog.json` antigo/vazio — boot mescla do repo (`catalogVolumeSync.ts`); servidor e `/item_catalog.json` fazem fallback se ainda vazio
+- **Equip manual:** autoloot só enche bolsas; Play HUD → abas **1–5** → clique no item → Equipar/Desequipar → `PUT /inventory` + WS `inventory_updated` (8 slots equipamento; equipar de qualquer bolsa liberada)
+- **PUT inventário:** cliente não pode aumentar `unlockedBagSlots` — validado contra `characters.unlocked_bag_slots` (migration `008_character_unlocked_bags.sql`)
 
 ## Backlog
 
+- Loja / API `unlock-bag` para bolsas 4–5 (monetização; flag `unlocked_bag_slots` já persistida)
+- Mover item manualmente entre bolsas
 - Corpse no chão / pickup manual (estilo Tibia clássico)
 - Party UI + modos de loot (leader / round-robin)
 - Política B de escala de chance em grupo

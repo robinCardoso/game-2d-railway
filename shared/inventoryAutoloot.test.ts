@@ -27,9 +27,9 @@ const catalog: ItemCatalogDocument = {
 };
 
 describe('applyAutolootGrants', () => {
-    it('empilha item existente na mochila', () => {
+    it('empilha item existente na bolsa 1', () => {
         const base = createEmptyInventory();
-        base.backpack = [{ slotIndex: 0, itemId: 'gold_coin', quantity: 3 }];
+        base.bags[0] = [{ slotIndex: 0, itemId: 'gold_coin', quantity: 3 }];
 
         const result = applyAutolootGrants(
             base,
@@ -38,7 +38,7 @@ describe('applyAutolootGrants', () => {
         );
 
         expect(result.granted).toEqual([{ itemId: 'gold_coin', quantity: 12 }]);
-        expect(result.inventory.backpack).toEqual([
+        expect(result.inventory.bags[0]).toEqual([
             { slotIndex: 0, itemId: 'gold_coin', quantity: 15 },
         ]);
     });
@@ -50,7 +50,7 @@ describe('applyAutolootGrants', () => {
             catalog
         );
 
-        expect(result.inventory.backpack).toEqual([
+        expect(result.inventory.bags[0]).toEqual([
             { slotIndex: 0, itemId: 'health_potion', quantity: 1 },
         ]);
     });
@@ -63,13 +63,33 @@ describe('applyAutolootGrants', () => {
         );
 
         expect(result.granted).toEqual([]);
-        expect(result.inventory.backpack).toEqual([]);
+        expect(result.inventory.bags[0]).toEqual([]);
     });
 
-    it('reporta overflow quando mochila está cheia', () => {
+    it('enche bolsa 2 quando bolsa 1 está cheia', () => {
         const base = createEmptyInventory();
         for (let i = 0; i < BACKPACK_SLOT_COUNT; i++) {
-            base.backpack.push({ slotIndex: i, itemId: `item_${i}`, quantity: 1 });
+            base.bags[0].push({ slotIndex: i, itemId: `item_${i}`, quantity: 1 });
+        }
+
+        const result = applyAutolootGrants(
+            base,
+            [{ itemId: 'gold_coin', quantity: 4 }],
+            catalog
+        );
+
+        expect(result.granted).toEqual([{ itemId: 'gold_coin', quantity: 4 }]);
+        expect(result.inventory.bags[1]).toEqual([
+            { slotIndex: 0, itemId: 'gold_coin', quantity: 4 },
+        ]);
+    });
+
+    it('reporta overflow quando bolsas liberadas estão cheias', () => {
+        const base = createEmptyInventory();
+        for (let bag = 0; bag < 3; bag++) {
+            for (let i = 0; i < BACKPACK_SLOT_COUNT; i++) {
+                base.bags[bag].push({ slotIndex: i, itemId: `item_${bag}_${i}`, quantity: 1 });
+            }
         }
 
         const result = applyAutolootGrants(

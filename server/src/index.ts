@@ -43,7 +43,7 @@ const room = new GameRoom(collision, instances, {
     vocations,
 });
 
-const app = createApp(() => room.getStats().online, collision);
+const app = createApp(() => room.getStats().online, collision, () => room);
 const httpServer = createServer(app);
 
 const wss = new WebSocketServer({ server: httpServer });

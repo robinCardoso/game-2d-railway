@@ -108,12 +108,28 @@
       }
     },
     {
+      "id": "iron_sword",
+      "name": "Iron Sword",
+      "category": "equipment",
+      "slot": "weapon",
+      "attackBonus": 3,
+      "description": "Espada de ferro básica.",
+      "implemented": true,
+      "sprite": {
+        "iconUrl": "tiles/items/icons/iron_sword.png",
+        "frameWidth": 32,
+        "frameHeight": 32,
+        "gridCols": 1,
+        "gridRows": 1
+      }
+    },
+    {
       "id": "wooden_shield",
       "name": "Wooden Shield",
       "category": "equipment",
-      "slot": "body",
+      "slot": "shield",
       "defenseBonus": 1,
-      "description": "Escudo de madeira (slot body para teste de defesa).",
+      "description": "Escudo de madeira.",
       "implemented": true,
       "sprite": {
         "iconUrl": "tiles/items/icons/wooden_shield.png",
