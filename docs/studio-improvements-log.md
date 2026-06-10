@@ -6,6 +6,20 @@ Documento de referência para humanos e agentes IA. **Atualizar este arquivo** q
 
 ---
 
+## Studio editor-only (estilo RME) — 2026-06-10
+
+| Área | Antes | Depois |
+|------|-------|--------|
+| Navegação Studio | WASD movia avatar oculto + `PlayerMovement` | `editorCamera.ts` — pan (espaço/meio/WASD/setas), sem jogador |
+| Mobs no Studio | `NpcAI` + `respawnEntities` + sprites animados | Marcadores estáticos na aba Spawns |
+| Combate / teste | Menu Teste (buffs), atalhos attack/sit/dead | Removido — testar em `play.html` via **Testar no Play** |
+| Produção | `studio.html` + APIs write expostas | Studio local (`npm run dev`); prod: `STUDIO_ENABLED=false`, sem bundle `studio.html` |
+| Validação mapa | Simulação parcial no Studio | `play.html?mapId=` (dev) com spawn do JSON do mapa |
+
+**Anti-regressão:** `isEditorOnly()` → `update()` não chama `NpcAI` / `PlayerMovement`; `respawnEntities()` no-op no Studio.
+
+---
+
 ## Resumo executivo
 
 | Área | Problema que existia | Solução implementada |

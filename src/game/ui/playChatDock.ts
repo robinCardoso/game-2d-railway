@@ -1,7 +1,6 @@
 import type { ChatChannel, ChatPlayerChannel } from '../../../shared/chatConfig';
 import { CHAT_MAX_TEXT_LENGTH, CHAT_PLAYER_CHANNELS } from '../../../shared/chatConfig';
 import {
-    appendChatMessage,
     getActiveChatChannel,
     getChatMessages,
     getChatUnreadCount,
@@ -303,35 +302,3 @@ export function initPlayChatDock(): void {
     refreshUi();
 }
 
-/** Mensagens de demonstração até integrações reais (loot/combate). */
-export function seedPlayChatMockMessages(): void {
-    if (getChatMessages('loot').length > 0) return;
-
-    appendChatMessage({
-        channel: 'loot',
-        kind: 'combat',
-        text: 'Você causou 24 de dano em Magoo Bruto.',
-        sentAtMs: Date.now() - 4_000,
-        html: '<span class="play-chat-line play-chat-line--combat">Você causou <strong class="play-chat-dmg">24</strong> de dano em Magoo Bruto.</span>',
-    });
-    appendChatMessage({
-        channel: 'loot',
-        kind: 'combat',
-        text: 'Você recebeu 12 de experiência.',
-        sentAtMs: Date.now() - 3_000,
-        html: '<span class="play-chat-line play-chat-line--combat">Você recebeu <strong class="play-chat-xp">12</strong> de experiência.</span>',
-    });
-    appendChatMessage({
-        channel: 'loot',
-        kind: 'loot',
-        text: 'Você pegou 9 moedas de ouro.',
-        sentAtMs: Date.now() - 2_000,
-        html: '<span class="play-chat-line play-chat-line--loot">Você pegou <strong class="play-chat-gold">9</strong> moedas de ouro.</span>',
-    });
-    appendChatMessage({
-        channel: 'system',
-        kind: 'system',
-        text: 'Bem-vindo ao Elarion Online.',
-        sentAtMs: Date.now() - 1_000,
-    });
-}

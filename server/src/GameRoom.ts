@@ -304,6 +304,8 @@ export class GameRoom {
     private spellHandlerContext(): SpellHandlerContext {
         return {
             getPlayerBySocket: (socket) => this.getPlayerBySocket(socket),
+            getPlayerById: (playerId) => this.players.get(playerId),
+            getPlayersInRoom: (room) => this.connectedPlayersInRoom(room),
             roomKey: (player) => this.roomKey(player),
             send: (socket, message) => this.send(socket, message),
             broadcastToRoom: (room, message) => this.broadcastToRoom(room, message),
@@ -346,10 +348,19 @@ export class GameRoom {
         };
     }
 
+    private connectedPlayersInRoom(room: string): ConnectedPlayer[] {
+        const list: ConnectedPlayer[] = [];
+        for (const p of this.players.values()) {
+            if (this.roomKey(p) === room) list.push(p);
+        }
+        return list;
+    }
+
     private attackHandlerContext(): AttackHandlerContext {
         return {
             getPlayerBySocket: (socket) => this.getPlayerBySocket(socket),
             getPlayerById: (playerId) => this.players.get(playerId),
+            getPlayersInRoom: (room) => this.connectedPlayersInRoom(room),
             roomKey: (player) => this.roomKey(player),
             send: (socket, message) => this.send(socket, message),
             broadcastToRoom: (room, message) => this.broadcastToRoom(room, message),

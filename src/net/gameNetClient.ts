@@ -9,6 +9,7 @@ import type {
 } from '../../shared/protocol';
 import { PROTOCOL_VERSION } from '../../shared/protocol';
 import { applyPlayerSnapshotList } from '../../shared/snapshotSync';
+import type { TilePos } from '../../shared/tileWalkable';
 import { sameRoom } from '../../shared/roomKey';
 import { getMapEntry } from '../engine/mapRegistry';
 import { recordPlayWsMessage } from '../game/debug/playPerformanceMonitor';
@@ -48,6 +49,14 @@ export interface GameNetClientOptions {
     onServerInstanceId?: (instanceId: string | undefined) => void;
     /** Deslize em andamento — adia sync só de direção (tile ainda não mudou). */
     isMovementStepping?: () => boolean;
+    /** Tile autoritativo conhecido (predição) — valida passos antes de enviar `move`. */
+    getServerAuthoritativeTile?: () => TilePos;
+    /** Valida passo adjacente antes de enviar (terreno + criaturas no cliente). */
+    validateOutgoingMove?: (from: TilePos, to: TilePos) => boolean;
+    /** Reserva de deslize (`steppingDest`) — destino bloqueado não envia ao servidor. */
+    validateSteppingDest?: (tileX: number, tileY: number, z: number) => boolean;
+    /** Passo rejeitado sem `position_correction` — cliente faz rollback suave. */
+    onMovementRejected?: (code: string) => void;
     /** Servidor corrigiu posição após movimento inválido. */
     onPositionCorrection?: (pos: {
         mapId: string;
@@ -147,6 +156,10 @@ export interface GameNetClientOptions {
         maxMana?: number;
     }) => void;
     onServerError?: (payload: { code: string; message: string; retryAfterMs?: number }) => void;
+    onInventoryUpdated?: (payload: {
+        playerId: string;
+        inventory: import('../../shared/inventory').CharacterInventoryDocument;
+    }) => void;
     onChatMessage?: (msg: ChatBroadcastMessage) => void;
     /** Após `welcome` — sincronizar XP local com o servidor (dev/mock). */
     onWelcome?: (payload: { health: number; maxHealth: number; rateExp?: number }) => void;
@@ -387,6 +400,8 @@ export class GameNetClient {
         const steppingDestChanged =
             last.steppingDestTileX !== steppingDestTileX ||
             last.steppingDestTileY !== steppingDestTileY;
+        const mapChanged =
+            last.mapId !== '' && (last.mapId !== mapId || last.instanceId !== instanceId);
 
         if (
             last.mapId === mapId &&
@@ -407,7 +422,38 @@ export class GameNetClient {
             return;
         }
 
-        const mapChanged = last.mapId !== '' && (last.mapId !== mapId || last.instanceId !== instanceId);
+        const validateMove = this.options.validateOutgoingMove;
+        if (tileChanged && !mapChanged && validateMove) {
+            const to: TilePos = { tileX, tileY, z };
+            if (last.tileX >= 0 && last.mapId === mapId) {
+                const fromLast: TilePos = {
+                    tileX: last.tileX,
+                    tileY: last.tileY,
+                    z: last.z,
+                };
+                if (!validateMove(fromLast, to)) {
+                    return;
+                }
+            }
+            const serverTile = this.options.getServerAuthoritativeTile?.();
+            if (serverTile && !validateMove(serverTile, to)) {
+                return;
+            }
+        }
+
+        const isSteppingReserve =
+            steppingDestTileX !== undefined &&
+            steppingDestTileY !== undefined &&
+            tileX === last.tileX &&
+            tileY === last.tileY &&
+            z === last.z;
+        const validateDest = this.options.validateSteppingDest;
+        if (isSteppingReserve && validateDest) {
+            if (!validateDest(steppingDestTileX, steppingDestTileY, z)) {
+                return;
+            }
+        }
+
         if (mapChanged && !getMapEntry(mapId)?.instanced) {
             this.networkInstanceId = undefined;
         }
@@ -658,8 +704,20 @@ export class GameNetClient {
                 break;
             case 'error':
                 console.warn(`[GameNet] ${msg.code}: ${msg.message}`);
-                if (msg.code === 'MOVEMENT_TOO_FAST') {
+                if (
+                    msg.code === 'MOVEMENT_TOO_FAST' ||
+                    msg.code === 'INVALID_STEP' ||
+                    msg.code === 'NOT_WALKABLE' ||
+                    msg.code === 'INVALID_TILE'
+                ) {
                     this.forceResyncPosition();
+                }
+                if (
+                    msg.code === 'INVALID_STEP' ||
+                    msg.code === 'NOT_WALKABLE' ||
+                    msg.code === 'INVALID_TILE'
+                ) {
+                    this.options.onMovementRejected?.(msg.code);
                 }
                 this.options.onServerError?.({
                     code: msg.code,
@@ -773,6 +831,14 @@ export class GameNetClient {
                 });
                 break;
             }
+            case 'inventory_updated':
+                if (msg.playerId === this.localPlayerId) {
+                    this.options.onInventoryUpdated?.({
+                        playerId: msg.playerId,
+                        inventory: msg.inventory,
+                    });
+                }
+                break;
             case 'player_died': {
                 const existing = this.remotePlayers.get(msg.playerId);
                 if (existing) {

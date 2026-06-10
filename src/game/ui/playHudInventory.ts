@@ -193,3 +193,12 @@ export function initPlayHudInventory(characterId: string): void {
 export function getLastPlayInventory(): CharacterInventoryDocument | null {
     return lastInventory;
 }
+
+/** Atualiza HUD com snapshot autoritativo (ex.: autoloot via WebSocket). */
+export function applyPlayInventorySnapshot(inventory: CharacterInventoryDocument): void {
+    lastInventory = inventory;
+    renderEquipment(inventory.equipment);
+    renderBackpack(inventory.backpack);
+    markHudUpdate('inventory');
+    setInventoryMessage(false, null);
+}

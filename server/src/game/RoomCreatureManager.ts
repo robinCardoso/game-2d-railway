@@ -26,6 +26,7 @@ import { processAttack } from '../combat/combat.js';
 import { validateAndResolveSpellCast, type SpellCastAttacker } from '../combat/spellCast.js';
 import { isPlayerInAttackRange, resolvePlayerAttackProfile } from '../../../shared/playerAttack.js';
 import type { SpellDefinition } from '../../../src/game-data/spellCatalogTypes.js';
+import type { MobLootEntry } from '../../../src/game-data/mobPresetTypes.js';
 import type { VocationConfig } from '../../../src/engine/character/calculateStats.js';
 import type { MapCollisionStore } from '../MapCollisionStore.js';
 import type { CreaturePresetStore } from './CreaturePresetStore.js';
@@ -61,8 +62,18 @@ interface ServerCreature {
     health: number;
     defense: number;
     xpReward: number;
+    loot: MobLootEntry[];
+    /** Dano acumulado por jogador nesta vida (loot/XP pessoal). */
+    damageByPlayer: Map<string, number>;
     isDead: boolean;
     respawnAtMs?: number;
+}
+
+export interface CreatureKillRewardData {
+    damageByPlayer: Map<string, number>;
+    maxHealth: number;
+    creatureTile: SpectatorTile;
+    loot: MobLootEntry[];
 }
 
 interface RoomCreatureState {
@@ -106,6 +117,35 @@ export class RoomCreatureManager {
         ) => void,
         private readonly getPlayersInRoom: (room: string) => RoomPlayerRef[]
     ) {}
+
+    getCreatureLoot(room: string, creatureId: string): MobLootEntry[] {
+        return this.getCreatureKillRewardData(room, creatureId)?.loot ?? [];
+    }
+
+    getCreatureKillRewardData(
+        room: string,
+        creatureId: string
+    ): CreatureKillRewardData | null {
+        const state = this.rooms.get(room);
+        const creature = state?.creatures.find((c) => c.id === creatureId);
+        if (!creature) return null;
+        return {
+            damageByPlayer: creature.damageByPlayer,
+            maxHealth: creature.maxHealth,
+            creatureTile: {
+                tileX: creature.tileX,
+                tileY: creature.tileY,
+                z: creature.z,
+            },
+            loot: creature.loot.map((row) => ({ ...row })),
+        };
+    }
+
+    private recordCreatureDamage(creature: ServerCreature, playerId: string, damage: number): void {
+        if (damage <= 0) return;
+        const prev = creature.damageByPlayer.get(playerId) ?? 0;
+        creature.damageByPlayer.set(playerId, prev + damage);
+    }
 
     getCreatureTile(
         room: string,
@@ -154,6 +194,8 @@ export class RoomCreatureManager {
                     health: stats.maxHealth,
                     defense: stats.defense,
                     xpReward: stats.xpReward,
+                    loot: stats.loot.map((row) => ({ ...row })),
+                    damageByPlayer: new Map(),
                     isDead: false,
                 };
             });
@@ -238,6 +280,7 @@ export class RoomCreatureManager {
         );
 
         creature.health = Math.max(0, creature.health - result.finalDamage);
+        this.recordCreatureDamage(creature, attacker.playerId, result.finalDamage);
 
         const damaged: CreatureDamagedMessage = {
             type: 'creature_damaged',
@@ -334,6 +377,7 @@ export class RoomCreatureManager {
         }
 
         creature.health = resolved.newHealth ?? creature.health;
+        this.recordCreatureDamage(creature, attacker.playerId, resolved.damage);
         const damaged: CreatureDamagedMessage = {
             type: 'creature_damaged',
             v: PROTOCOL_VERSION,
@@ -422,6 +466,7 @@ export class RoomCreatureManager {
                 creature.reactAfterMs = undefined;
                 creature.wakeUntilMs = undefined;
                 creature.respawnAtMs = undefined;
+                creature.damageByPlayer = new Map();
                 armMonsterWakeDelay(creature, nowMs);
                 respawns.push({
                     type: 'creature_respawned',

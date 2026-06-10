@@ -65,7 +65,9 @@ export function handleMove(
         ctx.rejectMove(
             player,
             'INVALID_TILE',
-            'Movimento rejeitado: coordenadas fora dos limites.'
+            'Movimento rejeitado: coordenadas fora dos limites.',
+            undefined,
+            false
         );
         return;
     }
@@ -143,7 +145,13 @@ export function handleMove(
     clearSteppingDest(player);
 
     if (!ctx.isWalkable(msg.mapId, msg.tileX, msg.tileY, msg.z)) {
-        ctx.rejectMove(player, 'NOT_WALKABLE', 'Movimento rejeitado: tile bloqueado.');
+        ctx.rejectMove(
+            player,
+            'NOT_WALKABLE',
+            'Movimento rejeitado: tile bloqueado.',
+            undefined,
+            false
+        );
         return;
     }
 
@@ -163,7 +171,9 @@ export function handleMove(
             ctx.rejectMove(
                 player,
                 'INVALID_STEP',
-                'Movimento rejeitado: passo inválido (adjacente, diagonal ou canto bloqueado).'
+                'Movimento rejeitado: passo inválido (adjacente, diagonal ou canto bloqueado).',
+                undefined,
+                false
             );
             return;
         }

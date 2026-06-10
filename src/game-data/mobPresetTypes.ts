@@ -32,6 +32,8 @@ export interface MobLootEntry {
     itemId: string;
     /** Chance de drop em percentual (0–100). */
     chance: number;
+    /** Quantidade ao dropar (padrão 1). */
+    quantity?: number;
 }
 
 export interface CreaturePresetEntry {
@@ -109,7 +111,19 @@ function sanitizeLoot(raw: unknown): MobLootEntry[] | undefined {
         const chanceRaw = (row as { chance?: unknown }).chance;
         const chance = typeof chanceRaw === 'number' ? chanceRaw : Number(chanceRaw);
         if (!Number.isFinite(chance) || chance < 0 || chance > 100) continue;
-        entries.push({ itemId, chance: Math.round(chance * 100) / 100 });
+        const qtyRaw = (row as { quantity?: unknown }).quantity;
+        const quantity =
+            qtyRaw === undefined || qtyRaw === null
+                ? undefined
+                : (() => {
+                      const n = typeof qtyRaw === 'number' ? qtyRaw : Number(qtyRaw);
+                      return Number.isFinite(n) && n >= 1 ? Math.floor(n) : undefined;
+                  })();
+        entries.push({
+            itemId,
+            chance: Math.round(chance * 100) / 100,
+            ...(quantity !== undefined ? { quantity } : {}),
+        });
     }
     return entries.length > 0 ? entries : undefined;
 }

@@ -22,6 +22,7 @@ Este repositório é **Elarion Online** — MMORPG 2D estilo Tibia com **Elarion
 | [docs/hosting.md](docs/hosting.md) | Deploy Railway (migração concluída), PostgreSQL, APIs unificadas |
 | [docs/multiplayer-remote-players.md](docs/multiplayer-remote-players.md) | Jogadores remotos (estado atual + roadmap escala) |
 | [docs/spell-system.md](docs/spell-system.md) | Magias, ícones PNG, VFX cast, Studio APIs |
+| [docs/loot-system.md](docs/loot-system.md) | Autoloot, loot pessoal multi-jogador, elegibilidade AOI |
 | [docs/game-rates.md](docs/game-rates.md) | `GAME_RATE_EXP` — multiplicador global de XP |
 | [docs/recent-features-jun-2026.md](docs/recent-features-jun-2026.md) | **Índice** — features jun/2026 + mapa de docs |
 | [docs/analise-chatgpt.md](docs/analise-chatgpt.md) | Escala OTC (AOI, cap aggro, viewport cull) |
@@ -45,6 +46,8 @@ Este repositório é **Elarion Online** — MMORPG 2D estilo Tibia com **Elarion
 13. **Magias:** ícones em `tiles/effects/spells/icons/` (PNG 32×32); VFX em `tiles/effects/spells/cast/`; catálogo `spell_catalog.json` — ver [docs/spell-system.md](docs/spell-system.md)
 14. **XP rate:** servidor usa `GAME_RATE_EXP` (`.env`); offline usa `public/game_rates.json` — ver [docs/game-rates.md](docs/game-rates.md)
 15. **Movimento WS:** `MOVEMENT_TOO_FAST` não envia `position_correction` (anti rubber-band em latência alta)
+16. **Studio editor-only:** `editorOnly` no bootstrap — sem `NpcAI`/`PlayerMovement`/`respawnEntities`; câmera em `editorCamera.ts`; produção sem `studio.html` (editar local → deploy)
+17. **Loot:** roll **só no servidor** (`rollMobLoot`); loot pessoal por participante elegível (AOI + 5% dano); política A — ver [docs/loot-system.md](docs/loot-system.md)
 
 ## Ao implementar melhorias nesta área
 

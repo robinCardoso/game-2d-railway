@@ -3,6 +3,7 @@
  * Compartilhado entre `server/` e `src/net/` (cliente).
  */
 
+import type { CharacterInventoryDocument } from './inventory.js';
 import { isChatPlayerChannel, parseChatSendText } from './chatConfig.js';
 import { buildRoomKey } from './roomKey.js';
 import { parseSpellBar } from './spellBar.js';
@@ -51,7 +52,8 @@ export type ServerMessage =
     | PlayerRespawnedMessage
     | AttackMissMessage
     | PlayerResourcesMessage
-    | ChatBroadcastMessage;
+    | ChatBroadcastMessage
+    | InventoryUpdatedMessage;
 
 export interface PlayerAppearance {
     outfitId: string;
@@ -360,6 +362,14 @@ export interface PlayerResourcesMessage {
     maxHealth: number;
     mana: number;
     maxMana: number;
+}
+
+/** Inventário autoritativo após autoloot (ou outras mudanças servidor). */
+export interface InventoryUpdatedMessage {
+    type: 'inventory_updated';
+    v: number;
+    playerId: string;
+    inventory: CharacterInventoryDocument;
 }
 
 export interface StateSyncMessage {

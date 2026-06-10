@@ -132,11 +132,13 @@ Na primeira execução, o boot copia seeds do repositório para `/data` se os di
 | `CLIENT_ORIGIN` | Recomendado | `https://seu-app.up.railway.app` |
 | `GAME_RATE_EXP` | Opcional | Multiplicador global de XP (padrão `1`); ver [game-rates.md](./game-rates.md) |
 | `STUDIO_MOCK_GM` | Dev only | `true` = APIs Studio sem JWT (não usar em prod) |
+| `STUDIO_ENABLED` | Prod | `false` por padrão — bloqueia APIs de escrita GM; leitura (`list-maps`, etc.) permanece |
 
 **Build do frontend** (variáveis `VITE_*` no Railway ou CI):
 
 | Variável build | Descrição |
 |----------------|-----------|
+| `VITE_STUDIO_ENABLED` | `false` em build de produção (padrão); `true` só para builds com Studio |
 | `VITE_STUDIO_GUARD` | `true` em produção |
 | `VITE_GAME_SERVER_WS` | Deixar vazio = same-origin `wss://` |
 | `VITE_USE_SERVER_WS_TICKET` | Dev: força `POST /api/ws-ticket` |
@@ -169,7 +171,7 @@ Registre com e-mail `*@gm.dev` (ex.: `gm@gm.dev`) — o servidor define `role=gm
 | `/login.html` | Login (JWT API) |
 | `/characters.html` | Lista de personagens |
 | `/play.html` | Jogo + WS conectado |
-| `/studio.html` | Editor GM (exige `can_access_studio`) |
+| `/studio.html` | Editor GM — **somente dev local** (produção redireciona para `/`) |
 | `/health` | JSON `{ status: "ok", phase: "railway-d", ... }` |
 | `/tiles/...` | Sprites PNG |
 

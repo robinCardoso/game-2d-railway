@@ -47,6 +47,7 @@
                   </div>
                 </div>
                 <button type="button" class="menu-dropdown-item" id="saveMapDevBtn" title="Grava em public/maps/ — só npm run dev">💾 Salvar em public/maps</button>
+                <button type="button" class="menu-dropdown-item" id="testInPlayBtn" title="Abre play.html com o mapa atual — só npm run dev">▶ Testar no Play</button>
               </div>
             </div>
 
@@ -64,7 +65,7 @@
               <div class="menu-dropdown">
                 <button type="button" class="menu-dropdown-item" id="undoBtn" disabled>↩ Desfazer</button>
                 <button type="button" class="menu-dropdown-item" id="redoBtn" disabled>↪ Refazer</button>
-                <button type="button" class="menu-dropdown-item" id="openTeleportBtn">📍 Ir para Posição</button>
+                <button type="button" class="menu-dropdown-item" id="openTeleportBtn">📍 Ir para coordenadas</button>
                 <button type="button" class="menu-dropdown-item" id="openHouseManagerBtn">🏠 Gerenciar Casas</button>
                 <button type="button" class="menu-dropdown-item" data-open-panel="map_editor" style="border-top: 1px solid var(--border-color); margin-top: 4px; padding-top: 8px;">🗺️ Mapa</button>
               </div>
@@ -83,10 +84,9 @@
             </div>
 
             <div class="menu-item">
-              <button type="button" class="menu-trigger">Jogo</button>
+              <button type="button" class="menu-trigger">Dados</button>
               <div class="menu-dropdown menu-dropdown--wide">
                 <button type="button" class="menu-dropdown-item" data-open-panel="spells">✨ Magias</button>
-                <button type="button" class="menu-dropdown-item" data-open-panel="mechanics">Mecânicas de jogo</button>
               </div>
             </div>
 
@@ -95,13 +95,6 @@
               <div class="menu-dropdown menu-dropdown--wide">
                 <button type="button" class="menu-dropdown-item" data-open-panel="stats">Dados técnicos</button>
                 <button type="button" class="menu-dropdown-item" data-open-panel="minimap">Minimap</button>
-              </div>
-            </div>
-
-            <div class="menu-item" data-requires-edit="true">
-              <button type="button" class="menu-trigger">Teste</button>
-              <div class="menu-dropdown">
-                <button type="button" class="menu-dropdown-item" data-open-panel="dev">Buffs e equipamento</button>
               </div>
             </div>
 
@@ -123,7 +116,7 @@
             <canvas id="gameCanvas"></canvas>
             <div class="hint">
               <span class="accent">Espaço + Arrasto</span> (ou <span class="accent">Botão Meio</span>) mover mapa ·
-              <span class="accent">WASD</span> mover player ·
+              <span class="accent">WASD / Setas</span> pan da câmera ·
               <span class="accent">P/B/E</span> ferramentas ·
               <span class="accent">Esc</span> fechar painel
             </div>
@@ -398,28 +391,6 @@
                     <p class="flyout-hint">Ícones PNG 32×32 em <code>tiles/effects/spells/icons/{id}.png</code> — use <strong>Upload ícone</strong> ou versione no git (<code>npm run generate:spell-icons</code>). VFX de conjuração: <code>tiles/effects/spells/cast/</code> (<code>castEffect</code>).</p>
                   </div>
                 </div>
-              </section>
-
-              <!-- Mecânicas -->
-              <section class="flyout-section" data-panel="mechanics">
-                <label class="check-row">
-                  <span>Colisão ativa</span>
-                  <input type="checkbox" id="collisionToggle" checked />
-                </label>
-                <label class="check-row">
-                  <span>Equipar barco</span>
-                  <input type="checkbox" id="boatToggle" />
-                </label>
-              </section>
-
-              <!-- Dev -->
-              <section class="flyout-section" data-panel="dev">
-                <button type="button" id="devEquipHasteBoots" class="menu-dropdown-item block-btn">Botas da Pressa</button>
-                <button type="button" id="devEquipLeatherBoots" class="menu-dropdown-item block-btn">Botas de Couro</button>
-                <button type="button" id="devBuffHaste" class="menu-dropdown-item block-btn">Haste (30s)</button>
-                <button type="button" id="devBuffSlow" class="menu-dropdown-item block-btn">Slow (15s)</button>
-                <button type="button" id="devClearBuffs" class="menu-dropdown-item block-btn">Limpar buffs</button>
-                <p class="flyout-hint">Console (F12) mostra comparação ao clicar.</p>
               </section>
 
               <!-- Conta -->

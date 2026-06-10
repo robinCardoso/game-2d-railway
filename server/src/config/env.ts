@@ -24,6 +24,10 @@ export const env = {
     /** Aceita progress_sync do cliente (dev/offline). Nunca habilitar em produção. */
     allowClientProgressSync: process.env.ALLOW_CLIENT_PROGRESS_SYNC === 'true',
     studioMockGm: process.env.STUDIO_MOCK_GM === 'true',
+    /** APIs e studio.html — dev por padrão; produção desliga salvo STUDIO_ENABLED=true. */
+    studioEnabled:
+        process.env.STUDIO_ENABLED === 'true' ||
+        (process.env.NODE_ENV !== 'production' && process.env.STUDIO_ENABLED !== 'false'),
     clientOrigin: process.env.CLIENT_ORIGIN?.trim() || null,
     /** Origens extras (vírgula) — ex.: domínio customizado além do Railway. */
     clientExtraOrigins: (process.env.CLIENT_EXTRA_ORIGINS ?? '')

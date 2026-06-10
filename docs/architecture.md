@@ -4,8 +4,9 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  STUDIO (GM) — studio.html + src/editor/* + src/main.ts       │
-│  Mapa, sprites, mobs, magias, itens; APIs /api/*              │
+│  STUDIO (GM, local) — studio.html + src/editor/* + src/main.ts │
+│  Editor de mapas puro: câmera livre, sem IA/combate; dev only  │
+│  Publicação: git → deploy; Play consome /maps/ em produção     │
 └───────────────────────────┬─────────────────────────────────┘
                             │ usa API pública
 ┌───────────────────────────▼─────────────────────────────────┐
@@ -37,8 +38,8 @@
 | `src/movement/` | Grid, passos, tween, escadas (chama engine) |
 | `src/character/` | Speed, equip, buffs, terreno no passo |
 | `src/functions/` | tileConfig, roles, history (editor + regras) |
-| `src/main.ts` | Bootstrap do **Studio** (`studio.html`) |
-| `src/playApp.ts` | Bootstrap do **Play** (`play.html`) — loop 60 FPS, rede, combate |
+| `src/main.ts` | Bootstrap do **Studio** (`studio.html`) — `editorOnly`, `editorCamera.ts` |
+| `src/game/playApp.ts` | Bootstrap do **Play** (`play.html`) — loop 60 FPS, rede, combate |
 | `src/net/` | Cliente WS (`gameNetClient.ts`), jogadores remotos, predição |
 | `src/game/` | UI Play (HUD, magias, inventário), efeitos de spell cast |
 | `server/` | Express, PostgreSQL, `GameRoom` WebSocket, APIs Studio |

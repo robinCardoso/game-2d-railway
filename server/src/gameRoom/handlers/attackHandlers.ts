@@ -6,10 +6,8 @@ import type { VocationId } from '../../../../shared/types/character.js';
 import type { SpectatorTile } from '../../../../shared/creatureSpectatorRange.js';
 import type { BroadcastCreatureEvent } from '../contextTypes.js';
 import { getLevelFromExp, calculateStatsForLevel } from '../../../../src/engine/character/calculateStats.js';
-import {
-    grantKillExperience,
-    scaleMobKillXpReward,
-} from '../../game/grantKillExperience.js';
+import { scaleMobKillXpReward } from '../../game/grantKillExperience.js';
+import { applyCreatureKillRewards } from './creatureKillRewards.js';
 import { ZoneType } from '../../../../src/engine/zones.js';
 import { processAttack } from '../../combat/combat.js';
 import type { MapCollisionStore } from '../../MapCollisionStore.js';
@@ -26,6 +24,7 @@ const DEFAULT_ATTACK_COOLDOWN_MS = 550;
 export interface AttackHandlerContext {
     getPlayerBySocket: (socket: WebSocket) => ConnectedPlayer | undefined;
     getPlayerById: (playerId: string) => ConnectedPlayer | undefined;
+    getPlayersInRoom: (room: string) => ConnectedPlayer[];
     roomKey: (player: Pick<ConnectedPlayer, 'mapId' | 'instanceId'>) => string;
     send: (socket: WebSocket, message: ServerMessage) => void;
     broadcastToRoom: (room: string, message: ServerMessage) => void;
@@ -382,14 +381,23 @@ function handlePveAttack(
             z: diedMsg.z,
         });
 
-        grantKillExperience(player, scaledXp, {
-            send: ctx.send,
-            progressPersistence: ctx.progressPersistence,
-            onAfterGrant: (p, gain) => {
-                if (gain.leveledUp) {
-                    void syncPlayerLearnedSpells(p);
-                }
+        applyCreatureKillRewards(
+            {
+                creatures: ctx.creatures,
+                room,
+                creatureId: msg.creatureId,
+                send: ctx.send,
+                progressPersistence: ctx.progressPersistence,
+                getPlayerById: ctx.getPlayerById,
+                getPlayersInRoom: ctx.getPlayersInRoom,
+                onAfterXp: (p, gain) => {
+                    if (gain.leveledUp) {
+                        void syncPlayerLearnedSpells(p);
+                    }
+                },
             },
-        });
+            player,
+            diedMsg
+        );
     }
 }
