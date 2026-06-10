@@ -298,6 +298,19 @@ function renderBackpack(
     document.querySelectorAll<HTMLButtonElement>('.bag-slot').forEach((slot) => {
         const index = Number(slot.dataset.slotIndex);
         const row = locked ? undefined : byIndex.get(index);
+
+        const currentItemId = slot.dataset.itemId || '';
+        const currentQty = slot.dataset.qty || '';
+        const targetItemId = row ? row.itemId : '';
+        const targetQty = row ? String(row.quantity) : '';
+
+        if (currentItemId === targetItemId && currentQty === targetQty) {
+            return;
+        }
+
+        slot.dataset.itemId = targetItemId;
+        slot.dataset.qty = targetQty;
+
         slot.classList.toggle('has-item', Boolean(row));
         slot.disabled = locked;
         if (row) {
