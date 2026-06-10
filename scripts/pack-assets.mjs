@@ -81,16 +81,28 @@ console.log(`Arquivos empacotados: ${filesToPack.length}`);
 
 // 3. Assinatura (Camada 4)
 function getOrCreateKeys() {
-    const privateKeyFromEnv = decodePemFromEnv(process.env.ASSET_PACK_PRIVATE_KEY);
+    const rawPrivateKey = process.env.ASSET_PACK_PRIVATE_KEY?.trim();
+    const privateKeyFromEnv = rawPrivateKey ? decodePemFromEnv(rawPrivateKey) : null;
+    if (rawPrivateKey && !privateKeyFromEnv) {
+        throw new Error('ASSET_PACK_PRIVATE_KEY não pôde ser decodificada (use PEM ou base64).');
+    }
     if (privateKeyFromEnv) {
-        if (!privateKeyFromEnv.includes('BEGIN PRIVATE KEY')) {
-            throw new Error('ASSET_PACK_PRIVATE_KEY inválida (esperado PEM ou base64 de PEM).');
+        try {
+            const publicKey = crypto
+                .createPublicKey({ key: privateKeyFromEnv, format: 'pem' })
+                .export({ type: 'spki', format: 'pem' });
+            fs.writeFileSync(PUBLIC_KEY_FILE, publicKey);
+            return { privateKey: privateKeyFromEnv, publicKey };
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            if (!process.env.CI) {
+                throw new Error(`ASSET_PACK_PRIVATE_KEY inválida (esperado PEM ou base64 de PEM): ${msg}`);
+            }
+            console.warn(
+                `[pack-assets] ASSET_PACK_PRIVATE_KEY inválida no CI (${msg}); gerando par temporário. ` +
+                    'Atualize com .\\scripts\\set-pack-github-secrets.ps1',
+            );
         }
-        const publicKey = crypto
-            .createPublicKey({ key: privateKeyFromEnv, format: 'pem' })
-            .export({ type: 'spki', format: 'pem' });
-        fs.writeFileSync(PUBLIC_KEY_FILE, publicKey);
-        return { privateKey: privateKeyFromEnv, publicKey };
     }
 
     if (fs.existsSync(PRIVATE_KEY_FILE) && fs.existsSync(PUBLIC_KEY_FILE)) {
