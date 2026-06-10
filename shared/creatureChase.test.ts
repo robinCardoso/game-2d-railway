@@ -13,6 +13,7 @@ import {
     pickMeleeRingGoalTile,
     resolveAggroFaceDirection,
     resolveChaseIdleDirection,
+    shouldMonsterApproachChase,
     tickMonsterChaseStep,
 } from './creatureChase.js';
 
@@ -294,5 +295,16 @@ describe('tickMonsterChaseStep walkStepMs', () => {
         );
         expect(second).not.toBeNull();
         expect(mob.lastAggroMoveTime).toBe(1600);
+    });
+});
+
+describe('shouldMonsterApproachChase', () => {
+    it('sempre permite mob já no alcance de combate', () => {
+        expect(shouldMonsterApproachChase(1, 1, 99)).toBe(true);
+    });
+
+    it('limita mobs que ainda estão se aproximando', () => {
+        expect(shouldMonsterApproachChase(5, 1, 9, 10)).toBe(true);
+        expect(shouldMonsterApproachChase(5, 1, 10, 10)).toBe(false);
     });
 });

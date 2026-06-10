@@ -6,10 +6,12 @@ import { resolveMobChaseConfig } from '../game-data/mobPresetTypes';
 import {
     MONSTER_AGGRO_RADIUS,
     MONSTER_STEP_MS,
+    chaseDistanceToPlayer,
     isMonsterWakePaused,
     manhattanDist,
     isRangedInComfortZone,
     resolveAggroFaceDirection,
+    shouldMonsterApproachChase,
     tickMonsterChaseStep,
     type CardinalDirection,
 } from '../../shared/creatureChase';
@@ -201,6 +203,7 @@ export const NpcAI: NpcAIController = {
         } = options;
 
         const reservedChaseGoals = new Set<string>();
+        const activeApproachersPerTarget = new Map<string, number>();
 
         const tickOrder = [...npcs].sort((a, b) => {
             if (a.type !== 'monster' || b.type !== 'monster') return 0;
@@ -270,6 +273,30 @@ export const NpcAI: NpcAIController = {
                     return;
                 }
             } else if (npc.type === 'monster') {
+                const chaseConfig = resolveMobChaseConfig(getCreaturePreset(npc.name));
+                const distToPlayer = manhattanDist(npc.tileX, npc.tileY, player.tileX, player.tileY);
+                const isAggroed =
+                    distToPlayer <= MONSTER_AGGRO_RADIUS && player.worldZ === npc.worldZ;
+
+                if (isAggroed) {
+                    const combatDist = chaseDistanceToPlayer(
+                        npc.tileX,
+                        npc.tileY,
+                        player.tileX,
+                        player.tileY,
+                        chaseConfig
+                    );
+                    const targetKey = `${player.tileX},${player.tileY},${player.worldZ}`;
+                    const chasing = activeApproachersPerTarget.get(targetKey) ?? 0;
+                    if (!shouldMonsterApproachChase(combatDist, chaseConfig.attackRange, chasing)) {
+                        applyAggroFace(npc, player);
+                        return;
+                    }
+                    if (combatDist > chaseConfig.attackRange) {
+                        activeApproachersPerTarget.set(targetKey, chasing + 1);
+                    }
+                }
+
                 tickMonsterChase(
                     npc,
                     player,

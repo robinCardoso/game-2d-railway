@@ -127,6 +127,68 @@ describe('PvP Combat System Tests', () => {
         expect(damageMsg.damage).toBeGreaterThanOrEqual(0);
     });
 
+    it('broadcast player_damaged só para espectadores no AOI 25×20', () => {
+        const attackerSocket = createMockSocket();
+        const targetSocket = createMockSocket();
+        const farSocket = createMockSocket();
+
+        const attackerId = 'p_attacker';
+        const targetId = 'p_target';
+        const farId = 'p_far';
+
+        room.handleMessage(attackerSocket, {
+            type: 'join',
+            v: PROTOCOL_VERSION,
+            name: 'Attacker',
+            playerId: attackerId,
+            mapId: 'mainland',
+            tileX: 10,
+            tileY: 10,
+            z: 0,
+            level: 10,
+            experience: 1000,
+        });
+
+        room.handleMessage(targetSocket, {
+            type: 'join',
+            v: PROTOCOL_VERSION,
+            name: 'Target',
+            playerId: targetId,
+            mapId: 'mainland',
+            tileX: 10,
+            tileY: 11,
+            z: 0,
+            level: 10,
+            experience: 1000,
+        });
+
+        room.handleMessage(farSocket, {
+            type: 'join',
+            v: PROTOCOL_VERSION,
+            name: 'Far',
+            playerId: farId,
+            mapId: 'mainland',
+            tileX: 200,
+            tileY: 200,
+            z: 0,
+            level: 10,
+            experience: 1000,
+        });
+
+        room.handleMessage(attackerSocket, {
+            type: 'attack',
+            v: PROTOCOL_VERSION,
+            mapId: 'mainland',
+            creatureId: targetId,
+        });
+
+        const parse = (sock: ReturnType<typeof createMockSocket>) =>
+            sock.send.mock.calls.map((call: unknown[]) => JSON.parse(call[0] as string));
+
+        expect(parse(targetSocket).some((m) => m.type === 'player_damaged')).toBe(true);
+        expect(parse(farSocket).some((m) => m.type === 'player_damaged')).toBe(false);
+    });
+
     it('should block PvP combat in No-PvP map (e.g. rookgaard)', () => {
         const attackerSocket = createMockSocket();
         const targetSocket = createMockSocket();

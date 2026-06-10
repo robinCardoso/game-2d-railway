@@ -13,12 +13,12 @@ import {
     isMonsterWakePaused,
     manhattanDist,
     MONSTER_AGGRO_RADIUS,
-    MONSTER_MAX_ACTIVE_CHASERS_PER_TARGET,
+    shouldMonsterApproachChase,
     resolveAggroFaceDirection,
     tickMonsterChaseStep,
     type CardinalDirection,
 } from '../../../shared/creatureChase.js';
-import { isTileInSpectatorRange } from '../../../shared/creatureSpectatorRange.js';
+import { creatureHasPlayerInAwareRange } from '../../../shared/creatureSpectatorRange.js';
 import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
 import { MONSTER_RESPAWN_MS } from '../../../shared/creatureDeath.js';
 import type { VocationId } from '../../../shared/types/character.js';
@@ -479,9 +479,11 @@ export class RoomCreatureManager {
                     chaseConfig
                 );
                 const targetKey = `${target.tileX},${target.tileY},${target.z}`;
+                const chasing = activeChasersPerTarget.get(targetKey) ?? 0;
+                if (!shouldMonsterApproachChase(combatDist, chaseConfig.attackRange, chasing)) {
+                    continue;
+                }
                 if (combatDist > chaseConfig.attackRange) {
-                    const chasing = activeChasersPerTarget.get(targetKey) ?? 0;
-                    if (chasing >= MONSTER_MAX_ACTIVE_CHASERS_PER_TARGET) continue;
                     activeChasersPerTarget.set(targetKey, chasing + 1);
                 }
 
@@ -581,22 +583,10 @@ export class RoomCreatureManager {
     }
 
     private hasPlayerInAwareRange(creature: ServerCreature, players: RoomPlayerRef[]): boolean {
-        const event = {
-            tileX: creature.tileX,
-            tileY: creature.tileY,
-            z: creature.z,
-        };
-        for (const p of players) {
-            if (
-                isTileInSpectatorRange(
-                    { tileX: p.tileX, tileY: p.tileY, z: p.z },
-                    event
-                )
-            ) {
-                return true;
-            }
-        }
-        return false;
+        return creatureHasPlayerInAwareRange(
+            { tileX: creature.tileX, tileY: creature.tileY, z: creature.z },
+            players.map((p) => ({ tileX: p.tileX, tileY: p.tileY, z: p.z }))
+        );
     }
 
     private nearestPlayerDist(creature: ServerCreature, players: RoomPlayerRef[]): number {

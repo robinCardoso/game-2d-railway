@@ -3,6 +3,18 @@
 export const MONSTER_AGGRO_RADIUS = 7;
 /** Máximo de mobs com IA de chase ativa por jogador-alvo (surround 8 + fila no anel). */
 export const MONSTER_MAX_ACTIVE_CHASERS_PER_TARGET = 10;
+
+/** Mobs já no alcance de combate sempre pensam; fora dele respeitam o cap de aproximação. */
+export function shouldMonsterApproachChase(
+    combatDist: number,
+    attackRange: number,
+    activeApproachersForTarget: number,
+    cap = MONSTER_MAX_ACTIVE_CHASERS_PER_TARGET
+): boolean {
+    if (combatDist <= attackRange) return true;
+    return activeApproachersForTarget < cap;
+}
+
 /** Distância Manhattan do anel de espera quando slots melee adjacentes estão cheios. */
 export const MELEE_WAIT_RING_DIST = 2;
 export const MONSTER_STEP_MS = 300;

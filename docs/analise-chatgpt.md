@@ -1,50 +1,43 @@
-## **Próxima implementação recomendada**
+## **Implementações concluídas (P1 escala)**
 
-### **1. AOI de combate e eventos PvP (P1 — continuação natural do P0)**
+### **1. AOI de combate e eventos PvP** ✅
 
-Hoje `attackHandlers.ts` ainda usa `broadcastToRoom` para:
+`attackHandlers.ts` usa `broadcastToPlayerSpectators` (retângulo 25×20 de `creatureSpectatorRange.ts`) para:
 
 - `player_damaged`
 - `player_died`
 - `player_respawned`
 
-Quem está longe recebe pacote à toa. O próximo passo é trocar por `broadcastToPlayerSpectators` (mesmo retângulo 25×20 de `creatureSpectatorRange.ts`), como já foi feito em `player_moved`.
+Mesmo padrão de `player_moved`, `player_joined`, `player_left` e eventos de criatura.
 
-**Esforço:** baixo (~1 handler + testes)  
-**Ganho:** menos tráfego WS e menos trabalho no cliente com muitos jogadores
-
----
-
-### **2. Cap de aggro por jogador (estilo OTC)**
-
-Com muitos Magões, todos dentro de 7 SQM ainda rodam IA de chase todo tick — só 8 ocupam surround, o resto vai pro anel, mas **todos pensam**.
-
-Limitar a ~8–10 mobs **ativos** por alvo (os mais próximos) reduz CPU no servidor e deixa o comportamento mais Tibia.
-
-**Esforço:** médio  
-**Ganho:** escala com packs grandes (como na sua screenshot)
+**Teste:** `pvp.test.ts` — jogador longe não recebe `player_damaged`.
 
 ---
 
-### **3. Viewport cull no Play (cliente)**
+### **2. Cap de aggro por jogador (estilo OTC)** ✅
 
-Itens já usam `viewport` em `collectItemDepthDrawables`; **NPCs e remotos não** — `collectNpcDepthDrawables` / `collectRemoteDepthDrawables` iteram tudo.
+`MONSTER_MAX_ACTIVE_CHASERS_PER_TARGET = 10` em `shared/creatureChase.ts`.
 
-Com 30+ entidades, isso pesa no draw mesmo fora da tela.
+- Servidor: `RoomCreatureManager` — só os N mobs mais próximos **em aproximação** rodam chase por alvo; mobs já no alcance melee continuam ativos.
+- Offline: `npcAI.ts` — mesma regra para packs grandes no Play SP.
 
-**Esforço:** baixo–médio  
-**Ganho:** FPS no Play com muitos mobs/jogadores
+**Helper:** `shouldMonsterApproachChase()` + testes em `creatureChase.test.ts`.
 
 ---
 
-### **4. Tick de IA só no aware range (servidor)**
+### **3. Viewport cull no Play (cliente)** ✅
 
-Broadcast de criaturas já é filtrado; o **tick de chase** ainda roda para todos os monstros da sala com alvo no aggro.
+`collectNpcDepthDrawables` / `collectRemoteDepthDrawables` recebem `viewport` de `playApp.ts` (mesmo bounds do chão visível).
 
-Pular mobs sem nenhum jogador no retângulo 25×20 economiza CPU em mapas grandes.
+**Teste:** `depthSortDraw.viewport.test.ts`.
 
-**Esforço:** médio  
-**Ganho:** servidor com mapas cheios de spawn
+---
+
+### **4. Tick de IA só no aware range (servidor)** ✅
+
+`RoomCreatureManager` filtra chase com `creatureHasPlayerInAwareRange()` — mobs sem jogador no retângulo 25×20 não rodam IA de perseguição.
+
+**Helper:** `creatureHasPlayerInAwareRange()` em `creatureSpectatorRange.ts`.
 
 ---
 
@@ -55,11 +48,10 @@ Pular mobs sem nenhum jogador no retângulo 25×20 economiza CPU em mapas grande
 | ---------------------------------------------- | ---------------------------------------- |
 | `stepDurationMs` calculado no servidor         | play público / anti-cheat                |
 | `move_request` (intenção, não posição)         | refactor de movimento                    |
-| A* pathfinding                                 | mobs presos em obstáculos com frequência |
-| Atualizar `docs/multiplayer-remote-players.md` | AOI jogadores ainda marcado como backlog |
+| BFS pathfinding (cardinal)                     | ✅ `findCardinalPathFirstStep` em `creatureChase.ts` |
+| Atualizar `docs/multiplayer-remote-players.md` | ✅ AOI jogadores/criaturas/PvP documentado |
 
 
 ---
 
-  
-"C:\Users\Robson\source\otc-server-main\server"
+Referência OTC: `C:\Users\Robson\source\otc-server-main\server`

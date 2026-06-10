@@ -4,6 +4,7 @@ import {
     CREATURE_AWARE_LEFT,
     CREATURE_AWARE_RIGHT,
     CREATURE_AWARE_TOP,
+    creatureHasPlayerInAwareRange,
     filterCreatureSnapshotsForViewer,
     filterPlayerSnapshotsForViewer,
     isTileInCreatureSpectatorRange,
@@ -105,5 +106,18 @@ describe('creatureSpectatorRange', () => {
         ];
         const filtered = filterPlayerSnapshotsForViewer(viewer, players);
         expect(filtered.map((p) => p.playerId)).toEqual(['near']);
+    });
+
+    it('creatureHasPlayerInAwareRange detecta jogador no retângulo', () => {
+        const creature = { tileX: 105, tileY: 100, z: 0 };
+        expect(
+            creatureHasPlayerInAwareRange(creature, [
+                { tileX: 100, tileY: 100, z: 0 },
+                { tileX: 200, tileY: 200, z: 0 },
+            ])
+        ).toBe(true);
+        expect(creatureHasPlayerInAwareRange(creature, [{ tileX: 200, tileY: 200, z: 0 }])).toBe(
+            false
+        );
     });
 });

@@ -62,3 +62,11 @@ export function filterPlayerSnapshotsForViewer<T extends Pick<PlayerSnapshot, 't
         })
     );
 }
+
+/** Algum jogador enxerga o tile da criatura (retângulo 25×20 OTC). */
+export function creatureHasPlayerInAwareRange(
+    creature: SpectatorTile,
+    players: readonly SpectatorTile[]
+): boolean {
+    return players.some((p) => isTileInSpectatorRange(p, creature));
+}
