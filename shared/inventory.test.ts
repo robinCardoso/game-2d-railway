@@ -21,6 +21,13 @@ const catalog: ItemCatalogDocument = {
             category: 'loot',
             implemented: true,
         },
+        {
+            id: 'dev_boots',
+            name: 'Dev Boots',
+            category: 'equipment',
+            slot: 'feet',
+            implemented: false,
+        },
     ],
 };
 
@@ -82,5 +89,49 @@ describe('validateCharacterInventory', () => {
             catalog
         );
         expect(result.ok).toBe(true);
+    });
+
+    it('rejeita item equipado e na mochila', () => {
+        const result = validateCharacterInventory(
+            {
+                equipment: {
+                    ...createEmptyInventory().equipment,
+                    feet: 'leather_boots',
+                },
+                backpack: [{ slotIndex: 0, itemId: 'leather_boots', quantity: 1 }],
+            },
+            catalog
+        );
+        expect(result.ok).toBe(false);
+    });
+
+    it('rejeita duplicar item vs inventário anterior', () => {
+        const previous = {
+            equipment: createEmptyInventory().equipment,
+            backpack: [{ slotIndex: 0, itemId: 'gold_coin', quantity: 5 }],
+        };
+        const result = validateCharacterInventory(
+            {
+                equipment: createEmptyInventory().equipment,
+                backpack: [{ slotIndex: 0, itemId: 'gold_coin', quantity: 99 }],
+            },
+            catalog,
+            { previous }
+        );
+        expect(result.ok).toBe(false);
+    });
+
+    it('rejeita equipar item não implementado', () => {
+        const result = validateCharacterInventory(
+            {
+                equipment: {
+                    ...createEmptyInventory().equipment,
+                    feet: 'dev_boots',
+                },
+                backpack: [],
+            },
+            catalog
+        );
+        expect(result.ok).toBe(false);
     });
 });

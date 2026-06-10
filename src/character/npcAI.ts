@@ -6,9 +6,12 @@ import { resolveMobChaseConfig } from '../game-data/mobPresetTypes';
 import {
     MONSTER_AGGRO_RADIUS,
     MONSTER_STEP_MS,
+    chaseDistanceToPlayer,
     isMonsterWakePaused,
     manhattanDist,
     isRangedInComfortZone,
+    resolveAggroFaceDirection,
+    shouldMonsterApproachChase,
     tickMonsterChaseStep,
     type CardinalDirection,
 } from '../../shared/creatureChase';
@@ -45,6 +48,31 @@ const CHASE_DIR_TO_SPRITE: Record<CardinalDirection, Direction> = {
     south: 'down',
     north: 'up',
 };
+
+const SPRITE_TO_CARDINAL: Record<Direction, CardinalDirection> = {
+    right: 'east',
+    left: 'west',
+    down: 'south',
+    up: 'north',
+};
+
+function applyAggroFace(
+    npc: GameEntity,
+    player: { tileX: number; tileY: number; worldZ: number }
+): void {
+    const faceDir = resolveAggroFaceDirection(
+        npc.tileX,
+        npc.tileY,
+        player.tileX,
+        player.tileY,
+        player.worldZ,
+        npc.worldZ,
+        SPRITE_TO_CARDINAL[npc.animController.currentDirection]
+    );
+    if (faceDir) {
+        npc.setDirection(CHASE_DIR_TO_SPRITE[faceDir]);
+    }
+}
 
 let lastNpcMoveTime = 0;
 
@@ -112,7 +140,7 @@ function tickMonsterChase(
     if (!isAggroed) return;
 
     if (inCombatPosition) {
-        faceTowardTile(npc, player.tileX, player.tileY);
+        applyAggroFace(npc, player);
         return;
     }
 
@@ -146,7 +174,7 @@ function tickMonsterChase(
     npc.reactAfterMs = mobState.reactAfterMs;
 
     if (!step) {
-        faceTowardTile(npc, player.tileX, player.tileY);
+        applyAggroFace(npc, player);
         return;
     }
 
@@ -174,10 +202,18 @@ export const NpcAI: NpcAIController = {
             createCollisionContext,
         } = options;
 
-        const moveSpeedPx = TILE_SIZE_SCREEN / (MONSTER_STEP_MS / (1000 / 60));
         const reservedChaseGoals = new Set<string>();
+        const activeApproachersPerTarget = new Map<string, number>();
 
-        npcs.forEach((npc) => {
+        const tickOrder = [...npcs].sort((a, b) => {
+            if (a.type !== 'monster' || b.type !== 'monster') return 0;
+            if (a.isDead || b.isDead) return 0;
+            const da = manhattanDist(a.tileX, a.tileY, player.tileX, player.tileY);
+            const db = manhattanDist(b.tileX, b.tileY, player.tileX, player.tileY);
+            return da - db;
+        });
+
+        tickOrder.forEach((npc) => {
             if (npc.isDead) return;
 
             if (npc.type === 'monster' && isMonsterWakePaused(npc, nowMs)) {
@@ -205,10 +241,13 @@ export const NpcAI: NpcAIController = {
                 return !occupiedByEntity && !occupiedByPlayer;
             };
 
-            const canGoalTile = (tx: number, ty: number) => {
-                if (!canWalkTerrain(tx, ty)) return false;
-                return !isEntityAtTile(tx, ty, npc.worldZ, 'player');
-            };
+            const canGoalTile =
+                npc.type === 'monster'
+                    ? canStepTo
+                    : (tx: number, ty: number) => {
+                          if (!canWalkTerrain(tx, ty)) return false;
+                          return !isEntityAtTile(tx, ty, npc.worldZ, 'player');
+                      };
 
             if (npc.type === 'npc') {
                 const distToPlayer = manhattanDist(npc.tileX, npc.tileY, player.tileX, player.tileY);
@@ -234,6 +273,30 @@ export const NpcAI: NpcAIController = {
                     return;
                 }
             } else if (npc.type === 'monster') {
+                const chaseConfig = resolveMobChaseConfig(getCreaturePreset(npc.name));
+                const distToPlayer = manhattanDist(npc.tileX, npc.tileY, player.tileX, player.tileY);
+                const isAggroed =
+                    distToPlayer <= MONSTER_AGGRO_RADIUS && player.worldZ === npc.worldZ;
+
+                if (isAggroed) {
+                    const combatDist = chaseDistanceToPlayer(
+                        npc.tileX,
+                        npc.tileY,
+                        player.tileX,
+                        player.tileY,
+                        chaseConfig
+                    );
+                    const targetKey = `${player.tileX},${player.tileY},${player.worldZ}`;
+                    const chasing = activeApproachersPerTarget.get(targetKey) ?? 0;
+                    if (!shouldMonsterApproachChase(combatDist, chaseConfig.attackRange, chasing)) {
+                        applyAggroFace(npc, player);
+                        return;
+                    }
+                    if (combatDist > chaseConfig.attackRange) {
+                        activeApproachersPerTarget.set(targetKey, chasing + 1);
+                    }
+                }
+
                 tickMonsterChase(
                     npc,
                     player,
@@ -280,6 +343,11 @@ export const NpcAI: NpcAIController = {
 
             const targetWorldX = npc.tileX * TILE_SIZE_SCREEN;
             const targetWorldY = npc.tileY * TILE_SIZE_SCREEN;
+            const walkStepMs =
+                npc.type === 'monster'
+                    ? resolveMobChaseConfig(getCreaturePreset(npc.name)).walkStepMs
+                    : MONSTER_STEP_MS;
+            const moveSpeedPx = TILE_SIZE_SCREEN / (walkStepMs / (1000 / 60));
 
             if (npc.worldX < targetWorldX) npc.worldX = Math.min(targetWorldX, npc.worldX + moveSpeedPx);
             else if (npc.worldX > targetWorldX) npc.worldX = Math.max(targetWorldX, npc.worldX - moveSpeedPx);

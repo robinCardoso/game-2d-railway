@@ -22,7 +22,7 @@ function findProjectRoot(): string {
     return path.resolve(moduleDir, '../../..');
 }
 
-const projectRoot = findProjectRoot();
+const projectRoot = path.resolve(findProjectRoot());
 
 export interface AppPaths {
     projectRoot: string;
@@ -37,6 +37,7 @@ export interface AppPaths {
     tileCatalogPath: string;
     autoBorderSetsPath: string;
     creaturePresetsPath: string;
+    spellCatalogPath: string;
     outfitPresetsPath: string;
     itemCatalogPath: string;
     tileVariantGroupsPath: string;
@@ -90,9 +91,11 @@ function seedDataRoot(dataRoot: string): void {
         'tile_catalog.json',
         'auto_border_sets.json',
         'creature_presets.json',
+        'spell_catalog.json',
         'outfit_presets.json',
         'item_catalog.json',
         'tile_variant_groups.json',
+        'game_rates.json',
     ];
     for (const file of publicFiles) {
         copyFileIfMissing(path.join(repoPublic, file), path.join(dataRoot, file));
@@ -126,6 +129,7 @@ function buildPaths(): AppPaths {
             tileCatalogPath: path.join(env.dataRoot, 'tile_catalog.json'),
             autoBorderSetsPath: path.join(env.dataRoot, 'auto_border_sets.json'),
             creaturePresetsPath: path.join(env.dataRoot, 'creature_presets.json'),
+            spellCatalogPath: path.join(env.dataRoot, 'spell_catalog.json'),
             outfitPresetsPath: path.join(env.dataRoot, 'outfit_presets.json'),
             itemCatalogPath: path.join(env.dataRoot, 'item_catalog.json'),
             tileVariantGroupsPath: path.join(env.dataRoot, 'tile_variant_groups.json'),
@@ -148,6 +152,7 @@ function buildPaths(): AppPaths {
         tileCatalogPath: path.join(repoPublicDir, 'tile_catalog.json'),
         autoBorderSetsPath: path.join(repoPublicDir, 'auto_border_sets.json'),
         creaturePresetsPath: path.join(repoPublicDir, 'creature_presets.json'),
+        spellCatalogPath: path.join(repoPublicDir, 'spell_catalog.json'),
         outfitPresetsPath: path.join(repoPublicDir, 'outfit_presets.json'),
         itemCatalogPath: path.join(repoPublicDir, 'item_catalog.json'),
         tileVariantGroupsPath: path.join(repoPublicDir, 'tile_variant_groups.json'),

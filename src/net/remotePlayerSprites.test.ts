@@ -39,6 +39,18 @@ describe('RemotePlayerSpriteManager', () => {
         });
     });
 
+    it('buildRemoteDepthEntries reutiliza buffer out', () => {
+        const mgr = new RemotePlayerSpriteManager();
+        const buffer: ReturnType<RemotePlayerSpriteManager['buildRemoteDepthEntries']> = [];
+        const first = mgr.buildRemoteDepthEntries([makeSnapshot()], buffer);
+        const second = mgr.buildRemoteDepthEntries([makeSnapshot({ tileX: 12 })], buffer);
+
+        expect(first).toBe(buffer);
+        expect(second).toBe(buffer);
+        expect(buffer).toHaveLength(1);
+        expect(buffer[0]?.tileX).toBe(12);
+    });
+
     it('spawnFloatingDamage enfileira dano quando state visual ainda não existe', () => {
         const mgr = new RemotePlayerSpriteManager();
         mgr.spawnFloatingDamage('p_test', 12, 1000);

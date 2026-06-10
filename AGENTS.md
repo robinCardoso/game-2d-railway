@@ -22,6 +22,7 @@ Este repositório é **Elarion Online** — MMORPG 2D estilo Tibia com **Elarion
 | [docs/hosting.md](docs/hosting.md) | Deploy Railway (migração concluída), PostgreSQL, APIs unificadas |
 | [docs/multiplayer-remote-players.md](docs/multiplayer-remote-players.md) | Jogadores remotos (estado atual + roadmap escala) |
 | [docs/playstore-steam-roadmap.md](docs/playstore-steam-roadmap.md) | Planejamento, empacotamento e adaptações para Steam e Play Store |
+| [docs/game-rates.md](docs/game-rates.md) | `GAME_RATE_EXP` — multiplicador global de XP |
 
 
 ## Invariantes críticas (resumo)

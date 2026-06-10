@@ -1,0 +1,10 @@
+{
+  "sheetUrl": "/tiles/effects/spells/cast/melee_default.png",
+  "frameWidth": 64,
+  "frameHeight": 64,
+  "frameCount": 4,
+  "fps": 12,
+  "drawScale": 1.1,
+  "rotateToTarget": true,
+  "durationMs": 300
+}

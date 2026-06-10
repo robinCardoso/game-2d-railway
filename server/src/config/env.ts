@@ -35,4 +35,6 @@ export const env = {
     desktopMinVersion: process.env.DESKTOP_MIN_VERSION?.trim() || '0.1.0',
     /** Versão mais recente recomendada (informativa para o cliente). */
     desktopLatestVersion: process.env.DESKTOP_LATEST_VERSION?.trim() || '0.1.0',
+    /** Multiplicador global de XP por kill (OTC rateExp). Padrão 1. */
+    rateExp: Number(process.env.GAME_RATE_EXP ?? 1),
 } as const;

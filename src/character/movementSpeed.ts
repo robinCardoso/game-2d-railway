@@ -6,8 +6,8 @@
  * Orquestração → `characterMovement.ts`
  */
 
-import type { AccountType } from '../functions/roles';
-import type { SpeedBuffTotals } from './speedBuffs';
+import type { AccountType } from '../functions/roles.js';
+import type { SpeedBuffTotals } from './speedBuffs.js';
 
 export const MOVEMENT_SPEED_LIMITS = {
     MIN: 1,

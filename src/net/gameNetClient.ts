@@ -1,4 +1,6 @@
+import type { ChatPlayerChannel } from '../../shared/chatConfig';
 import type {
+    ChatBroadcastMessage,
     ClientMessage,
     CreatureSnapshot,
     PlayerAppearance,
@@ -6,8 +8,10 @@ import type {
     ServerMessage,
 } from '../../shared/protocol';
 import { PROTOCOL_VERSION } from '../../shared/protocol';
+import { applyPlayerSnapshotList } from '../../shared/snapshotSync';
 import { sameRoom } from '../../shared/roomKey';
 import { getMapEntry } from '../engine/mapRegistry';
+import { recordPlayWsMessage } from '../game/debug/playPerformanceMonitor';
 import { applyServerMessageToStore, recordPingSent, resetServerStateStore } from './serverStateStore';
 import { detectRuntimePlatform } from '../game/runtime/platform';
 import { getClientRuntimeConfig } from '../game/runtime/runtimeEnv';
@@ -37,6 +41,7 @@ export interface GameNetClientOptions {
         steppingDestTileY?: number;
         level?: number;
         experience?: number;
+        spellBar?: { slot1?: string; slot2?: string; slot3?: string };
     };
     onStatusChange?: (status: NetStatus) => void;
     /** Servidor atribuiu instanceId (dungeon instanciada). */
@@ -77,6 +82,12 @@ export interface GameNetClientOptions {
         damage: number;
         attackerPlayerId?: string;
     }) => void;
+    onAttackMiss?: (payload: {
+        creatureId: string;
+        mapId: string;
+        instanceId?: string;
+        code?: string;
+    }) => void;
     onCreatureDied?: (payload: {
         creatureId: string;
         mapId: string;
@@ -105,6 +116,13 @@ export interface GameNetClientOptions {
         health?: number;
         maxHealth?: number;
     }) => void;
+    onPlayerResources?: (payload: {
+        playerId: string;
+        health: number;
+        maxHealth: number;
+        mana: number;
+        maxMana: number;
+    }) => void;
     onPlayerDamaged?: (payload: {
         playerId: string;
         health: number;
@@ -128,9 +146,10 @@ export interface GameNetClientOptions {
         mana?: number;
         maxMana?: number;
     }) => void;
-    onServerError?: (payload: { code: string; message: string }) => void;
+    onServerError?: (payload: { code: string; message: string; retryAfterMs?: number }) => void;
+    onChatMessage?: (msg: ChatBroadcastMessage) => void;
     /** Após `welcome` — sincronizar XP local com o servidor (dev/mock). */
-    onWelcome?: (payload: { health: number; maxHealth: number }) => void;
+    onWelcome?: (payload: { health: number; maxHealth: number; rateExp?: number }) => void;
 }
 
 /**
@@ -204,6 +223,24 @@ export class GameNetClient {
         });
     }
 
+    /** Conjura magia em criatura — combate autoritativo (spell system). */
+    sendCastSpell(
+        spellId: string,
+        creatureId: string,
+        mapId: string,
+        instanceId?: string | null
+    ): void {
+        if (!this.isConnected()) return;
+        this.send({
+            type: 'cast_spell',
+            v: PROTOCOL_VERSION,
+            spellId,
+            creatureId,
+            mapId,
+            instanceId: instanceId ?? this.networkInstanceId ?? undefined,
+        });
+    }
+
     sendProgressSync(level: number, experience: number): void {
         if (!this.isConnected()) return;
         this.send({
@@ -214,10 +251,37 @@ export class GameNetClient {
         });
     }
 
+    sendSpellBarSync(spellBar: {
+        slot1?: string;
+        slot2?: string;
+        slot3?: string;
+    }): void {
+        if (!this.isConnected()) return;
+        this.send({
+            type: 'spell_bar_sync',
+            v: PROTOCOL_VERSION,
+            slot1: spellBar.slot1,
+            slot2: spellBar.slot2,
+            slot3: spellBar.slot3,
+        });
+    }
+
     /** Pede snapshot da sala após aba voltar ao foco (creature_sync + state_sync). */
     requestRoomResync(): void {
         if (!this.isConnected()) return;
         this.send({ type: 'resync_request', v: PROTOCOL_VERSION });
+    }
+
+    sendChat(channel: ChatPlayerChannel, text: string): void {
+        if (!this.isConnected()) return;
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        this.send({
+            type: 'chat_send',
+            v: PROTOCOL_VERSION,
+            channel,
+            text: trimmed,
+        });
     }
 
     connect(): void {
@@ -448,6 +512,7 @@ export class GameNetClient {
             experience: state.experience,
             platform: detectRuntimePlatform(),
             clientBuildVersion: getClientRuntimeConfig().buildVersion,
+            spellBar: state.spellBar,
         });
     }
 
@@ -468,6 +533,7 @@ export class GameNetClient {
         // Aplica estado autoritativo ANTES dos callbacks — garante consistência
         // mesmo se o render loop estiver pausado (Electron minimizado, browser throttlado).
         applyServerMessageToStore(msg);
+        recordPlayWsMessage(msg.type);
 
         switch (msg.type) {
             case 'welcome':
@@ -511,6 +577,7 @@ export class GameNetClient {
                 this.options.onWelcome?.({
                     health: msg.health,
                     maxHealth: msg.maxHealth,
+                    rateExp: msg.rateExp,
                 });
                 break;
             case 'instance_assigned':
@@ -555,12 +622,7 @@ export class GameNetClient {
                 break;
             }
             case 'state_sync':
-                this.remotePlayers.clear();
-                for (const p of msg.players) {
-                    if (p.playerId !== this.localPlayerId) {
-                        this.remotePlayers.set(p.playerId, p);
-                    }
-                }
+                applyPlayerSnapshotList(this.remotePlayers, msg.players, this.localPlayerId ?? undefined);
                 break;
             case 'position_correction':
                 this.lastSynced = {
@@ -583,7 +645,14 @@ export class GameNetClient {
                 break;
             case 'error':
                 console.warn(`[GameNet] ${msg.code}: ${msg.message}`);
-                this.options.onServerError?.({ code: msg.code, message: msg.message });
+                this.options.onServerError?.({
+                    code: msg.code,
+                    message: msg.message,
+                    retryAfterMs: msg.retryAfterMs,
+                });
+                break;
+            case 'chat_message':
+                this.options.onChatMessage?.(msg);
                 break;
             case 'pong':
                 break;
@@ -616,6 +685,14 @@ export class GameNetClient {
                     maxHealth: msg.maxHealth,
                     damage: msg.damage,
                     attackerPlayerId: msg.attackerPlayerId,
+                });
+                break;
+            case 'attack_miss':
+                this.options.onAttackMiss?.({
+                    creatureId: msg.creatureId,
+                    mapId: msg.mapId,
+                    instanceId: msg.instanceId,
+                    code: msg.code,
                 });
                 break;
             case 'creature_died':
@@ -651,6 +728,17 @@ export class GameNetClient {
                         leveledUp: msg.leveledUp,
                         health: msg.health,
                         maxHealth: msg.maxHealth,
+                    });
+                }
+                break;
+            case 'player_resources':
+                if (msg.playerId === this.localPlayerId) {
+                    this.options.onPlayerResources?.({
+                        playerId: msg.playerId,
+                        health: msg.health,
+                        maxHealth: msg.maxHealth,
+                        mana: msg.mana,
+                        maxMana: msg.maxMana,
                     });
                 }
                 break;

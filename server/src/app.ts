@@ -7,9 +7,12 @@ import { healthHandler } from './routes/health.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createCharactersRouter } from './routes/characters.js';
 import { createCharacterInventoryRouter } from './routes/characterInventory.js';
+import { createCharacterSpellSlotsRouter } from './routes/characterSpellSlots.js';
+import { createCharacterSpellsRouter } from './routes/characterSpells.js';
 import { createWsTicketRouter } from './routes/wsTicket.js';
 import { createStudioRouter } from './routes/studio/index.js';
 import { desktopVersionHandler } from './routes/desktopVersion.js';
+import { gameRatesHandler } from './routes/gameRates.js';
 import { studioService } from './studio/studioService.js';
 import { isDatabaseConfigured } from './db/pool.js';
 import type { MapCollisionStore } from './MapCollisionStore.js';
@@ -30,6 +33,33 @@ const CAPACITOR_WEBVIEW_ORIGINS = [
     'capacitor://localhost',
     'ionic://localhost',
 ] as const;
+
+function resolveExistingFile(filePath: string): string | null {
+    const abs = path.resolve(filePath);
+    try {
+        if (fs.existsSync(abs) && fs.statSync(abs).isFile()) return abs;
+    } catch {
+        /* ignore */
+    }
+    return null;
+}
+
+function serveJsonFile(route: string, filePath: string, app: Express): void {
+    app.get(route, (_req, res, next) => {
+        const abs = resolveExistingFile(filePath);
+        if (!abs) {
+            next();
+            return;
+        }
+        try {
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.send(fs.readFileSync(abs, 'utf8'));
+        } catch (err) {
+            next(err);
+        }
+    });
+}
 
 function buildAllowedCorsOrigins(): Set<string> {
     const origins = new Set<string>();
@@ -84,9 +114,18 @@ export function createApp(getOnline: (() => number) | undefined, collision: MapC
         '/api/characters/:characterId/inventory',
         createCharacterInventoryRouter()
     );
+    app.use(
+        '/api/characters/:characterId/spell-slots',
+        createCharacterSpellSlotsRouter()
+    );
+    app.use(
+        '/api/characters/:characterId/spells',
+        createCharacterSpellsRouter()
+    );
     app.use('/api/characters', createCharactersRouter((mapId) => collision.getMapSpawn(mapId)));
     app.use('/api/ws-ticket', createWsTicketRouter(collision));
     app.get('/api/desktop/version', desktopVersionHandler);
+    app.get('/api/game-rates', gameRatesHandler);
     studioService.setCollisionStore(collision);
     app.use('/api', createStudioRouter());
 
@@ -107,27 +146,27 @@ export function createApp(getOnline: (() => number) | undefined, collision: MapC
             res.status(403).send('Forbidden');
             return;
         }
-        if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-            const ext = path.extname(filePath).toLowerCase();
+        const absTile = resolveExistingFile(filePath);
+        if (absTile) {
+            const ext = path.extname(absTile).toLowerCase();
             res.setHeader('Content-Type', MIME_TYPES[ext] ?? 'application/octet-stream');
             res.setHeader('Cache-Control', 'no-cache');
-            res.sendFile(filePath);
+            res.sendFile(absTile);
             return;
         }
         // Volume DATA_ROOT pode não ter subpastas read-only novas (ex. effects/combat/)
         if (env.dataRoot) {
             const repoFilePath = path.join(paths.repoTilesDir, safePath);
             const repoRoot = path.normalize(paths.repoTilesDir + path.sep);
-            if (
-                (repoFilePath.startsWith(repoRoot) || repoFilePath === paths.repoTilesDir) &&
-                fs.existsSync(repoFilePath) &&
-                fs.statSync(repoFilePath).isFile()
-            ) {
-                const ext = path.extname(repoFilePath).toLowerCase();
-                res.setHeader('Content-Type', MIME_TYPES[ext] ?? 'application/octet-stream');
-                res.setHeader('Cache-Control', 'no-cache');
-                res.sendFile(repoFilePath);
-                return;
+            if (repoFilePath.startsWith(repoRoot) || repoFilePath === paths.repoTilesDir) {
+                const absRepoTile = resolveExistingFile(repoFilePath);
+                if (absRepoTile) {
+                    const ext = path.extname(absRepoTile).toLowerCase();
+                    res.setHeader('Content-Type', MIME_TYPES[ext] ?? 'application/octet-stream');
+                    res.setHeader('Cache-Control', 'no-cache');
+                    res.sendFile(absRepoTile);
+                    return;
+                }
             }
         }
         next();
@@ -140,35 +179,17 @@ export function createApp(getOnline: (() => number) | undefined, collision: MapC
 
     // Presets/catálogos do volume
     if (env.dataRoot) {
-        const serveDataFile = (route: string, filePath: string) => {
-            app.get(route, (_req, res, next) => {
-                if (fs.existsSync(filePath)) {
-                    res.setHeader('Content-Type', 'application/json');
-                    res.setHeader('Cache-Control', 'no-cache');
-                    res.sendFile(filePath);
-                    return;
-                }
-                next();
-            });
-        };
-        serveDataFile('/tile_catalog.json', paths.tileCatalogPath);
-        serveDataFile('/auto_border_sets.json', paths.autoBorderSetsPath);
-        serveDataFile('/creature_presets.json', paths.creaturePresetsPath);
-        serveDataFile('/outfit_presets.json', paths.outfitPresetsPath);
-        serveDataFile('/item_catalog.json', paths.itemCatalogPath);
-        serveDataFile('/tile_variant_groups.json', paths.tileVariantGroupsPath);
-        serveDataFile('/vocations.json', paths.vocationsJsonPath);
+        serveJsonFile('/tile_catalog.json', paths.tileCatalogPath, app);
+        serveJsonFile('/auto_border_sets.json', paths.autoBorderSetsPath, app);
+        serveJsonFile('/creature_presets.json', paths.creaturePresetsPath, app);
+        serveJsonFile('/spell_catalog.json', paths.spellCatalogPath, app);
+        serveJsonFile('/outfit_presets.json', paths.outfitPresetsPath, app);
+        serveJsonFile('/item_catalog.json', paths.itemCatalogPath, app);
+        serveJsonFile('/tile_variant_groups.json', paths.tileVariantGroupsPath, app);
+        serveJsonFile('/vocations.json', paths.vocationsJsonPath, app);
     }
 
-    app.get('/vocations.json', (_req, res, next) => {
-        if (fs.existsSync(paths.vocationsJsonPath)) {
-            res.setHeader('Content-Type', 'application/json');
-            res.setHeader('Cache-Control', 'no-cache');
-            res.sendFile(paths.vocationsJsonPath);
-            return;
-        }
-        next();
-    });
+    serveJsonFile('/vocations.json', paths.vocationsJsonPath, app);
 
     if (fs.existsSync(paths.distDir)) {
         app.use(express.static(paths.distDir, { index: 'index.html' }));

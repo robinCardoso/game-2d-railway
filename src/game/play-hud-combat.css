@@ -1,0 +1,265 @@
+/**
+ * Fase 4 — hub de combate (canto inferior direito do canvas).
+ * Arco: slot 3 (9h) · slot 2 (10h30) · slot 1 (12h) · ataque (âncora).
+ */
+
+.play-combat-hub {
+    position: absolute;
+    right: max(12px, env(safe-area-inset-right, 0px));
+    bottom: max(16px, env(safe-area-inset-bottom, 0px));
+    z-index: 28;
+    pointer-events: none;
+}
+
+.play-combat-hub__cluster {
+    --hub-attack: 76px;
+    --hub-spell: 50px;
+    --hub-pad: 12px;
+    --hub-orbit: calc(var(--hub-attack) / 2 + var(--hub-spell) / 2 + var(--hub-pad));
+    --hub-cx: calc(var(--hub-attack) / 2);
+    --hub-cy: calc(var(--hub-attack) / 2);
+    position: relative;
+    width: calc(var(--hub-cx) + var(--hub-orbit) + var(--hub-spell) / 2);
+    height: calc(var(--hub-cy) + var(--hub-orbit) + var(--hub-spell) / 2);
+    pointer-events: auto;
+}
+
+.play-combat-hub__spell-slot {
+    --slot-tx: 0px;
+    --slot-ty: 0px;
+    position: absolute;
+    width: var(--hub-spell);
+    height: var(--hub-spell);
+    right: calc(var(--hub-cx) - var(--hub-spell) / 2);
+    bottom: calc(var(--hub-cy) - var(--hub-spell) / 2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    transform: translate(var(--slot-tx), var(--slot-ty));
+    transition: transform 0.12s ease;
+    z-index: 2;
+}
+
+/* 12h — acima do ataque */
+.play-combat-hub__spell-slot--1 {
+    --slot-tx: 0px;
+    --slot-ty: calc(-1 * var(--hub-orbit));
+    z-index: 4;
+}
+
+/* 10h30 — superior-esquerdo */
+.play-combat-hub__spell-slot--2 {
+    --slot-tx: calc(var(--hub-orbit) * -0.707);
+    --slot-ty: calc(var(--hub-orbit) * -0.707);
+    z-index: 3;
+}
+
+/* 9h — esquerda do ataque */
+.play-combat-hub__spell-slot--3 {
+    --slot-tx: calc(-1 * var(--hub-orbit));
+    --slot-ty: 0px;
+    z-index: 2;
+}
+
+.play-combat-hub__spell-slot:active {
+    transform: translate(var(--slot-tx), var(--slot-ty)) scale(0.94);
+}
+
+.play-combat-hub__spell-ring {
+    position: relative;
+    width: var(--hub-spell);
+    height: var(--hub-spell);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at 35% 28%, #2a3140 0%, #141820 72%);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.play-combat-hub__spell-slot:hover .play-combat-hub__spell-ring,
+.play-combat-hub__spell-slot:focus-visible .play-combat-hub__spell-ring {
+    border-color: rgba(245, 158, 11, 0.5);
+}
+
+.play-combat-hub__spell-slot.is-on-cooldown .play-combat-hub__spell-ring {
+    opacity: 0.55;
+}
+
+.play-combat-hub__spell-icon {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.play-combat-hub__spell-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+.play-combat-hub__spell-badge {
+    position: absolute;
+    right: -2px;
+    top: 0;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: #1e293b;
+    border: 2px solid #141820;
+    color: #f8fafc;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 12px;
+    text-align: center;
+    pointer-events: none;
+}
+
+.play-combat-hub__spell-cooldown {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    pointer-events: none;
+    opacity: 0;
+    background: conic-gradient(
+        rgba(0, 0, 0, 0.55) var(--cd-pct, 0%),
+        transparent var(--cd-pct, 0%)
+    );
+    transition: opacity 0.1s ease;
+}
+
+.play-combat-hub__spell-slot.is-on-cooldown .play-combat-hub__spell-cooldown {
+    opacity: 1;
+}
+
+/* Botão ataque — âncora canto inferior direito do cluster */
+.play-combat-hub__attack-wrap {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    z-index: 1;
+}
+
+.play-combat-hub__attack {
+    position: relative;
+    width: var(--hub-attack);
+    height: var(--hub-attack);
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    cursor: pointer;
+    background: radial-gradient(circle at 35% 28%, #3d3520 0%, #1a1810 72%);
+    border: 3px solid rgba(251, 191, 36, 0.55);
+    box-shadow:
+        0 0 20px rgba(251, 191, 36, 0.25),
+        0 6px 20px rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.12s ease, border-color 0.18s ease;
+}
+
+.play-combat-hub__attack:hover {
+    border-color: #fbbf24;
+    box-shadow:
+        0 0 28px rgba(251, 191, 36, 0.4),
+        0 6px 20px rgba(0, 0, 0, 0.45);
+}
+
+.play-combat-hub__attack:active {
+    transform: scale(0.94);
+}
+
+.play-combat-hub__attack:focus-visible {
+    outline: 2px solid #f59e0b;
+    outline-offset: 3px;
+}
+
+.play-combat-hub__attack.is-on-cooldown {
+    border-color: rgba(100, 116, 139, 0.5);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.play-combat-hub__attack-icon {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+}
+
+.play-combat-hub__attack-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    pointer-events: none;
+}
+
+.play-combat-hub__attack-cooldown {
+    position: absolute;
+    inset: 4px;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 2;
+    opacity: 0;
+    background: conic-gradient(
+        from -90deg,
+        rgba(0, 0, 0, 0.65) var(--cd-pct, 0%),
+        transparent var(--cd-pct, 0%)
+    );
+    transition: opacity 0.08s linear;
+}
+
+.play-combat-hub__attack.is-on-cooldown .play-combat-hub__attack-cooldown {
+    opacity: 1;
+}
+
+@media (min-width: 1366px) {
+    .play-combat-hub {
+        right: max(16px, env(safe-area-inset-right, 0px));
+        bottom: max(20px, env(safe-area-inset-bottom, 0px));
+    }
+
+    .play-combat-hub__cluster {
+        --hub-attack: 82px;
+        --hub-spell: 54px;
+        --hub-pad: 14px;
+    }
+}
+
+@media (max-width: 520px) {
+    .play-combat-hub {
+        right: max(8px, env(safe-area-inset-right, 0px));
+        bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    }
+
+    .play-combat-hub__cluster {
+        --hub-attack: 68px;
+        --hub-spell: 44px;
+        --hub-pad: 10px;
+    }
+
+    .play-combat-hub__attack-icon {
+        width: 34px;
+        height: 34px;
+    }
+
+    .play-combat-hub__spell-icon {
+        width: 24px;
+        height: 24px;
+    }
+}

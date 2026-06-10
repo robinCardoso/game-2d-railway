@@ -43,9 +43,28 @@ function catalogById(catalog: ItemCatalogDocument): Map<string, ItemCatalogEntry
     return new Map(catalog.items.map((item) => [item.id, item]));
 }
 
+/** Contagem total por itemId (equipamento + mochila). */
+export function countInventoryItems(
+    inventory: CharacterInventoryDocument
+): Map<string, number> {
+    const counts = new Map<string, number>();
+    const add = (itemId: string, qty: number) => {
+        counts.set(itemId, (counts.get(itemId) ?? 0) + qty);
+    };
+    for (const slot of EQUIPMENT_SLOTS) {
+        const itemId = inventory.equipment[slot];
+        if (itemId) add(itemId, 1);
+    }
+    for (const row of inventory.backpack) {
+        add(row.itemId, row.quantity);
+    }
+    return counts;
+}
+
 export function validateCharacterInventory(
     raw: unknown,
-    catalog: ItemCatalogDocument
+    catalog: ItemCatalogDocument,
+    options?: { previous?: CharacterInventoryDocument }
 ): { ok: true; value: CharacterInventoryDocument } | { ok: false; errors: string[] } {
     const errors: string[] = [];
     if (!raw || typeof raw !== 'object') {
@@ -85,6 +104,10 @@ export function validateCharacterInventory(
             }
             if (entry.slot !== slot) {
                 errors.push(`Item ${itemId} não cabe no slot ${slot} (esperado ${entry.slot}).`);
+                continue;
+            }
+            if (entry.implemented === false) {
+                errors.push(`Item ${itemId} não está disponível no jogo.`);
                 continue;
             }
             equipment[slot] = itemId;
@@ -131,12 +154,51 @@ export function validateCharacterInventory(
             errors.push(`Item desconhecido na mochila: ${itemId}`);
             continue;
         }
+        const backpackEntry = byId.get(itemId);
+        if (backpackEntry?.implemented === false) {
+            errors.push(`Item ${itemId} não está disponível no jogo.`);
+            continue;
+        }
 
         seenSlots.add(slotIndex);
         backpack.push({ slotIndex, itemId, quantity });
     }
 
     backpack.sort((a, b) => a.slotIndex - b.slotIndex);
+
+    if (errors.length === 0) {
+        const equippedIds = new Set<string>();
+        for (const slot of EQUIPMENT_SLOTS) {
+            const itemId = equipment[slot];
+            if (!itemId) continue;
+            if (equippedIds.has(itemId)) {
+                errors.push(`Item ${itemId} equipado em mais de um slot.`);
+            }
+            equippedIds.add(itemId);
+        }
+
+        const backpackIds = new Set(backpack.map((row) => row.itemId));
+        for (const itemId of equippedIds) {
+            if (backpackIds.has(itemId)) {
+                errors.push(
+                    `Item ${itemId} não pode estar equipado e na mochila ao mesmo tempo.`
+                );
+            }
+        }
+
+        if (options?.previous) {
+            const prevCounts = countInventoryItems(options.previous);
+            const nextCounts = countInventoryItems({ equipment, backpack });
+            for (const [itemId, nextQty] of nextCounts) {
+                const prevQty = prevCounts.get(itemId) ?? 0;
+                if (nextQty > prevQty) {
+                    errors.push(
+                        `Item ${itemId}: quantidade inválida (${nextQty} > ${prevQty} possuídos).`
+                    );
+                }
+            }
+        }
+    }
 
     if (errors.length > 0) {
         return { ok: false, errors };

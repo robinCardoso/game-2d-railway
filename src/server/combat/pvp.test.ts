@@ -3,6 +3,7 @@ import { GameRoom } from '../../../server/src/GameRoom';
 import { MapCollisionStore } from '../../../server/src/MapCollisionStore';
 import { MapInstanceStore } from '../../../server/src/MapInstanceStore';
 import { CreaturePresetStore } from '../../../server/src/game/CreaturePresetStore';
+import { SpellCatalogStore } from '../../../server/src/game/SpellCatalogStore';
 import { VocationStore } from '../../../server/src/game/VocationStore';
 import { PROTOCOL_VERSION } from '../../../shared/protocol';
 import * as enterTicketModule from '../../../server/src/enterTicket';
@@ -12,6 +13,7 @@ describe('PvP Combat System Tests', () => {
     let collision: MapCollisionStore;
     let instances: MapInstanceStore;
     let creaturePresets: CreaturePresetStore;
+    let spellCatalog: SpellCatalogStore;
     let vocations: VocationStore;
     let room: GameRoom;
 
@@ -19,6 +21,7 @@ describe('PvP Combat System Tests', () => {
         collision = new MapCollisionStore();
         instances = new MapInstanceStore();
         creaturePresets = new CreaturePresetStore();
+        spellCatalog = new SpellCatalogStore();
         vocations = new VocationStore();
 
         // Spy/Stub methods to avoid file reading and allow custom mapping setups
@@ -58,6 +61,7 @@ describe('PvP Combat System Tests', () => {
             requireWsTicket: false,
             positionSaveIntervalMs: 0,
             creaturePresets,
+            spellCatalog,
             vocations,
         });
     });
@@ -121,6 +125,68 @@ describe('PvP Combat System Tests', () => {
         expect(damageMsg.playerId).toBe(targetId);
         expect(damageMsg.attackerPlayerId).toBe(attackerId);
         expect(damageMsg.damage).toBeGreaterThanOrEqual(0);
+    });
+
+    it('broadcast player_damaged só para espectadores no AOI 25×20', () => {
+        const attackerSocket = createMockSocket();
+        const targetSocket = createMockSocket();
+        const farSocket = createMockSocket();
+
+        const attackerId = 'p_attacker';
+        const targetId = 'p_target';
+        const farId = 'p_far';
+
+        room.handleMessage(attackerSocket, {
+            type: 'join',
+            v: PROTOCOL_VERSION,
+            name: 'Attacker',
+            playerId: attackerId,
+            mapId: 'mainland',
+            tileX: 10,
+            tileY: 10,
+            z: 0,
+            level: 10,
+            experience: 1000,
+        });
+
+        room.handleMessage(targetSocket, {
+            type: 'join',
+            v: PROTOCOL_VERSION,
+            name: 'Target',
+            playerId: targetId,
+            mapId: 'mainland',
+            tileX: 10,
+            tileY: 11,
+            z: 0,
+            level: 10,
+            experience: 1000,
+        });
+
+        room.handleMessage(farSocket, {
+            type: 'join',
+            v: PROTOCOL_VERSION,
+            name: 'Far',
+            playerId: farId,
+            mapId: 'mainland',
+            tileX: 200,
+            tileY: 200,
+            z: 0,
+            level: 10,
+            experience: 1000,
+        });
+
+        room.handleMessage(attackerSocket, {
+            type: 'attack',
+            v: PROTOCOL_VERSION,
+            mapId: 'mainland',
+            creatureId: targetId,
+        });
+
+        const parse = (sock: ReturnType<typeof createMockSocket>) =>
+            sock.send.mock.calls.map((call: unknown[]) => JSON.parse(call[0] as string));
+
+        expect(parse(targetSocket).some((m) => m.type === 'player_damaged')).toBe(true);
+        expect(parse(farSocket).some((m) => m.type === 'player_damaged')).toBe(false);
     });
 
     it('should block PvP combat in No-PvP map (e.g. rookgaard)', () => {
@@ -519,6 +585,11 @@ describe('PvP Combat System Tests', () => {
 
         const attackerSent = attackerSocket.send.mock.calls.map((call: any) => JSON.parse(call[0]));
         expect(attackerSent.find((m: any) => m.type === 'creature_damaged')).toBeUndefined();
+        expect(attackerSent.find((m: any) => m.type === 'attack_miss')).toMatchObject({
+            type: 'attack_miss',
+            creatureId: mobId,
+            code: 'NOT_ADJACENT',
+        });
     });
 
     it('should initialize player health from ticket if valid', () => {

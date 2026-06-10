@@ -23,6 +23,8 @@
 
 .play-panel[hidden] {
     display: none !important;
+    content-visibility: hidden;
+    contain: strict;
 }
 
 .play-panel-header {
@@ -104,29 +106,6 @@
     object-fit: cover;
 }
 
-.character-panel-bars {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-bottom: 16px;
-    font-size: 13px;
-}
-
-.stat-exp-bar {
-    height: 8px;
-    background: rgba(255, 255, 255, 0.08);
-    border-radius: 999px;
-    overflow: hidden;
-    margin-top: 6px;
-}
-
-#statExpBarFill {
-    height: 100%;
-    width: 0%;
-    background: linear-gradient(90deg, #6366f1, #22d3ee);
-    transition: width 0.25s ease;
-}
-
 .character-stat-list {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -164,6 +143,11 @@
 
     .play-panel--settings {
         width: min(620px, calc(100vw - 44px));
+    }
+
+    .play-panel--spells {
+        width: min(860px, calc(100vw - 44px));
+        max-height: min(640px, calc(100dvh - 110px));
     }
 }
 

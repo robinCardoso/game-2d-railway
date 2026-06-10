@@ -27,6 +27,7 @@ import {
 import { initAutoBorderUi, onMapEditorTileSelectionChanged, getActiveBorderSet } from './editor/autoBorderUi';
 import { initVocationEditor } from './editor/vocationEditorModal';
 import { initMobStatsEditor } from './editor/mobStatsEditorModal';
+import { initSpellEditor, refreshSpellEditorPanel } from './editor/spellEditor';
 import { initItemEditor } from './editor/itemEditorModal';
 import { CREATURE_PRESETS_UPDATED } from './game-data/creaturePresetUi';
 import { ITEM_CATALOG_UPDATED } from './game-data/itemCatalogUi';
@@ -706,6 +707,10 @@ function parseSpriteProfile(value: string | undefined): SpriteProfileId {
 
 editorShell = initEditorShell();
 editorShell.setPanelOpenHook((id, trigger) => {
+    if (id === 'spells') {
+        refreshSpellEditorPanel();
+        return;
+    }
     if (id !== 'character') return;
     const profile = parseSpriteProfile(trigger?.dataset.spriteProfile);
     setSpriteEditorProfile(profile);
@@ -722,6 +727,7 @@ initCharacterEditor({ onCatalogChanged: refreshCreatureCatalog });
 initMapSpriteEditor();
 initVocationEditor();
 initMobStatsEditor();
+initSpellEditor();
 initItemEditor();
 initAutoBorderUi({ onRecalcFloor: () => recalcAutoBorderForEditingFloor() });
 

@@ -11,7 +11,7 @@
       "magicAttack": 1,
       "distanceAttack": 2,
       "defense": 10,
-      "attackSpeed": 900,
+      "attackSpeed": 1500,
       "defenseAttack": 8,
       "health": 180,
       "mana": 30

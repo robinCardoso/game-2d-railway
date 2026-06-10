@@ -106,5 +106,9 @@ export function createStudioRouter(): Router {
     router.post('/save-item-catalog', wrap((req) => studioService.saveItemCatalog(req.body ?? {})));
     router.post('/save-item-icon', wrap((req) => studioService.saveItemIcon(req.body ?? {})));
 
+    router.get('/get-spell-catalog', wrap(() => studioService.getSpellCatalog()));
+    router.post('/save-spell-catalog', wrap((req) => studioService.saveSpellCatalog(req.body ?? {})));
+    router.post('/save-spell-icon', wrap((req) => studioService.saveSpellIcon(req.body ?? {})));
+
     return router;
 }
