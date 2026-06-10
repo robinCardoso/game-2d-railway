@@ -497,7 +497,6 @@ function respawnEntities(): void {
 
 /** Recarrega presets (visualSize/drawScale) e respawna NPCs — útil após editar mob no Studio. */
 async function reloadCreaturePresetsForPlay(): Promise<void> {
-    await assetLoader.initialize();
     await loadItemCatalog();
     await loadCreaturePresets();
     if (usesServerCreatures()) {
@@ -1988,6 +1987,7 @@ export async function startPlay(
         setWorldEntryStage('character', 'active', 'Carregando personagem...');
     }
 
+    await assetLoader.initialize();
     await loadRuntimeVocations();
     await loadSpellCatalog();
     await loadClientGameRates();

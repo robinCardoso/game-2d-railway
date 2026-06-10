@@ -1,4 +1,5 @@
 import { getTileProperties, normalizeTileFileName, type TileProperties } from '../functions/tileConfig';
+import { assetLoader } from '../game-data/assetLoader';
 import type { PaletteCategory, RegistryTile, TileRegistry } from './types';
 import { ENGINE_CONFIG, tileAssetSizeSuffix } from './config';
 import customTileProperties from '../../tiles/tile_properties.json';
@@ -422,6 +423,30 @@ function getTileImageGlob(): Record<string, string> {
     }) as Record<string, string>;
 }
 
+async function collectTileImageSources(): Promise<Array<{ registryPath: string; loadPath: string }>> {
+    await assetLoader.initialize();
+
+    if (assetLoader.isPackaged()) {
+        return assetLoader
+            .listFiles('tiles/', '.png')
+            .filter((path) => {
+                const fileName = path.split('/').pop()!.replace('.png', '');
+                return shouldRegisterTilePath(path, fileName);
+            })
+            .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+            .map((path) => ({ registryPath: path, loadPath: `/${path}` }));
+    }
+
+    const tileImagesRaw = getTileImageGlob();
+    return Object.keys(tileImagesRaw)
+        .filter((path) => {
+            const fileName = path.split('/').pop()!.replace('.png', '');
+            return shouldRegisterTilePath(path, fileName);
+        })
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+        .map((path) => ({ registryPath: path, loadPath: tileImagesRaw[path] }));
+}
+
 /**
  * Carrega PNGs aguardando dimensões — necessário para detectar variant strips.
  */
@@ -430,25 +455,22 @@ export async function buildTileRegistryAsync(options?: { bustImageCache?: boolea
     const bustCache = options?.bustImageCache ?? false;
     const registry = createEmptyRegistry();
     const ids = createNextIdAllocator(7);
-    const tileImagesRaw = getTileImageGlob();
-    const paths = Object.keys(tileImagesRaw)
-        .filter((path) => {
-            const fileName = path.split('/').pop()!.replace('.png', '');
-            return shouldRegisterTilePath(path, fileName);
-        })
-        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    const sources = await collectTileImageSources();
 
     const imageByPath = new Map<string, HTMLImageElement>();
     await Promise.all(
-        paths.map(async (path) => {
-            imageByPath.set(path, await loadImageElement(tileImagesRaw[path], bustCache));
+        sources.map(async ({ registryPath, loadPath }) => {
+            const img = assetLoader.isPackaged()
+                ? await assetLoader.loadImageElement(loadPath, bustCache)
+                : await loadImageElement(loadPath, bustCache);
+            imageByPath.set(registryPath, img);
         })
     );
 
-    for (const path of paths) {
-        const img = imageByPath.get(path);
+    for (const { registryPath } of sources) {
+        const img = imageByPath.get(registryPath);
         if (!img) continue;
-        registerLoadedTile(registry, ids, path, img);
+        registerLoadedTile(registry, ids, registryPath, img);
     }
 
     return registry;

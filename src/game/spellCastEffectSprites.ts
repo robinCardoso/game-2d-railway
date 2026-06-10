@@ -2,8 +2,8 @@
  * Strips de VFX de magia — `tiles/effects/spells/cast/{kind}.png` + JSON.
  * Mesmo contrato visual do anel de alvo (`combatTargetRing.ts`).
  */
+import { assetLoader } from '../game-data/assetLoader';
 import { removeChromaKey } from '../utils/imageProcessor';
-import { resolveApiUrl } from '../shared/apiUrl';
 import type { SpellCastEffectKind } from './spellCastEffects';
 
 export interface SpellCastSpriteConfig {
@@ -81,30 +81,22 @@ function applySheetFromImage(
     });
 }
 
-function loadKind(kind: SpellCastEffectKind): void {
+async function loadKind(kind: SpellCastEffectKind): Promise<void> {
     const entry = getSheet(kind);
     if (entry.loadStarted) return;
     entry.loadStarted = true;
 
-    const jsonUrl = resolveApiUrl(`/tiles/effects/spells/cast/${kind}.json`);
-    void fetch(jsonUrl)
-        .then((res) => (res.ok ? res.json() : null))
-        .then((json: Partial<SpellCastSpriteConfig> | null) => {
-            const img = new Image();
-            img.onload = () => applySheetFromImage(kind, img, json);
-            img.onerror = () => {
-                console.warn('[spellCastEffectSprites] PNG não encontrado:', kind);
-            };
-            const sheetUrl =
-                (json?.sheetUrl as string | undefined) ??
-                `tiles/effects/spells/cast/${kind}.png`;
-            img.src = resolveApiUrl('/' + sheetUrl.replace(/^\//, ''));
-        })
-        .catch(() => {
-            const img = new Image();
-            img.onload = () => applySheetFromImage(kind, img);
-            img.src = resolveApiUrl(`/tiles/effects/spells/cast/${kind}.png`);
-        });
+    await assetLoader.initialize();
+    const jsonPath = `tiles/effects/spells/cast/${kind}.json`;
+    const json = await assetLoader.fetchJson<Partial<SpellCastSpriteConfig>>(jsonPath);
+    const sheetUrl =
+        (json?.sheetUrl as string | undefined) ?? `tiles/effects/spells/cast/${kind}.png`;
+    const img = await assetLoader.loadImageElement('/' + sheetUrl.replace(/^\//, ''));
+    if (img.naturalWidth > 0) {
+        applySheetFromImage(kind, img, json);
+        return;
+    }
+    console.warn('[spellCastEffectSprites] PNG não encontrado:', kind);
 }
 
 export function ensureSpellCastSpritesLoaded(): void {

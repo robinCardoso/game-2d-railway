@@ -80,24 +80,40 @@ console.log(`Arquivos empacotados: ${filesToPack.length}`);
 
 // 3. Assinatura (Camada 4)
 function getOrCreateKeys() {
+    const envPrivateKey = process.env.ASSET_PACK_PRIVATE_KEY?.trim();
+    if (envPrivateKey) {
+        const privateKey = envPrivateKey.includes('BEGIN PRIVATE KEY')
+            ? envPrivateKey
+            : Buffer.from(envPrivateKey, 'base64').toString('utf8');
+        if (!fs.existsSync(PUBLIC_KEY_FILE)) {
+            throw new Error(
+                'ASSET_PACK_PRIVATE_KEY definida, mas public_key.pem não existe na raiz do projeto.',
+            );
+        }
+        return {
+            privateKey,
+            publicKey: fs.readFileSync(PUBLIC_KEY_FILE, 'utf8'),
+        };
+    }
+
     if (fs.existsSync(PRIVATE_KEY_FILE) && fs.existsSync(PUBLIC_KEY_FILE)) {
         return {
             privateKey: fs.readFileSync(PRIVATE_KEY_FILE, 'utf8'),
-            publicKey: fs.readFileSync(PUBLIC_KEY_FILE, 'utf8')
+            publicKey: fs.readFileSync(PUBLIC_KEY_FILE, 'utf8'),
         };
     }
-    
-    console.log('Gerando novo par de chaves ECDSA...');
+
+    console.log('Gerando novo par de chaves ECDSA (apenas desenvolvimento local)...');
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', {
         namedCurve: 'prime256v1',
         publicKeyEncoding: { type: 'spki', format: 'pem' },
-        privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+        privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
     });
-    
+
     fs.writeFileSync(PUBLIC_KEY_FILE, publicKey);
     fs.writeFileSync(PRIVATE_KEY_FILE, privateKey);
-    console.log('Chaves geradas: public_key.pem e private_key.pem');
-    
+    console.log('Chaves geradas: public_key.pem e private_key.pem (private_key.pem está no .gitignore)');
+
     return { privateKey, publicKey };
 }
 
