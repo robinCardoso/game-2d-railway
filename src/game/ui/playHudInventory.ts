@@ -301,15 +301,23 @@ function renderBackpack(
 
         const currentItemId = slot.dataset.itemId || '';
         const currentQty = slot.dataset.qty || '';
+        const currentLocked = slot.dataset.locked || 'false';
+        
         const targetItemId = row ? row.itemId : '';
         const targetQty = row ? String(row.quantity) : '';
+        const targetLocked = locked ? 'true' : 'false';
 
-        if (currentItemId === targetItemId && currentQty === targetQty) {
+        if (
+            currentItemId === targetItemId &&
+            currentQty === targetQty &&
+            currentLocked === targetLocked
+        ) {
             return;
         }
 
         slot.dataset.itemId = targetItemId;
         slot.dataset.qty = targetQty;
+        slot.dataset.locked = targetLocked;
 
         slot.classList.toggle('has-item', Boolean(row));
         slot.disabled = locked;
