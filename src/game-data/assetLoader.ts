@@ -15,8 +15,38 @@ export interface PakManifest {
     files: Record<string, PakManifestEntry>;
 }
 
+/** Converte URL/glob (`/tiles/foo.png`, `../../tiles/foo.png`) para chave do manifest. */
+function inferMimeType(relativePath: string): string {
+    const ext = relativePath.split('.').pop()?.toLowerCase();
+    switch (ext) {
+        case 'svg':
+            return 'image/svg+xml';
+        case 'jpg':
+        case 'jpeg':
+            return 'image/jpeg';
+        case 'gif':
+            return 'image/gif';
+        case 'webp':
+            return 'image/webp';
+        case 'json':
+            return 'application/json';
+        default:
+            return 'image/png';
+    }
+}
+
+export function normalizePackPath(publicPath: string): string {
+    let path = publicPath.replace(/\\/g, '/').replace(/^\//, '');
+    const tilesIdx = path.indexOf('tiles/');
+    if (tilesIdx > 0) {
+        path = path.slice(tilesIdx);
+    }
+    return path;
+}
+
 class AssetLoader {
     private active = false;
+    private initPromise: Promise<void> | null = null;
     private manifest: PakManifest | null = null;
     private memoryCache = new Map<string, ArrayBuffer>();
     private blobUrlCache = new Map<string, string>();
@@ -24,6 +54,21 @@ class AssetLoader {
 
     public isPackaged(): boolean {
         return this.active;
+    }
+
+    public hasFile(publicPath: string): boolean {
+        if (!this.active) return false;
+        return this.memoryCache.has(normalizePackPath(publicPath));
+    }
+
+    public listFiles(prefix = '', extension?: string): string[] {
+        if (!this.active || !this.manifest) return [];
+        const normPrefix = prefix.replace(/^\//, '');
+        return Object.keys(this.manifest.files).filter((key) => {
+            if (normPrefix && !key.startsWith(normPrefix)) return false;
+            if (extension && !key.toLowerCase().endsWith(extension.toLowerCase())) return false;
+            return true;
+        });
     }
 
     /** Helper to parse PEM into ArrayBuffer for Web Crypto API */
@@ -40,10 +85,17 @@ class AssetLoader {
     private async sha256(buffer: ArrayBuffer): Promise<string> {
         const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
         const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
     }
 
     public async initialize(): Promise<void> {
+        if (this.initPromise) return this.initPromise;
+
+        this.initPromise = this.doInitialize();
+        return this.initPromise;
+    }
+
+    private async doInitialize(): Promise<void> {
         if (import.meta.env.VITE_USE_LOOSE_ASSETS === 'true') {
             console.log('[AssetLoader] Usando modo loose assets (arquivos soltos).');
             return;
@@ -51,12 +103,11 @@ class AssetLoader {
 
         try {
             console.log('[AssetLoader] Tentando baixar assets.pak ...');
-            
-            // 1. Baixar tudo em paralelo
+
             const [pakRes, sigRes, pubKeyRes] = await Promise.all([
                 fetch(resolveApiUrl(PAK_URL)),
                 fetch(resolveApiUrl(SIG_URL)),
-                fetch(resolveApiUrl(PUB_KEY_URL))
+                fetch(resolveApiUrl(PUB_KEY_URL)),
             ]);
 
             if (!pakRes.ok) {
@@ -68,7 +119,6 @@ class AssetLoader {
             const sigBuffer = await sigRes.arrayBuffer();
             const pubKeyPem = await pubKeyRes.text();
 
-            // 2. Importar chave pública
             const pubKeyBuf = this.pemToArrayBuffer(pubKeyPem);
             const importedKey = await crypto.subtle.importKey(
                 'spki',
@@ -78,7 +128,6 @@ class AssetLoader {
                 ['verify']
             );
 
-            // 3. Validar assinatura (Camada 4)
             const isValid = await crypto.subtle.verify(
                 { name: 'ECDSA', hash: { name: 'SHA-256' } },
                 importedKey,
@@ -87,11 +136,12 @@ class AssetLoader {
             );
 
             if (!isValid) {
-                throw new Error('Assinatura do assets.pak falhou. Arquivo possivelmente corrompido ou adulterado!');
+                throw new Error(
+                    'Assinatura do assets.pak falhou. Arquivo possivelmente corrompido ou adulterado!'
+                );
             }
             console.log('[AssetLoader] Assinatura do pacote válida.');
 
-            // 4. Ler cabeçalho do pacote
             const pakDataView = new DataView(pakBuffer);
             const magicBuf = new Uint8Array(pakBuffer, 0, 12);
             const magicStr = this.textDecoder.decode(magicBuf);
@@ -102,16 +152,14 @@ class AssetLoader {
             const manifestSize = pakDataView.getUint32(12, true);
             const manifestBuf = new Uint8Array(pakBuffer, 16, manifestSize);
             const manifestStr = this.textDecoder.decode(manifestBuf);
-            
+
             this.manifest = JSON.parse(manifestStr) as PakManifest;
             const dataStartOffset = 16 + manifestSize;
 
-            // 5. Validar hashes e carregar arquivos na memória (Camada 2)
             for (const [filepath, entry] of Object.entries(this.manifest.files)) {
                 const fileStart = dataStartOffset + entry.offset;
                 const fileBuf = pakBuffer.slice(fileStart, fileStart + entry.size);
-                
-                // Validação de Hash para cada arquivo
+
                 const fileHash = await this.sha256(fileBuf);
                 if (fileHash !== entry.hash) {
                     throw new Error(`Hash inválido para o arquivo: ${filepath}`);
@@ -122,51 +170,107 @@ class AssetLoader {
 
             this.active = true;
             console.log(`[AssetLoader] Inicializado com sucesso! ${this.memoryCache.size} arquivos em cache.`);
-            
         } catch (err) {
             console.error('[AssetLoader] Erro fatal ao inicializar:', err);
-            throw err; // Impedir que o jogo continue se o pacote estiver adulterado
+            throw err;
         }
     }
 
-    /** Retorna um arquivo JSON parseado */
+    /** Retorna um arquivo JSON parseado do pacote. */
     public async getJson<T>(relativePath: string): Promise<T | null> {
         if (!this.active) return null;
-        
-        const buf = this.memoryCache.get(relativePath);
+
+        const buf = this.memoryCache.get(normalizePackPath(relativePath));
         if (!buf) return null;
 
         const str = this.textDecoder.decode(buf);
         return JSON.parse(str) as T;
     }
 
-    /** Retorna uma URL de Blob para imagens. Faz cache da URL. */
-    public getBlobUrl(relativePath: string, mimeType = 'image/png'): string | null {
+    /** Texto bruto do pacote (ex.: `.calibration.json`). */
+    public getText(relativePath: string): string | null {
         if (!this.active) return null;
 
-        if (this.blobUrlCache.has(relativePath)) {
-            return this.blobUrlCache.get(relativePath)!;
-        }
-
-        const buf = this.memoryCache.get(relativePath);
+        const buf = this.memoryCache.get(normalizePackPath(relativePath));
         if (!buf) return null;
 
-        const blob = new Blob([buf], { type: mimeType });
+        return this.textDecoder.decode(buf);
+    }
+
+    /** JSON do pacote ou fetch HTTP em modo loose. */
+    public async fetchJson<T>(publicPath: string): Promise<T | null> {
+        const packKey = normalizePackPath(publicPath);
+        if (this.active) {
+            return this.getJson<T>(packKey);
+        }
+
+        try {
+            const url = publicPath.startsWith('/') ? publicPath : `/${publicPath}`;
+            const res = await fetch(resolveApiUrl(url), { cache: 'no-store' });
+            if (!res.ok) return null;
+            return (await res.json()) as T;
+        } catch {
+            return null;
+        }
+    }
+
+    /** Texto do pacote ou fetch HTTP em modo loose. */
+    public async fetchText(publicPath: string): Promise<string | null> {
+        if (this.active) {
+            return this.getText(publicPath);
+        }
+
+        try {
+            const url = publicPath.startsWith('/') ? publicPath : `/${publicPath}`;
+            const res = await fetch(resolveApiUrl(url), { cache: 'no-store' });
+            if (!res.ok) return null;
+            return await res.text();
+        } catch {
+            return null;
+        }
+    }
+
+    /** Retorna uma URL de Blob para imagens. Faz cache da URL. */
+    public getBlobUrl(relativePath: string, mimeType?: string): string | null {
+        if (!this.active) return null;
+
+        const key = normalizePackPath(relativePath);
+        if (this.blobUrlCache.has(key)) {
+            return this.blobUrlCache.get(key)!;
+        }
+
+        const buf = this.memoryCache.get(key);
+        if (!buf) return null;
+
+        const blob = new Blob([buf], { type: mimeType ?? inferMimeType(key) });
         const url = URL.createObjectURL(blob);
-        this.blobUrlCache.set(relativePath, url);
+        this.blobUrlCache.set(key, url);
         return url;
     }
 
-    /** Resolve um caminho genérico (usa o pacote se ativo, ou url normal) */
+    /** Resolve caminho para blob URL (pacote) ou URL HTTP (loose). */
     public resolveAssetUrl(publicPath: string): string {
+        const normalized = normalizePackPath(publicPath);
         if (this.active) {
-            // Remove a barra inicial se existir
-            const relativePath = publicPath.replace(/^\//, '');
-            const blobUrl = this.getBlobUrl(relativePath);
+            const blobUrl = this.getBlobUrl(normalized);
             if (blobUrl) return blobUrl;
         }
-        // Fallback natural
-        return publicPath;
+        const withSlash = publicPath.startsWith('/') ? publicPath : `/${publicPath}`;
+        return resolveApiUrl(withSlash);
+    }
+
+    /** Carrega HTMLImageElement de tile/sprite (pacote ou loose). */
+    public loadImageElement(publicPath: string, bustCache = false): Promise<HTMLImageElement> {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => resolve(img);
+            let src = this.resolveAssetUrl(publicPath);
+            if (bustCache && !src.startsWith('blob:') && !src.startsWith('data:')) {
+                src = `${src}${src.includes('?') ? '&' : '?'}v=${Date.now()}`;
+            }
+            img.src = src;
+        });
     }
 }
 

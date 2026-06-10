@@ -1,6 +1,6 @@
 import { resolveAnimationSourceRect } from './sheetFrameLayout';
 import { fetchCharacterConfigMerged } from './characterCalibrationLoader';
-import { resolveApiUrl } from '../shared/apiUrl';
+import { assetLoader } from '../game-data/assetLoader';
 
 interface PortraitConfig {
     frameWidth: number;
@@ -40,7 +40,7 @@ export async function drawCharacterPortraitPreview(
         img.onload = () => resolve(true);
         img.onerror = () => resolve(false);
     });
-    img.src = resolveApiUrl('/' + cleanPath);
+    img.src = assetLoader.resolveAssetUrl('/' + cleanPath);
     if (!(await loaded)) return;
 
     const frameWidth = config?.frameWidth ?? 32;

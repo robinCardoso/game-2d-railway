@@ -1,3 +1,4 @@
+import { assetLoader } from '../../game-data/assetLoader';
 import { getSpellCatalogEntries } from '../../game-data/spellCatalog';
 import type { SpellDefinition, SpellGroup } from '../../game-data/spellCatalogTypes';
 import type { CharacterRow } from '../../shared/types';
@@ -35,6 +36,10 @@ let groupFilter: SpellFilter = 'all';
 let spellModalDirty = false;
 
 const EMPTY_ICON = '/ui/play-hud/combat/slot_empty.svg';
+
+function spellIconUrl(icon: string): string {
+    return assetLoader.resolveAssetUrl(icon);
+}
 
 function spellAppliesToVocation(spell: SpellDefinition, vocation: string): boolean {
     if (spell.vocations.length === 0) return true;
@@ -134,7 +139,7 @@ function renderSlotPreviews(): void {
         const nameEl = btn.querySelector<HTMLElement>('.play-spell-modal__slot-name');
         const metaEl = btn.querySelector<HTMLElement>('.play-spell-modal__slot-meta');
         if (icon) {
-            icon.src = spell?.icon ?? EMPTY_ICON;
+            icon.src = spellIconUrl(spell?.icon ?? EMPTY_ICON);
             icon.alt = spell?.name ?? '';
         }
         if (nameEl) nameEl.textContent = spell?.name ?? 'Vazio';
@@ -176,7 +181,7 @@ function renderSpellList(): void {
           class="play-spell-modal__list-item${selected ? ' is-selected' : ''}${unlocked ? '' : ' is-locked'}"
           data-spell-id="${spell.id}">
           <span class="play-spell-modal__list-icon">
-            <img src="${spell.icon}" alt="" width="24" height="24" draggable="false" />
+            <img src="${spellIconUrl(spell.icon)}" alt="" width="24" height="24" draggable="false" />
           </span>
           <span class="play-spell-modal__list-body">
             <strong>${spell.name}${equippedHint}</strong>
@@ -231,7 +236,7 @@ function renderSpellDetail(): void {
     const rangeEl = content.querySelector<HTMLElement>('#playSpellDetailRange');
 
     if (iconEl) {
-        iconEl.src = spell.icon;
+        iconEl.src = spellIconUrl(spell.icon);
         iconEl.alt = spell.name;
     }
     if (nameEl) nameEl.textContent = spell.name;
