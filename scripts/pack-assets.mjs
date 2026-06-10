@@ -85,15 +85,11 @@ function getOrCreateKeys() {
         const privateKey = envPrivateKey.includes('BEGIN PRIVATE KEY')
             ? envPrivateKey
             : Buffer.from(envPrivateKey, 'base64').toString('utf8');
-        if (!fs.existsSync(PUBLIC_KEY_FILE)) {
-            throw new Error(
-                'ASSET_PACK_PRIVATE_KEY definida, mas public_key.pem não existe na raiz do projeto.',
-            );
-        }
-        return {
-            privateKey,
-            publicKey: fs.readFileSync(PUBLIC_KEY_FILE, 'utf8'),
-        };
+        const publicKey = crypto
+            .createPublicKey({ key: privateKey, format: 'pem' })
+            .export({ type: 'spki', format: 'pem' });
+        fs.writeFileSync(PUBLIC_KEY_FILE, publicKey);
+        return { privateKey, publicKey };
     }
 
     if (fs.existsSync(PRIVATE_KEY_FILE) && fs.existsSync(PUBLIC_KEY_FILE)) {
