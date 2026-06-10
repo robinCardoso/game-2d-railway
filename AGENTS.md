@@ -21,8 +21,11 @@ Este repositório é **Elarion Online** — MMORPG 2D estilo Tibia com **Elarion
 | [docs/ui-menus.md](docs/ui-menus.md) | IDs de UI estáveis |
 | [docs/hosting.md](docs/hosting.md) | Deploy Railway (migração concluída), PostgreSQL, APIs unificadas |
 | [docs/multiplayer-remote-players.md](docs/multiplayer-remote-players.md) | Jogadores remotos (estado atual + roadmap escala) |
-| [docs/playstore-steam-roadmap.md](docs/playstore-steam-roadmap.md) | Planejamento, empacotamento e adaptações para Steam e Play Store |
+| [docs/spell-system.md](docs/spell-system.md) | Magias, ícones PNG, VFX cast, Studio APIs |
 | [docs/game-rates.md](docs/game-rates.md) | `GAME_RATE_EXP` — multiplicador global de XP |
+| [docs/recent-features-jun-2026.md](docs/recent-features-jun-2026.md) | **Índice** — features jun/2026 + mapa de docs |
+| [docs/analise-chatgpt.md](docs/analise-chatgpt.md) | Escala OTC (AOI, cap aggro, viewport cull) |
+| [docs/playstore-steam-roadmap.md](docs/playstore-steam-roadmap.md) | Planejamento, empacotamento e adaptações para Steam e Play Store |
 
 
 ## Invariantes críticas (resumo)
@@ -39,6 +42,9 @@ Este repositório é **Elarion Online** — MMORPG 2D estilo Tibia com **Elarion
 10. **Performance Studio:** viewport culling em `draw()`; cache invalida em load/undo/recalc; Play sempre 60 FPS
 11. **Calibração personagem:** sidecar `{nome}.calibration.json` — fonte de verdade; `fetchCharacterConfigMerged` no load; `save-character` grava ambos
 12. **Testes:** `npm test` — ref priority, exclusão effects/, anti double-remap, `characterCalibration`
+13. **Magias:** ícones em `tiles/effects/spells/icons/` (PNG 32×32); VFX em `tiles/effects/spells/cast/`; catálogo `spell_catalog.json` — ver [docs/spell-system.md](docs/spell-system.md)
+14. **XP rate:** servidor usa `GAME_RATE_EXP` (`.env`); offline usa `public/game_rates.json` — ver [docs/game-rates.md](docs/game-rates.md)
+15. **Movimento WS:** `MOVEMENT_TOO_FAST` não envia `position_correction` (anti rubber-band em latência alta)
 
 ## Ao implementar melhorias nesta área
 
@@ -54,6 +60,8 @@ npm run dev         # Vite :5173 + servidor :8787 (APIs unificadas via proxy)
 npm run dev:web     # só frontend (sem APIs)
 npm run dev:server  # só Express
 npm test            # vitest — tile ref / registry
+npm run generate:spell-icons           # placeholders PNG hotbar + paths no catálogo
+npm run generate:spell-cast-sprites    # placeholders VFX conjuração
 npm run migrate:character-calibration  # sidecar + JSON enxuto para outfits legados
 ```
 
