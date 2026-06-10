@@ -149,6 +149,8 @@ import { resetPlaySpellCooldowns, tryCastSpellFromSlot } from './playSpellCast';
 import type { SpellBarSlot } from './ui/playSpellBar';
 import { toast } from '../utils/popup';
 import { ensureCombatTargetRingLoaded } from './combatTargetRing';
+import { ensureSpellCastSpritesLoaded } from './spellCastEffectSprites';
+import { drawSpellCastEffects, resetSpellCastEffects } from './spellCastEffects';
 import {
     setPlayPerfMonitorContext,
     tickPlayPerformanceMonitorFrame,
@@ -1464,6 +1466,14 @@ function draw(dtMs: number): void {
         ctx.globalAlpha = 1;
         drawDepthSorted(ctx, playDepthDrawBuffer);
 
+        drawSpellCastEffects(ctx, {
+            z,
+            cameraX: camX,
+            cameraY: camY,
+            tileSize: TILE_SIZE_SCREEN,
+            nowMs,
+        });
+
         if (
             renderOpts.showFloatingDamage &&
             z === player.worldZ &&
@@ -1883,9 +1893,11 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
     activeCharacter = character;
     resetPlayCombatInput();
     resetPlaySpellCooldowns();
+    resetSpellCastEffects();
     resetPlayHudStatusCache();
     resetPlayCombatHubCooldownTracking();
     ensureCombatTargetRingLoaded();
+    ensureSpellCastSpritesLoaded();
 
     if (isWorldEntryPending()) {
         showWorldEntryOverlay(`Carregando ${character.name}...`, {

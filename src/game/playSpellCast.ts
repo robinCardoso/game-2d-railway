@@ -21,9 +21,11 @@ import {
     type PlayCombatServerBridge,
 } from './playCombat';
 import { getSpellForSlot, type SpellBarSlot } from './ui/playSpellBar';
+import { ENGINE_CONFIG } from '../engine/config';
+import { spawnSpellCastEffect } from './spellCastEffects';
 import { toast } from '../utils/popup';
 
-// SPELL_SYSTEM_TODO: VFX castEffect, projéteis, validação LOS, PvP spell
+// SPELL_SYSTEM_TODO: projéteis, validação LOS, PvP spell
 
 const groupCooldownUntil: Partial<Record<SpellGroup, number>> = {};
 const slotCooldownUntil: Partial<Record<SpellBarSlot, number>> = {};
@@ -179,7 +181,21 @@ export function tryCastSpellFromSlot(
     groupCooldownUntil[spell.group] = options.nowMs + spell.groupCooldownMs;
     options.playerMana.mana = Math.max(0, options.playerMana.mana - spell.manaCost);
 
-    if (target) options.callbacks.faceToward(target);
+    if (target) {
+        options.callbacks.faceToward(target);
+        const tileSize = ENGINE_CONFIG.TILE_SIZE;
+        spawnSpellCastEffect(
+            spell,
+            {
+                worldX: target.worldX,
+                worldY: target.worldY,
+                z: target.worldZ,
+                casterWorldX: options.player.worldX ?? options.player.tileX * tileSize,
+                casterWorldY: options.player.worldY ?? options.player.tileY * tileSize,
+            },
+            options.nowMs
+        );
+    }
     options.callbacks.onCastSwing?.();
 
     if (options.server?.multiplayerConfigured && options.server.wsConnected && target) {

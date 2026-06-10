@@ -1,0 +1,10 @@
+{
+  "sheetUrl": "/tiles/effects/spells/cast/knight_brutal_strike.png",
+  "frameWidth": 64,
+  "frameHeight": 64,
+  "frameCount": 4,
+  "fps": 14,
+  "drawScale": 1.2,
+  "rotateToTarget": true,
+  "durationMs": 280
+}

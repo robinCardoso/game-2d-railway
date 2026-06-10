@@ -52,9 +52,27 @@ Implementação: `shared/protocol.ts`, `gameNetClient.sendCastSpell`, `GameRoom.
 - `src/editor/spellEditor.ts`
 - APIs: `GET /api/get-spell-catalog`, `POST /api/save-spell-catalog`, `POST /api/save-spell-icon`
 
-## Roadmap (pós-MVP)
+## VFX de conjuração (`castEffect`)
 
-- VFX `castEffect` (strips em `tiles/effects/spells/cast/`)
+Strips PNG + JSON em `tiles/effects/spells/cast/{castEffect}.png` (fundo magenta, chroma no cliente — igual combate).
+
+| `castEffect` | Strip | Frames |
+|--------------|-------|--------|
+| `knight_brutal_strike` | `knight_brutal_strike.png` | 4 — corte |
+| `knight_ground_slam` | `knight_ground_slam.png` | 5 — onda no chão |
+| `knight_front_sweep` | `knight_front_sweep.png` | 4 — arco |
+| `melee_default` | `melee_default.png` | 4 |
+| `magic_default` | `magic_default.png` | 4 — pulso |
+
+| Módulo | Função |
+|--------|--------|
+| `src/game/spellCastEffectSprites.ts` | Load PNG/JSON, draw strip + rotação |
+| `src/game/spellCastEffects.ts` | Spawn + fila ativa (fallback canvas se PNG não carregou) |
+| `scripts/generate-spell-cast-sprites.mjs` | Regenerar placeholders: `npm run generate:spell-cast-sprites` |
+
+Substituir os PNG por arte no Studio ou editor de imagem — manter `frameWidth` 64, strip horizontal, fundo `#FF00FF`.
+
+## Roadmap (pós-MVP)
 - Projéteis e LOS
 - Persistência `CharacterRow.spellBar` no servidor
 - Poções F1/F2 e botão Interagir no hub

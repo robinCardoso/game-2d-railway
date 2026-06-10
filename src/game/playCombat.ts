@@ -20,6 +20,8 @@ export interface PlayCombatPlayer {
     tileX: number;
     tileY: number;
     worldZ: number;
+    worldX?: number;
+    worldY?: number;
 }
 
 export interface PlayCombatCallbacks {

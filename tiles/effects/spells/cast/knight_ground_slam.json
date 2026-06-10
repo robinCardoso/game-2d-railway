@@ -1,0 +1,10 @@
+{
+  "sheetUrl": "/tiles/effects/spells/cast/knight_ground_slam.png",
+  "frameWidth": 64,
+  "frameHeight": 64,
+  "frameCount": 5,
+  "fps": 12,
+  "drawScale": 1.25,
+  "rotateToTarget": false,
+  "durationMs": 520
+}

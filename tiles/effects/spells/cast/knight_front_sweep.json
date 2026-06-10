@@ -1,0 +1,10 @@
+{
+  "sheetUrl": "/tiles/effects/spells/cast/knight_front_sweep.png",
+  "frameWidth": 64,
+  "frameHeight": 64,
+  "frameCount": 4,
+  "fps": 12,
+  "drawScale": 1.3,
+  "rotateToTarget": true,
+  "durationMs": 380
+}

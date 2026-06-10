@@ -1,0 +1,10 @@
+{
+  "sheetUrl": "/tiles/effects/spells/cast/magic_default.png",
+  "frameWidth": 64,
+  "frameHeight": 64,
+  "frameCount": 4,
+  "fps": 10,
+  "drawScale": 1.15,
+  "rotateToTarget": false,
+  "durationMs": 420
+}
