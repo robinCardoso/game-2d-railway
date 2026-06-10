@@ -12,6 +12,13 @@ import {
     pruneFloatingDamages,
     type FloatingDamageEntry,
 } from '../game/floatingCombatText';
+import {
+    createNetworkMotionBuffer,
+    pushNetworkMotionSegment,
+    sampleNetworkMotion,
+    snapNetworkMotionBuffer,
+    type NetworkMotionBuffer,
+} from '../../shared/networkMotionBuffer';
 
 const { TILE_SIZE } = ENGINE_CONFIG;
 
@@ -80,6 +87,9 @@ type RemoteVisualState = {
     idleAfterMs: number;
     /** Timestamp do último pacote de movimento recebido. */
     lastMovePacketAt: number;
+    /** Amostras recentes de tile — suaviza estimativa de passo entre bursts de rede. */
+    posHistory: Array<{ tileX: number; tileY: number; z: number; atMs: number }>;
+    motionBuffer: NetworkMotionBuffer;
     controller: SpriteAnimationController;
     floatingDamages?: FloatingDamageEntry[];
 };
@@ -148,32 +158,45 @@ export class RemotePlayerSpriteManager {
         return entries;
     }
 
-    tick(nowMs: number): void {
+    tick(nowMs: number, renderDelayMs = 0): void {
+        const renderTimeMs = nowMs - renderDelayMs;
+
         for (const state of this.states.values()) {
             if (state.floatingDamages) {
                 state.floatingDamages = pruneFloatingDamages(state.floatingDamages, nowMs);
             }
-            if (state.moving) {
+
+            if (renderDelayMs > 0) {
+                const sample = sampleNetworkMotion(
+                    state.motionBuffer,
+                    renderTimeMs,
+                    state.visualX,
+                    state.visualY
+                );
+                state.visualX = sample.x;
+                state.visualY = sample.y;
+                state.moving = sample.moving;
+            } else if (state.moving) {
                 const elapsed = nowMs - state.moveStartedAt;
                 const t = Math.min(1, elapsed / state.moveDurationMs);
                 state.visualX = state.fromX + (state.toX - state.fromX) * t;
                 state.visualY = state.fromY + (state.toY - state.fromY) * t;
-
-                const stepDir = directionFromWorldDelta(
-                    state.fromX,
-                    state.fromY,
-                    state.toX,
-                    state.toY
-                );
-                if (stepDir) {
-                    state.controller.setDirection(stepDir);
-                }
 
                 if (t >= 1) {
                     state.visualX = state.toX;
                     state.visualY = state.toY;
                     state.moving = false;
                 }
+            }
+
+            const stepDir = directionFromWorldDelta(
+                state.fromX,
+                state.fromY,
+                state.toX,
+                state.toY
+            );
+            if (stepDir && (state.moving || nowMs < state.idleAfterMs)) {
+                state.controller.setDirection(stepDir);
             }
 
             const walking = state.moving || nowMs < state.idleAfterMs;
@@ -207,10 +230,30 @@ export class RemotePlayerSpriteManager {
             state.toY = y;
             state.moving = false;
             state.idleAfterMs = 0;
+            snapNetworkMotionBuffer(state.motionBuffer, x, y, performance.now());
         }
     }
 
     private estimateStepDuration(state: RemoteVisualState, nowMs: number, isDiagonal: boolean): number {
+        const history = state.posHistory;
+        if (history.length >= 2) {
+            const intervals: number[] = [];
+            for (let i = 1; i < history.length; i++) {
+                const dt = history[i]!.atMs - history[i - 1]!.atMs;
+                if (dt > 0) intervals.push(dt);
+            }
+            if (intervals.length > 0) {
+                intervals.sort((a, b) => a - b);
+                const median = intervals[Math.floor(intervals.length / 2)]!;
+                const base = clamp(
+                    median + REMOTE_SMOOTHING_EXTRA_MS,
+                    MIN_REMOTE_STEP_MS,
+                    MAX_REMOTE_STEP_MS
+                );
+                return isDiagonal ? base * DIAGONAL_STEP_DURATION_FACTOR : base;
+            }
+        }
+
         const packetInterval =
             state.lastMovePacketAt > 0 ? nowMs - state.lastMovePacketAt : REMOTE_STEP_DURATION_MS;
         const base = clamp(
@@ -219,6 +262,21 @@ export class RemotePlayerSpriteManager {
             MAX_REMOTE_STEP_MS
         );
         return isDiagonal ? base * DIAGONAL_STEP_DURATION_FACTOR : base;
+    }
+
+    private pushPosHistory(
+        state: RemoteVisualState,
+        tileX: number,
+        tileY: number,
+        z: number,
+        atMs: number
+    ): void {
+        const last = state.posHistory[state.posHistory.length - 1];
+        if (last && last.tileX === tileX && last.tileY === tileY && last.z === z) return;
+        state.posHistory.push({ tileX, tileY, z, atMs });
+        if (state.posHistory.length > 6) {
+            state.posHistory.splice(0, state.posHistory.length - 6);
+        }
     }
 
     private applyNetworkPosition(
@@ -267,6 +325,7 @@ export class RemotePlayerSpriteManager {
             state.tileX = player.tileX;
             state.tileY = player.tileY;
             state.z = player.z;
+            this.pushPosHistory(state, player.tileX, player.tileY, player.z, nowMs);
             if (fromServer !== undefined) {
                 state.moveDurationMs = clampStepDuration(fromServer, isDiagonal);
             }
@@ -301,6 +360,16 @@ export class RemotePlayerSpriteManager {
         state.lastMovePacketAt = nowMs;
         state.idleAfterMs = nowMs + duration + REMOTE_IDLE_GRACE_MS;
         state.moving = true;
+        this.pushPosHistory(state, player.tileX, player.tileY, player.z, nowMs);
+        pushNetworkMotionSegment(
+            state.motionBuffer,
+            fromX,
+            fromY,
+            targetWorldX,
+            targetWorldY,
+            nowMs,
+            duration
+        );
 
         applyRemoteFacing(
             state,
@@ -322,7 +391,7 @@ export class RemotePlayerSpriteManager {
         controller.setDirection(protocolDirectionToSprite(player.direction));
         controller.setState('idle');
 
-        return {
+        const state: RemoteVisualState = {
             playerId: player.playerId,
             tileX: player.tileX,
             tileY: player.tileY,
@@ -338,8 +407,12 @@ export class RemotePlayerSpriteManager {
             moving: false,
             idleAfterMs: nowMs,
             lastMovePacketAt: 0,
+            posHistory: [{ tileX: player.tileX, tileY: player.tileY, z: player.z, atMs: nowMs }],
+            motionBuffer: createNetworkMotionBuffer(),
             controller,
         };
+        snapNetworkMotionBuffer(state.motionBuffer, worldX, worldY, nowMs);
+        return state;
     }
 
     spawnFloatingDamage(playerId: string, damage: number, nowMs: number): void {

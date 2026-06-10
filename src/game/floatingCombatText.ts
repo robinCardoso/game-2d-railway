@@ -78,19 +78,30 @@ export function createFloatingXpEntry(
     };
 }
 
+export type FloatingDamageMotion = 'linear' | 'easeOut';
+
+function computeFloatingRise(progress: number, risePx: number, motion: FloatingDamageMotion): number {
+    if (motion === 'easeOut') {
+        const eased = 1 - (1 - progress) * (1 - progress);
+        return eased * risePx;
+    }
+    return progress * risePx;
+}
+
 export function drawFloatingDamages(
     ctx: CanvasRenderingContext2D,
     entries: FloatingDamageEntry[],
     anchorX: number,
     anchorTopY: number,
-    nowMs: number
+    nowMs: number,
+    motion: FloatingDamageMotion = 'linear'
 ): void {
     for (const entry of entries) {
         const elapsed = nowMs - entry.startMs;
         if (elapsed < 0 || elapsed >= entry.durationMs) continue;
 
         const progress = elapsed / entry.durationMs;
-        const rise = progress * FLOATING_DAMAGE_RISE_PX;
+        const rise = computeFloatingRise(progress, FLOATING_DAMAGE_RISE_PX, motion);
         const stackOffset = entry.stackIndex * 11;
         const x = anchorX + (entry.stackIndex % 2 === 0 ? -6 : 6);
         const y = anchorTopY - 6 - stackOffset - rise;

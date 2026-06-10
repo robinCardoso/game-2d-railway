@@ -14,6 +14,7 @@ import {
 import { isInstancedMap } from '../../mapRegistry.js';
 import type { MapInstanceStore } from '../../MapInstanceStore.js';
 import { resolveServerPlayerStepDurationMs } from '../../game/playerMovement.js';
+import type { SpectatorTile } from '../../../../shared/creatureSpectatorRange.js';
 import type { ConnectedPlayer } from '../types.js';
 
 /** Tolerância de jitter de rede no intervalo mínimo entre passos (0.85 = 15% mais rápido que o step). */
@@ -25,6 +26,12 @@ export interface MoveHandlerContext {
     getPlayerBySocket: (socket: WebSocket) => ConnectedPlayer | undefined;
     send: (socket: WebSocket, message: ServerMessage) => void;
     broadcastToRoom: (room: string, message: ServerMessage, exceptId?: string) => void;
+    broadcastToPlayerSpectators: (
+        room: string,
+        message: ServerMessage,
+        event: SpectatorTile,
+        exceptId?: string
+    ) => void;
     roomKey: (player: Pick<ConnectedPlayer, 'mapId' | 'instanceId'>) => string;
     isWalkable: (mapId: string, tileX: number, tileY: number, z: number) => boolean;
     rejectMove: (player: ConnectedPlayer, code: string, message: string, logDetail?: string) => void;
@@ -107,7 +114,7 @@ export function handleMove(
         if (sameDest) {
             return;
         }
-        ctx.broadcastToRoom(
+        ctx.broadcastToPlayerSpectators(
             ctx.roomKey(player),
             {
                 type: 'player_moved',
@@ -121,6 +128,7 @@ export function handleMove(
                 direction: player.direction,
                 stepDurationMs: player.lastStepDurationMs,
             },
+            { tileX: steppingDestTileX, tileY: steppingDestTileY, z: player.z },
             player.id
         );
         return;
@@ -237,25 +245,33 @@ export function handleMove(
         stepDurationMs: player.lastStepDurationMs,
     };
 
+    const eventTile: SpectatorTile = {
+        tileX: player.tileX,
+        tileY: player.tileY,
+        z: player.z,
+    };
+
     if (mapChanged || oldRoom !== newRoom) {
-        ctx.broadcastToRoom(
+        ctx.broadcastToPlayerSpectators(
             oldRoom,
             { type: 'player_left', v: PROTOCOL_VERSION, playerId: player.id },
+            from,
             player.id
         );
-        ctx.broadcastToRoom(newRoom, payload, player.id);
-        ctx.broadcastToRoom(
+        ctx.broadcastToPlayerSpectators(newRoom, payload, eventTile, player.id);
+        ctx.broadcastToPlayerSpectators(
             newRoom,
             {
                 type: 'player_joined',
                 v: PROTOCOL_VERSION,
                 player: ctx.toSnapshot(player),
             },
+            eventTile,
             player.id
         );
         ctx.sendCreatureSync(player.socket, newRoom, player.mapId, player.instanceId);
     } else {
-        ctx.broadcastToRoom(newRoom, payload, player.id);
+        ctx.broadcastToPlayerSpectators(newRoom, payload, eventTile, player.id);
     }
 
     const acceptedAt = Date.now();

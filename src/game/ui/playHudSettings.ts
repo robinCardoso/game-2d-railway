@@ -4,6 +4,7 @@ import {
     PLAY_ZOOM_STEPS,
     snapPlayZoom,
 } from '../playZoom';
+import { DEFAULT_NETWORK_RENDER_DELAY_MS } from '../../../shared/networkMotionBuffer';
 
 const STORAGE_PREFIX = 'elarion.play.';
 const DEFAULT_ZOOM_KEY = 'defaultZoom';
@@ -59,6 +60,18 @@ export function getPlayHudQuality(): PlayHudQuality {
         /* ignore */
     }
     return 'high';
+}
+
+/** Delay de interpolação de remotos/mobs — 0 no modo light (snap por pacote). */
+export function getNetworkRenderDelayMs(quality: PlayHudQuality = getPlayHudQuality()): number {
+    switch (quality) {
+        case 'high':
+            return DEFAULT_NETWORK_RENDER_DELAY_MS;
+        case 'medium':
+            return Math.round(DEFAULT_NETWORK_RENDER_DELAY_MS * 0.5);
+        case 'light':
+            return 0;
+    }
 }
 
 export function setPlayHudQuality(quality: PlayHudQuality): void {

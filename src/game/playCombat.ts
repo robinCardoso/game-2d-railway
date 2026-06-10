@@ -283,7 +283,8 @@ export function resolveMonsterTileForAttackRange(
     return { tileX: foot.tileX, tileY: foot.tileY, z: target.worldZ };
 }
 
-function resolveAuthoritativeMonsterTile(
+/** Tile do mob para alcance — MP usa tile do servidor; SP usa pé visual. */
+export function resolveAuthoritativeMonsterTile(
     target: GameEntity,
     server?: PlayCombatServerBridge
 ): { tileX: number; tileY: number; z: number } {

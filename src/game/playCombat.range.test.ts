@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GameEntity } from '../character/entity';
 import { isPlayerInAttackRange, resolvePlayerAttackProfile } from '../../shared/playerAttack';
-import { resolveMonsterTileForAttackRange } from './playCombat';
+import { resolveAuthoritativeMonsterTile, resolveMonsterTileForAttackRange } from './playCombat';
 
 const TILE = 32;
 
@@ -55,5 +55,29 @@ describe('resolveMonsterTileForAttackRange', () => {
         expect(
             isPlayerInAttackRange(player, { tileX: authTile.tileX, tileY: authTile.tileY, z: 0 }, profile)
         ).toBe(false);
+    });
+
+    it('tile autoritativo permite alcance melee quando pé visual ainda está longe (deslize)', () => {
+        const mob = makeMonster('m1', 11, 10, {
+            worldX: 12 * TILE,
+            worldY: 10 * TILE,
+        });
+        const player = { tileX: 10, tileY: 10, z: 0 };
+        const meleeSpellProfile = { attackType: 'melee' as const, range: 1, requiresLineOfSight: false };
+
+        const footTile = resolveMonsterTileForAttackRange(mob);
+        const authTile = resolveAuthoritativeMonsterTile(mob, {
+            multiplayerConfigured: true,
+            wsConnected: true,
+            sendAttack: () => {},
+            getCreatureAuthoritativeTile: () => ({ tileX: 11, tileY: 10, z: 0 }),
+        });
+
+        expect(
+            isPlayerInAttackRange(player, { tileX: footTile.tileX, tileY: footTile.tileY, z: 0 }, meleeSpellProfile)
+        ).toBe(false);
+        expect(
+            isPlayerInAttackRange(player, { tileX: authTile.tileX, tileY: authTile.tileY, z: 0 }, meleeSpellProfile)
+        ).toBe(true);
     });
 });

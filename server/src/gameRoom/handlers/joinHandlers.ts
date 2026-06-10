@@ -5,6 +5,11 @@ import {
     PROTOCOL_VERSION,
     SERVER_MAP_SIZE,
 } from '../../../../shared/protocol.js';
+import {
+    filterCreatureSnapshotsForViewer,
+    filterPlayerSnapshotsForViewer,
+    type SpectatorTile,
+} from '../../../../shared/creatureSpectatorRange.js';
 import { buildRoomKey } from '../../../../shared/roomKey.js';
 import { createEmptyEquipment } from '../../../../shared/inventory.js';
 import { resolveSpellBarOrDefaults } from '../../../../shared/spellSlots.js';
@@ -34,7 +39,13 @@ export interface JoinHandlerContext {
     toSnapshot: (player: ConnectedPlayer) => PlayerSnapshot;
     send: (socket: WebSocket, message: ServerMessage) => void;
     broadcastToRoom: (room: string, message: ServerMessage, exceptId?: string) => void;
-    sendPlayerResources: (player: ConnectedPlayer) => void;
+    broadcastToPlayerSpectators: (
+        room: string,
+        message: ServerMessage,
+        event: SpectatorTile,
+        exceptId?: string
+    ) => void;
+    sendPlayerResources: (player: ConnectedPlayer, force?: boolean) => void;
     sendPositionCorrection: (player: ConnectedPlayer) => void;
     collision: MapCollisionStore;
     instances: MapInstanceStore;
@@ -211,9 +222,13 @@ export function handleJoin(
     const versionLog = msg.clientBuildVersion ? `v${msg.clientBuildVersion}` : 'v?';
     console.log(`[GameRoom] ${joinName} (${id}) entrou em ${room} ${platformLog} ${versionLog}`);
 
-    const others = ctx.playersInRoom(room, id);
+    const joinViewer = { tileX: joinTileX, tileY: joinTileY, z: joinZ };
+    const others = filterPlayerSnapshotsForViewer(joinViewer, ctx.playersInRoom(room, id));
     const joinNowMs = Date.now();
-    const creatureSnapshots = ctx.creatures.ensureRoom(room, joinMapId, instanceId);
+    const creatureSnapshots = filterCreatureSnapshotsForViewer(
+        joinViewer,
+        ctx.creatures.ensureRoom(room, joinMapId, instanceId)
+    );
     if (roomWasEmpty) {
         ctx.creatures.armRoomWakeDelay(room, joinNowMs);
     }
@@ -251,13 +266,14 @@ export function handleJoin(
         });
     }
 
-    ctx.broadcastToRoom(
+    ctx.broadcastToPlayerSpectators(
         room,
         {
             type: 'player_joined',
             v: PROTOCOL_VERSION,
             player: ctx.toSnapshot(player),
         },
+        joinViewer,
         id
     );
 

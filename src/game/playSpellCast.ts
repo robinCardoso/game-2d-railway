@@ -1,4 +1,3 @@
-import { ENGINE_CONFIG } from '../engine/config';
 import { calculateMagicDamage, calculateMeleeDamage } from '../engine/combat/calculateDamage';
 import { calculateStatsForLevel } from '../engine/character/calculateStats';
 import type { GameEntity } from '../character/entity';
@@ -16,6 +15,7 @@ import { beginCreatureDeath } from './creatureDeathLifecycle';
 import { applyExperienceGain } from './experience';
 import {
     getPlayCombatTarget,
+    resolveAuthoritativeMonsterTile,
     type PlayCombatCallbacks,
     type PlayCombatPlayer,
     type PlayCombatServerBridge,
@@ -116,7 +116,7 @@ export function tryCastSpellFromSlot(
         character: CharacterRow;
         characterSpeed: CharacterSpeedState;
         npcs: GameEntity[];
-        playerMana: { current: number; max: number };
+        playerMana: { mana: number; maxMana: number };
         callbacks: PlayCombatCallbacks & { onCastSwing?: () => void };
         server?: PlayCombatServerBridge & { sendCastSpell?: (spellId: string, creatureId: string) => void };
     }
@@ -136,17 +136,15 @@ export function tryCastSpellFromSlot(
         return false;
     }
 
-    if (options.playerMana.current < spell.manaCost) {
+    if (options.playerMana.mana < spell.manaCost) {
         toast.info('Mana insuficiente.');
         return false;
     }
 
     const combatTarget = getPlayCombatTarget();
-    if (spell.requiresTarget) {
-        if (!combatTarget || combatTarget.type !== 'monster') {
-            toast.info('Selecione um monstro como alvo.');
-            return false;
-        }
+    if (spell.requiresTarget && (!combatTarget || combatTarget.type !== 'monster')) {
+        toast.info('Selecione um monstro como alvo.');
+        return false;
     }
 
     const target = combatTarget
@@ -159,7 +157,7 @@ export function tryCastSpellFromSlot(
 
     if (target) {
         const vocationId = (options.character.vocation as VocationId) || 'knight';
-        const foot = target.getFootTile(ENGINE_CONFIG.TILE_SIZE);
+        const mobTile = resolveAuthoritativeMonsterTile(target, options.server);
         if (
             !isPlayerInAttackRange(
                 {
@@ -167,7 +165,7 @@ export function tryCastSpellFromSlot(
                     tileY: options.player.tileY,
                     z: options.player.worldZ,
                 },
-                { tileX: foot.tileX, tileY: foot.tileY, z: target.worldZ },
+                { tileX: mobTile.tileX, tileY: mobTile.tileY, z: mobTile.z },
                 spellRangeProfile(spell, vocationId)
             )
         ) {
@@ -179,7 +177,7 @@ export function tryCastSpellFromSlot(
     slotCooldownUntil[slot] = options.nowMs + spell.cooldownMs;
     slotCooldownDuration[slot] = spell.cooldownMs;
     groupCooldownUntil[spell.group] = options.nowMs + spell.groupCooldownMs;
-    options.playerMana.current = Math.max(0, options.playerMana.current - spell.manaCost);
+    options.playerMana.mana = Math.max(0, options.playerMana.mana - spell.manaCost);
 
     if (target) options.callbacks.faceToward(target);
     options.callbacks.onCastSwing?.();

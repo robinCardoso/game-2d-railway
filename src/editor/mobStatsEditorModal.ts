@@ -197,6 +197,7 @@ function readDraftFromForm(base: CreaturePresetEntry): CreaturePresetEntry {
             chaseBehavior === 'melee'
                 ? undefined
                 : readNum('mobMaxRangeInput', chaseDefaults.maxRange),
+        walkStepMs: readNum('mobWalkStepMsInput', chaseDefaults.walkStepMs),
         loot: readLootFromForm(),
     };
 
@@ -411,6 +412,11 @@ function selectPreset(name: string | null): void {
         maxRangeInput.value = String(chaseDefaults.maxRange);
         maxRangeInput.disabled = !isMonster || chaseDefaults.chaseBehavior === 'melee';
     }
+    const walkStepInput = document.getElementById('mobWalkStepMsInput') as HTMLInputElement | null;
+    if (walkStepInput) {
+        walkStepInput.value = String(chaseDefaults.walkStepMs);
+        walkStepInput.disabled = !isMonster;
+    }
     syncAttackRangeFieldState();
 
     renderLootTable(preset.loot ?? []);
@@ -565,4 +571,5 @@ function updatePreview(
             `${chase.minRange}–${chase.maxRange} SQM (ideal ${chase.attackRange})`
         );
     }
+    set('mobPreviewWalk', `${chase.walkStepMs} ms/tile`);
 }

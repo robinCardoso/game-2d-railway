@@ -14,6 +14,13 @@ import {
     tickCreatureCorpse,
 } from '../game/creatureDeathLifecycle';
 import { creatureVisualDesyncPx, logCreatureSync } from './creatureSyncDebug';
+import {
+    createNetworkMotionBuffer,
+    pushNetworkMotionSegment,
+    sampleNetworkMotion,
+    snapNetworkMotionBuffer,
+    type NetworkMotionBuffer,
+} from '../../shared/networkMotionBuffer';
 
 const { TILE_SIZE } = ENGINE_CONFIG;
 
@@ -157,7 +164,7 @@ function ensureEntityPresetConfig(entity: GameEntity): void {
 }
 
 /**
- * Criaturas online — 1 tile por deslize (~320 ms), meta sempre atualizada no servidor.
+ * Criaturas online — 1 tile por deslize (stepDurationMs do servidor, default 300 ms), meta sempre atualizada.
  * Pacotes durante deslize só atualizam a meta; o próximo passo começa ao chegar no SQM.
  */
 export class ServerCreatureSync {
@@ -167,6 +174,7 @@ export class ServerCreatureSync {
     private readonly stepDurationMs = new Map<string, number>();
     private readonly chaseActiveUntil = new Map<string, number>();
     private readonly networkCommitted = new Map<string, NetworkCommittedTile>();
+    private readonly motionBuffers = new Map<string, NetworkMotionBuffer>();
     private readonly loading = new Set<string>();
 
     isActive(): boolean {
@@ -448,6 +456,15 @@ export class ServerCreatureSync {
                 durationMs: slideDuration,
                 active: true,
             });
+            pushNetworkMotionSegment(
+                this.ensureMotionBuffer(snap.creatureId),
+                fromX,
+                fromY,
+                targetWorldX,
+                targetWorldY,
+                nowMs,
+                slideDuration
+            );
         }
 
         entity.tileX = snap.tileX;
@@ -509,7 +526,7 @@ export class ServerCreatureSync {
         return max;
     }
 
-    tick(nowMs: number): void {
+    tick(nowMs: number, renderDelayMs = 0): void {
 
         for (const [id, entity] of this.entities.entries()) {
             if (entity.isDead) {
@@ -524,14 +541,31 @@ export class ServerCreatureSync {
             if (isSlideActive(slide)) {
                 const elapsed = nowMs - slide!.startedAtMs;
                 const t = Math.min(1, elapsed / slide!.durationMs);
-                entity.worldX = slide!.fromX + (slide!.toX - slide!.fromX) * t;
-                entity.worldY = slide!.fromY + (slide!.toY - slide!.fromY) * t;
-                faceMotionDelta(entity, slide!.fromX, slide!.fromY, slide!.toX, slide!.toY);
                 sliding = t < 1;
 
-                if (!sliding) {
-                    entity.worldX = slide!.toX;
-                    entity.worldY = slide!.toY;
+                if (renderDelayMs > 0) {
+                    const buf = this.ensureMotionBuffer(id);
+                    const sample = sampleNetworkMotion(
+                        buf,
+                        nowMs - renderDelayMs,
+                        entity.worldX,
+                        entity.worldY
+                    );
+                    entity.worldX = sample.x;
+                    entity.worldY = sample.y;
+                    sliding = sample.moving || t < 1;
+                } else {
+                    entity.worldX = slide!.fromX + (slide!.toX - slide!.fromX) * t;
+                    entity.worldY = slide!.fromY + (slide!.toY - slide!.fromY) * t;
+                }
+
+                faceMotionDelta(entity, slide!.fromX, slide!.fromY, slide!.toX, slide!.toY);
+
+                if (t >= 1) {
+                    if (renderDelayMs <= 0) {
+                        entity.worldX = slide!.toX;
+                        entity.worldY = slide!.toY;
+                    }
                     
                     if (slide!.queued && slide!.queued.length > 0) {
                         const { toX, toY, durationMs, direction } = slide!.queued.shift()!;
@@ -540,14 +574,24 @@ export class ServerCreatureSync {
                         slide!.toX = toX;
                         slide!.toY = toY;
                         
-                        // Always start the new animation from exactly 0% to prevent jumping/teleporting.
                         slide!.startedAtMs = nowMs;
                         
                         slide!.durationMs = durationMs;
                         
-                        // Catch up gracefully if backed up
                         if (slide!.queued.length > 0) {
                             slide!.durationMs /= 1.5;
+                        }
+
+                        if (renderDelayMs > 0) {
+                            pushNetworkMotionSegment(
+                                this.ensureMotionBuffer(id),
+                                slide!.fromX,
+                                slide!.fromY,
+                                slide!.toX,
+                                slide!.toY,
+                                nowMs,
+                                slide!.durationMs
+                            );
                         }
                         
                         faceFromWorldDeltaOrServer(
@@ -559,9 +603,8 @@ export class ServerCreatureSync {
                             direction
                         );
                         
-                        // Evaluate the new slide immediately so it doesn't wait a frame
                         const newElapsed = nowMs - slide!.startedAtMs;
-                        if (newElapsed > 0) {
+                        if (newElapsed > 0 && renderDelayMs <= 0) {
                             const newT = Math.min(1, newElapsed / slide!.durationMs);
                             entity.worldX = slide!.fromX + (slide!.toX - slide!.fromX) * newT;
                             entity.worldY = slide!.fromY + (slide!.toY - slide!.fromY) * newT;
@@ -606,6 +649,7 @@ export class ServerCreatureSync {
         this.stepDurationMs.clear();
         this.chaseActiveUntil.clear();
         this.networkCommitted.clear();
+        this.motionBuffers.clear();
         this.loading.clear();
     }
 
@@ -627,6 +671,7 @@ export class ServerCreatureSync {
     }
 
     snapAllToAuthoritativeTiles(): void {
+        const nowMs = performance.now();
         for (const entity of this.entities.values()) {
             if (entity.isDead) continue;
             this.slides.delete(entity.id);
@@ -637,12 +682,27 @@ export class ServerCreatureSync {
             } else {
                 snapEntityToTile(entity, entity.tileX, entity.tileY);
             }
+            snapNetworkMotionBuffer(
+                this.ensureMotionBuffer(entity.id),
+                entity.worldX,
+                entity.worldY,
+                nowMs
+            );
             this.chaseActiveUntil.delete(entity.id);
             this.networkCommitted.delete(entity.id);
             if (!entity.isDead) {
                 entity.setState('idle');
             }
         }
+    }
+
+    private ensureMotionBuffer(creatureId: string): NetworkMotionBuffer {
+        let buf = this.motionBuffers.get(creatureId);
+        if (!buf) {
+            buf = createNetworkMotionBuffer();
+            this.motionBuffers.set(creatureId, buf);
+        }
+        return buf;
     }
 
     /** Se a meta autoritativa ainda está à frente do último passo de rede, continua o deslize. */
@@ -721,6 +781,15 @@ export class ServerCreatureSync {
             durationMs: duration,
             active: true,
         });
+        pushNetworkMotionSegment(
+            this.ensureMotionBuffer(creatureId),
+            fromX,
+            fromY,
+            toX,
+            toY,
+            nowMs,
+            duration
+        );
         this.stepDurationMs.set(creatureId, duration);
         this.chaseActiveUntil.set(creatureId, nowMs + duration + CHASE_IDLE_GRACE_MS);
         this.networkCommitted.set(creatureId, { tileX: next.tileX, tileY: next.tileY });
@@ -817,6 +886,12 @@ export class ServerCreatureSync {
             tileX: snap.tileX,
             tileY: snap.tileY,
         });
+        snapNetworkMotionBuffer(
+            this.ensureMotionBuffer(snap.creatureId),
+            entity.worldX,
+            entity.worldY,
+            performance.now()
+        );
         void entity.animController.loadImage();
         return entity;
     }

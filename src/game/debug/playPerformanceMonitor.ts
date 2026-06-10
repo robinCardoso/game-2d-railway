@@ -3,6 +3,8 @@
  * Ativar: F9 ou localStorage `debug.play.perf` = '1'
  */
 
+import { cyclePlayStressLevel, getPlayStressLevel } from './playStressTest';
+
 export type HudUpdateArea = 'resources' | 'spellBar' | 'chat' | 'minimap' | 'ping' | 'inventory';
 
 const STORAGE_KEY = 'debug.play.perf';
@@ -12,6 +14,12 @@ export interface PlayPerfContext {
     visiblePlayers: number;
     visibleCreatures: number;
     floatingDamages: number;
+    depthDrawables: number;
+    sortCacheHits: number;
+    sortCacheMisses: number;
+    stressLevel: number;
+    pendingPredictions: number;
+    renderDelayMs: number;
 }
 
 let enabled = false;
@@ -33,6 +41,12 @@ let context: PlayPerfContext = {
     visiblePlayers: 0,
     visibleCreatures: 0,
     floatingDamages: 0,
+    depthDrawables: 0,
+    sortCacheHits: 0,
+    sortCacheMisses: 0,
+    stressLevel: getPlayStressLevel(),
+    pendingPredictions: 0,
+    renderDelayMs: 0,
 };
 
 export function isPlayPerfMonitorEnabled(): boolean {
@@ -108,6 +122,8 @@ function formatOverlayText(elapsedMs: number): string {
         'Play perf (F9)',
         `FPS ${displayedFps} · avg ${displayedAvgMs.toFixed(1)} ms · max ${displayedMaxMs.toFixed(1)} ms`,
         `ping ${context.pingMs >= 0 ? `${context.pingMs} ms` : '—'} · players ${context.visiblePlayers} · mobs ${context.visibleCreatures} · floats ${context.floatingDamages}`,
+        `depth ${context.depthDrawables} · sort hit ${context.sortCacheHits} miss ${context.sortCacheMisses}${context.stressLevel > 0 ? ` · stress ${context.stressLevel} (F10)` : ''}`,
+        `interp ${context.renderDelayMs} ms · predicted ${context.pendingPredictions}`,
     ];
 
     const wsSorted = [...wsCounts.entries()].sort((a, b) => b[1] - a[1]);
@@ -140,9 +156,19 @@ export function initPlayPerformanceMonitor(): void {
     if (enabled) ensureOverlay();
 
     window.addEventListener('keydown', (event) => {
-        if (event.key !== 'F9') return;
-        event.preventDefault();
-        setPlayPerfMonitorEnabled(!isPlayPerfMonitorEnabled());
+        if (event.key === 'F9') {
+            event.preventDefault();
+            setPlayPerfMonitorEnabled(!isPlayPerfMonitorEnabled());
+            return;
+        }
+        if (event.key === 'F10') {
+            event.preventDefault();
+            const level = cyclePlayStressLevel();
+            context = { ...context, stressLevel: level };
+            if (level > 0 && !isPlayPerfMonitorEnabled()) {
+                setPlayPerfMonitorEnabled(true);
+            }
+        }
     });
 }
 

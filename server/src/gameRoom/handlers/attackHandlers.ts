@@ -3,6 +3,8 @@ import type { ClientMessage, ServerMessage } from '../../../../shared/protocol.j
 import { PROTOCOL_VERSION } from '../../../../shared/protocol.js';
 import { isPlayerInAttackRange, resolvePlayerAttackProfile } from '../../../../shared/playerAttack.js';
 import type { VocationId } from '../../../../shared/types/character.js';
+import type { SpectatorTile } from '../../../../shared/creatureSpectatorRange.js';
+import type { BroadcastCreatureEvent } from '../contextTypes.js';
 import { getLevelFromExp, calculateStatsForLevel } from '../../../../src/engine/character/calculateStats.js';
 import { applyExperienceGain } from '../../../../src/game/experience.js';
 import { ZoneType } from '../../../../src/engine/zones.js';
@@ -24,7 +26,13 @@ export interface AttackHandlerContext {
     roomKey: (player: Pick<ConnectedPlayer, 'mapId' | 'instanceId'>) => string;
     send: (socket: WebSocket, message: ServerMessage) => void;
     broadcastToRoom: (room: string, message: ServerMessage) => void;
-    sendPlayerResources: (player: ConnectedPlayer) => void;
+    broadcastToPlayerSpectators: (
+        room: string,
+        message: ServerMessage,
+        event: SpectatorTile
+    ) => void;
+    broadcastCreatureEvent: BroadcastCreatureEvent;
+    sendPlayerResources: (player: ConnectedPlayer, force?: boolean) => void;
     sendPositionCorrection: (player: ConnectedPlayer) => void;
     persistPlayerPosition: (player: ConnectedPlayer, immediate?: boolean) => void;
     recalcPlayerMaxHealth: (player: ConnectedPlayer) => void;
@@ -197,15 +205,23 @@ function handlePvpAttack(
     player.lastAttackAtMs = now;
     targetPlayer.health = Math.max(0, targetPlayer.health - damageResult.finalDamage);
 
-    ctx.broadcastToRoom(room, {
-        type: 'player_damaged',
-        v: PROTOCOL_VERSION,
-        playerId: targetPlayer.id,
-        health: targetPlayer.health,
-        maxHealth: targetPlayer.maxHealth,
-        damage: damageResult.finalDamage,
-        attackerPlayerId: player.id,
-    });
+    ctx.broadcastToPlayerSpectators(
+        room,
+        {
+            type: 'player_damaged',
+            v: PROTOCOL_VERSION,
+            playerId: targetPlayer.id,
+            health: targetPlayer.health,
+            maxHealth: targetPlayer.maxHealth,
+            damage: damageResult.finalDamage,
+            attackerPlayerId: player.id,
+        },
+        {
+            tileX: targetPlayer.tileX,
+            tileY: targetPlayer.tileY,
+            z: targetPlayer.z,
+        }
+    );
     ctx.sendPlayerResources(targetPlayer);
     ctx.persistPlayerPosition(targetPlayer);
 
@@ -220,12 +236,20 @@ function handlePvpDeath(
     targetPlayer: ConnectedPlayer,
     room: string
 ): void {
-    ctx.broadcastToRoom(room, {
-        type: 'player_died',
-        v: PROTOCOL_VERSION,
-        playerId: targetPlayer.id,
-        killerPlayerId: killer.id,
-    });
+    ctx.broadcastToPlayerSpectators(
+        room,
+        {
+            type: 'player_died',
+            v: PROTOCOL_VERSION,
+            playerId: targetPlayer.id,
+            killerPlayerId: killer.id,
+        },
+        {
+            tileX: targetPlayer.tileX,
+            tileY: targetPlayer.tileY,
+            z: targetPlayer.z,
+        }
+    );
 
     const deathZone = ctx.collision.getZoneIdAt(
         targetPlayer.mapId,
@@ -239,6 +263,12 @@ function handlePvpDeath(
         targetPlayer.level = getLevelFromExp(targetPlayer.experience);
         ctx.recalcPlayerMaxHealth(targetPlayer);
     }
+
+    const deathTile = {
+        tileX: targetPlayer.tileX,
+        tileY: targetPlayer.tileY,
+        z: targetPlayer.z,
+    };
 
     const spawn = ctx.collision.getMapSpawn(targetPlayer.mapId) ?? { x: 50, y: 50, z: 0 };
     targetPlayer.tileX = spawn.x;
@@ -269,20 +299,24 @@ function handlePvpDeath(
         }
     }
 
-    ctx.broadcastToRoom(room, {
-        type: 'player_respawned',
-        v: PROTOCOL_VERSION,
-        playerId: targetPlayer.id,
-        mapId: targetPlayer.mapId,
-        instanceId: targetPlayer.instanceId,
-        tileX: spawn.x,
-        tileY: spawn.y,
-        z: spawn.z,
-        health: targetPlayer.health,
-        maxHealth: targetPlayer.maxHealth,
-        mana: targetPlayer.mana,
-        maxMana: targetPlayer.maxMana,
-    });
+    ctx.broadcastToPlayerSpectators(
+        room,
+        {
+            type: 'player_respawned',
+            v: PROTOCOL_VERSION,
+            playerId: targetPlayer.id,
+            mapId: targetPlayer.mapId,
+            instanceId: targetPlayer.instanceId,
+            tileX: spawn.x,
+            tileY: spawn.y,
+            z: spawn.z,
+            health: targetPlayer.health,
+            maxHealth: targetPlayer.maxHealth,
+            mana: targetPlayer.mana,
+            maxMana: targetPlayer.maxMana,
+        },
+        deathTile
+    );
 
     ctx.sendPositionCorrection(targetPlayer);
     ctx.persistPlayerPosition(targetPlayer, true);
@@ -333,11 +367,15 @@ function handlePveAttack(
     }
 
     if (outcome.damaged) {
-        ctx.broadcastToRoom(room, outcome.damaged);
+        ctx.broadcastCreatureEvent(room, msg.creatureId, outcome.damaged);
     }
 
     if (outcome.died) {
-        ctx.broadcastToRoom(room, outcome.died);
+        ctx.broadcastCreatureEvent(room, msg.creatureId, outcome.died, {
+            tileX: outcome.died.tileX,
+            tileY: outcome.died.tileY,
+            z: outcome.died.z,
+        });
 
         const gain = applyExperienceGain(player.experience, outcome.died.xpReward);
         player.experience = gain.experience;

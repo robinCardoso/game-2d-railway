@@ -40,6 +40,8 @@ function buildDrawOrder(drawables: readonly DepthDrawable[]): number[] {
 /** Cache por andar Z — evita `.sort()` quando nenhum pé mudou desde o último frame. */
 export class DepthSortFingerprintCache {
     private readonly byZ = new Map<number, FloorSortState>();
+    private sortHits = 0;
+    private sortMisses = 0;
 
     sortIfDirty(z: number, drawables: DepthDrawable[]): void {
         const fingerprint = computeDepthSortFingerprint(drawables);
@@ -51,15 +53,26 @@ export class DepthSortFingerprintCache {
             cached.drawOrder.length === drawables.length
         ) {
             applyDrawOrder(drawables, cached.drawOrder);
+            this.sortHits += 1;
             return;
         }
 
         const drawOrder = buildDrawOrder(drawables);
         applyDrawOrder(drawables, drawOrder);
         this.byZ.set(z, { fingerprint, drawOrder });
+        this.sortMisses += 1;
+    }
+
+    consumeSortStats(): { hits: number; misses: number } {
+        const stats = { hits: this.sortHits, misses: this.sortMisses };
+        this.sortHits = 0;
+        this.sortMisses = 0;
+        return stats;
     }
 
     clear(): void {
         this.byZ.clear();
+        this.sortHits = 0;
+        this.sortMisses = 0;
     }
 }

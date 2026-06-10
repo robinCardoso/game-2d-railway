@@ -57,6 +57,14 @@ import {
     createPositionCorrectionSlide,
     tickPositionCorrectionSlide,
 } from '../movement/positionCorrectionSlide';
+import {
+    createClientMovementPrediction,
+    getPendingPredictionCount,
+    reconcileMovementPrediction,
+    recordPredictedMove,
+    resetClientMovementPrediction,
+    type ClientMovementPrediction,
+} from '../movement/clientMovementPrediction';
 import type { RemotePlayerDepthEntry } from '../engine/depthSortDraw';
 import { PlayerMovement } from '../movement/playerMovement';
 import { NpcAI } from '../character/npcAI';
@@ -101,7 +109,7 @@ import {
 import { updatePlayHudPing, updatePlayHudStatus, resetPlayHudStatusCache } from './ui/playHudStatusUi';
 import { initPlayHudInventory } from './ui/playHudInventory';
 import { bindPlayChatNetwork, createPlayChatNetHandlers } from './chat/playChatController';
-import { getPlayDefaultZoom, getPlayRenderOptions } from './ui/playHudSettings';
+import { getPlayDefaultZoom, getPlayHudQuality, getNetworkRenderDelayMs, getPlayRenderOptions } from './ui/playHudSettings';
 import {
     PLAY_DEFAULT_ZOOM_CHANGED_EVENT,
     PLAY_ZOOM_SESSION_KEY,
@@ -145,6 +153,15 @@ import {
     setPlayPerfMonitorContext,
     tickPlayPerformanceMonitorFrame,
 } from './debug/playPerformanceMonitor';
+import { appendPlayStressDepthDrawables, getPlayStressLevel } from './debug/playStressTest';
+import {
+    applyPlayCameraFollow,
+    computePlayCameraTarget,
+    createPlayCameraJuiceState,
+    snapPlayCamera,
+    tickPlayScreenShake,
+    triggerPlayScreenShake,
+} from './playCameraJuice';
 import { tickOfflineMonsterDeathAndRespawn } from './creatureDeathLifecycle';
 import { loadRuntimeVocations, getVocationById } from '../game-data/vocationRegistry';
 import { calculateStatsForLevel } from '../engine/character/calculateStats';
@@ -218,6 +235,16 @@ const playDepthDrawBuffer: DepthDrawable[] = [];
 const playRemoteDepthBuffer: RemotePlayerDepthEntry[] = [];
 const playDepthSortCache = new DepthSortFingerprintCache();
 const positionCorrectionSlide = createPositionCorrectionSlide();
+let movementPrediction: ClientMovementPrediction = createClientMovementPrediction({
+    tileX: player.tileX,
+    tileY: player.tileY,
+    z: player.worldZ,
+});
+const playCameraJuice = createPlayCameraJuiceState();
+let lastLoopMs = 0;
+let frameDepthDrawables = 0;
+let frameSortHits = 0;
+let frameSortMisses = 0;
 
 
 import { getClientRuntimeConfig } from './runtime/runtimeEnv';
@@ -485,6 +512,10 @@ function applyLoadedMap(loaded: ReturnType<typeof loadMapFromJson>): void {
     player.tileY = loaded.spawn.y;
     player.worldZ = clampFloorZ(loaded.spawn.z);
     syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
+    const zoom = camera.zoom || 1;
+    const target = computePlayCameraTarget(player.worldX, player.worldY, canvas, zoom);
+    snapPlayCamera(camera, target.x, target.y);
+    resetClientMovementPrediction(movementPrediction, player.tileX, player.tileY, player.worldZ);
     editingFloor = player.worldZ;
     refreshPlayerMovementSpeed();
     respawnEntities();
@@ -635,7 +666,7 @@ function tryPlaySpellSlot(slot: SpellBarSlot): void {
         character: activeCharacter,
         characterSpeed,
         npcs: getPlayEntities(),
-        playerMana: { current: player.mana, max: player.maxMana },
+        playerMana: player,
         callbacks: buildPlayCombatCallbacks(nowMs),
         server: buildPlayCombatServerBridge(),
     });
@@ -989,15 +1020,22 @@ function isEntityAtTile(tx: number, ty: number, z: number, excludeId?: string): 
     return false;
 }
 
-function updatePlayCameraFollow(): void {
+function updatePlayCameraFollow(dtMs: number): void {
     const zoom = camera.zoom || 1;
-    const visibleW = canvas.width / zoom;
-    const visibleH = canvas.height / zoom;
-    camera.x = Math.floor(player.worldX - visibleW / 2 + ((camera as { offsetX?: number }).offsetX || 0));
-    camera.y = Math.floor(player.worldY - visibleH / 2 + ((camera as { offsetY?: number }).offsetY || 0));
+    const manualOffsetX = (camera as { offsetX?: number }).offsetX || 0;
+    const manualOffsetY = (camera as { offsetY?: number }).offsetY || 0;
+    const target = computePlayCameraTarget(
+        player.worldX,
+        player.worldY,
+        canvas,
+        zoom,
+        manualOffsetX,
+        manualOffsetY
+    );
+    applyPlayCameraFollow(camera, target.x, target.y, getPlayHudQuality(), dtMs);
 }
 
-function update(): void {
+function update(dtMs: number): void {
     const nowMs = performance.now();
     const playEntities = getPlayEntities();
     const aiEntities = usesServerCreatures() ? npcs.filter((n) => n.type === 'npc') : npcs;
@@ -1016,7 +1054,7 @@ function update(): void {
     }
 
     if (usesServerCreatures()) {
-        serverCreatures.tick(nowMs);
+        serverCreatures.tick(nowMs, getNetworkRenderDelayMs());
     } else {
         tickOfflineMonsterDeathAndRespawn(npcs, nowMs, TILE_SIZE_SCREEN);
     }
@@ -1046,17 +1084,33 @@ function update(): void {
             posXEl: document.getElementById('posX') as HTMLElement,
             posYEl: document.getElementById('posY') as HTMLElement,
             posZEl: document.getElementById('posZ') as HTMLElement,
+            skipCameraUpdate: true,
         });
         editingFloorResult = result.editingFloor;
     } else {
-        updatePlayCameraFollow();
         activeCharacterController.setState('idle');
         activeCharacterController.update(nowMs, gridMovement.stepDurationMs);
     }
+    updatePlayCameraFollow(dtMs);
     editingFloor = editingFloorResult;
 
     const currentTileKey = getPlayerTileKey();
     const enteredNewTile = currentTileKey !== previousPlayerTileKey;
+    if (
+        enteredNewTile &&
+        gameNet?.isConnected() &&
+        isServerAuthoritativePosition() &&
+        previousPlayerTileKey
+    ) {
+        const parts = previousPlayerTileKey.split('_').map(Number);
+        const fromZ = parts[2] ?? player.worldZ;
+        recordPredictedMove(
+            movementPrediction,
+            { tileX: parts[0]!, tileY: parts[1]!, z: fromZ },
+            { tileX: player.tileX, tileY: player.tileY, z: player.worldZ },
+            nowMs
+        );
+    }
     if (enteredNewTile) previousPlayerTileKey = currentTileKey;
 
     if (
@@ -1085,7 +1139,7 @@ function update(): void {
         remoteSprites.sync(
             gameNet.getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId())
         );
-        remoteSprites.tick(nowMs);
+        remoteSprites.tick(nowMs, getNetworkRenderDelayMs());
     }
     gameNet?.syncPositionIfChanged();
 
@@ -1198,7 +1252,7 @@ function setupPlayZoomControls(): void {
     });
 }
 
-function draw(): void {
+function draw(dtMs: number): void {
     const zoom = camera.zoom || 1;
     const nowMs = performance.now();
 
@@ -1211,8 +1265,9 @@ function draw(): void {
     ctx.scale(zoom, zoom);
     ctx.imageSmoothingEnabled = false;
 
-    const camX = Math.round(camera.x * zoom) / zoom;
-    const camY = Math.round(camera.y * zoom) / zoom;
+    const shake = tickPlayScreenShake(playCameraJuice, dtMs);
+    const camX = Math.round((camera.x + shake.x) * zoom) / zoom;
+    const camY = Math.round((camera.y + shake.y) * zoom) / zoom;
     const camState = { x: camX, y: camY, zoom };
 
     const borderDrawCtx = getPlayBorderDrawContext();
@@ -1353,6 +1408,7 @@ function draw(): void {
                 showFloatingDamage: renderOpts.showFloatingDamage,
                 highlightEntityId: getPlayCombatHoverId(),
                 nowMs,
+                viewport,
             },
             playDepthDrawBuffer
         );
@@ -1364,7 +1420,10 @@ function draw(): void {
                 camState,
                 TILE_SIZE_SCREEN,
                 nowMs,
-                renderOpts,
+                {
+                    ...renderOpts,
+                    viewport,
+                },
                 playDepthDrawBuffer
             );
         }
@@ -1390,7 +1449,18 @@ function draw(): void {
         });
         if (localDrawable) playDepthDrawBuffer.push(localDrawable);
 
+        appendPlayStressDepthDrawables(
+            playDepthDrawBuffer,
+            getPlayStressLevel(),
+            z,
+            player.worldZ,
+            player.worldX,
+            player.worldY,
+            TILE_SIZE_SCREEN
+        );
+
         playDepthSortCache.sortIfDirty(z, playDepthDrawBuffer);
+        frameDepthDrawables += playDepthDrawBuffer.length;
         ctx.globalAlpha = 1;
         drawDepthSorted(ctx, playDepthDrawBuffer);
 
@@ -1416,7 +1486,8 @@ function draw(): void {
                 ctx,
                 placement.drawX + placement.drawW / 2,
                 placement.drawY,
-                nowMs
+                nowMs,
+                getPlayHudQuality() === 'high' ? 'easeOut' : 'linear'
             );
         }
 
@@ -1439,6 +1510,10 @@ function draw(): void {
         }
     });
 
+    const sortStats = playDepthSortCache.consumeSortStats();
+    frameSortHits += sortStats.hits;
+    frameSortMisses += sortStats.misses;
+
     ctx.restore();
 }
 
@@ -1460,13 +1535,20 @@ function handlePlayPageHidden(): void {
 }
 
 function handlePlayPageVisible(): void {
+    resetClientMovementPrediction(movementPrediction, player.tileX, player.tileY, player.worldZ);
     resyncController?.requestResync();
 }
 
 function loop(): void {
     const frameStart = performance.now();
-    update();
-    draw();
+    const dtMs = lastLoopMs > 0 ? frameStart - lastLoopMs : 16;
+    lastLoopMs = frameStart;
+    frameDepthDrawables = 0;
+    frameSortHits = 0;
+    frameSortMisses = 0;
+
+    update(dtMs);
+    draw(dtMs);
     tickPlayPerformanceMonitorFrame(performance.now() - frameStart);
 
     const remoteCount =
@@ -1478,6 +1560,12 @@ function loop(): void {
         visiblePlayers: remoteCount + (activeCharacter ? 1 : 0),
         visibleCreatures: getPlayEntities().filter((entity) => entity.type === 'monster').length,
         floatingDamages: localPlayerFloats.getActiveCount(),
+        depthDrawables: frameDepthDrawables,
+        sortCacheHits: frameSortHits,
+        sortCacheMisses: frameSortMisses,
+        stressLevel: getPlayStressLevel(),
+        pendingPredictions: getPendingPredictionCount(movementPrediction),
+        renderDelayMs: getNetworkRenderDelayMs(),
     });
 
     requestAnimationFrame(loop);
@@ -1579,6 +1667,21 @@ function setupNetwork(
         isMovementStepping: () => gridMovement.stepping,
         onPositionCorrection: (pos) => {
             if (pos.mapId !== (currentMapId ?? char.spawnMapId)) return;
+            const reconcile = reconcileMovementPrediction(
+                movementPrediction,
+                pos.tileX,
+                pos.tileY,
+                pos.z,
+                player.tileX,
+                player.tileY,
+                player.worldZ
+            );
+            if (reconcile.droppedPending > 0) {
+                console.debug(
+                    `[Play] position_correction → rollback ${reconcile.clientAheadTiles} tile(s), ` +
+                        `dropped ${reconcile.droppedPending} predicted step(s)`
+                );
+            }
             player.worldZ = clampFloorZ(pos.z);
             gridMovement.stepping = false;
             gridMovement.activeStepFacing = null;
@@ -1716,6 +1819,12 @@ function setupNetwork(
                 player.maxHealth = msg.maxHealth;
                 updateCharacterStatsUi(activeCharacter!, { flashLevel: false });
                 localPlayerFloats.spawnDamage(msg.damage, now);
+                if (getPlayHudQuality() === 'high' && msg.damage > 0) {
+                    triggerPlayScreenShake(
+                        playCameraJuice,
+                        Math.min(8, 3 + msg.damage * 0.15)
+                    );
+                }
             } else {
                 remoteSprites.spawnFloatingDamage(msg.playerId, msg.damage, now);
             }

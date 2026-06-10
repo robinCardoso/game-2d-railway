@@ -11,6 +11,24 @@ import type { RegistryTile, TileRegistry } from './types';
 
 /** Margem em tiles para itens altos (ex. árvore 64×64) cujo pé sai do viewport antes da copa. */
 const DEFAULT_ITEM_VIEWPORT_MARGIN_TILES = 2;
+/** Margem para NPCs/remotos (sprites 32×32+ podem extrapolar a célula do pé). */
+const DEFAULT_ENTITY_VIEWPORT_MARGIN_TILES = 2;
+
+function isTileInDepthSortViewport(
+    tileX: number,
+    tileY: number,
+    viewport: DepthSortViewport | undefined,
+    marginTiles: number
+): boolean {
+    if (!viewport) return true;
+    const margin = Math.max(0, marginTiles);
+    return (
+        tileX >= viewport.startX - margin &&
+        tileX <= viewport.endX + margin &&
+        tileY >= viewport.startY - margin &&
+        tileY <= viewport.endY + margin
+    );
+}
 
 /** Fade só quando parte do sprite já saiu da tela (px). 0 = desliga. */
 export const DEFAULT_ITEM_EDGE_FADE_PX = 28;
@@ -399,6 +417,8 @@ export function collectNpcDepthDrawables(
         showFloatingDamage?: boolean;
         highlightEntityId?: string | null;
         nowMs?: number;
+        viewport?: DepthSortViewport;
+        viewportMarginTiles?: number;
     },
     out?: DepthDrawable[]
 ): DepthDrawable[] {
@@ -410,9 +430,17 @@ export function collectNpcDepthDrawables(
     const showFloatingDamage = options?.showFloatingDamage ?? true;
     const highlightEntityId = options?.highlightEntityId ?? null;
     const nowMs = options?.nowMs ?? 0;
+    const viewport = options?.viewport;
+    const viewportMarginTiles =
+        options?.viewportMarginTiles ?? DEFAULT_ENTITY_VIEWPORT_MARGIN_TILES;
 
     for (const npc of npcs) {
         if (npc.worldZ !== z) continue;
+        if (
+            !isTileInDepthSortViewport(npc.tileX, npc.tileY, viewport, viewportMarginTiles)
+        ) {
+            continue;
+        }
         if (!shouldDrawCreatureCorpse(npc, nowMs)) continue;
         if (!npc.animController.isLoaded || !npc.animController.image) continue;
 
@@ -593,6 +621,8 @@ export function collectRemoteDepthDrawables(
         showPlayerNames?: boolean;
         showHealthBars?: boolean;
         showFloatingDamage?: boolean;
+        viewport?: DepthSortViewport;
+        viewportMarginTiles?: number;
     },
     out?: DepthDrawable[]
 ): DepthDrawable[] {
@@ -602,9 +632,17 @@ export function collectRemoteDepthDrawables(
     const showPlayerNames = render?.showPlayerNames ?? true;
     const showHealthBars = render?.showHealthBars ?? true;
     const showFloatingDamage = render?.showFloatingDamage ?? true;
+    const viewport = render?.viewport;
+    const viewportMarginTiles =
+        render?.viewportMarginTiles ?? DEFAULT_ENTITY_VIEWPORT_MARGIN_TILES;
 
     for (const remote of remotes) {
         if (remote.z !== z) continue;
+        if (
+            !isTileInDepthSortViewport(remote.tileX, remote.tileY, viewport, viewportMarginTiles)
+        ) {
+            continue;
+        }
         const worldX = remote.worldX ?? remote.tileX * tileSize;
         const worldY = remote.worldY ?? remote.tileY * tileSize;
         const ctrl = remote.controller;

@@ -31,6 +31,8 @@ export interface PlayerMovementController {
         posXEl: HTMLElement;
         posYEl: HTMLElement;
         posZEl: HTMLElement;
+        /** Play: câmera com lerp/shake em playCameraJuice — não snap aqui. */
+        skipCameraUpdate?: boolean;
     }): { editingFloor: number };
     teleportPlayer(options: {
         player: any;
@@ -53,7 +55,7 @@ export interface PlayerMovementController {
 export const PlayerMovement: PlayerMovementController = {
     updateMovement(options) {
         const nowMs = performance.now();
-        const {
+        let {
             keys,
             player,
             gridMovement,
@@ -63,14 +65,14 @@ export const PlayerMovement: PlayerMovementController = {
             TILE_SIZE_SCREEN,
             MAP_SIZE,
             ENGINE_CONFIG,
+            editingFloor,
             updateFloorButtons,
             refreshPlayerMovementSpeed,
             posXEl,
             posYEl,
             posZEl,
+            skipCameraUpdate,
         } = options;
-
-        let editingFloor = options.editingFloor;
 
         if (!gridMovement.stepping) {
             refreshPlayerMovementSpeed(nowMs);
@@ -143,12 +145,14 @@ export const PlayerMovement: PlayerMovementController = {
             updateFloorButtons();
         }
 
-        // 6. Atualização de Câmera centralizada no player com offset manual de arrasto (arredondado para evitar frestas/linhas pretas)
-        const zoom = (camera as any).zoom || 1.0;
-        const visibleW = canvas.width / zoom;
-        const visibleH = canvas.height / zoom;
-        camera.x = Math.floor(player.worldX - visibleW / 2 + ((camera as any).offsetX || 0));
-        camera.y = Math.floor(player.worldY - visibleH / 2 + ((camera as any).offsetY || 0));
+        // 6. Câmera (Play pode adiar para lerp/shake em playCameraJuice)
+        if (!skipCameraUpdate) {
+            const zoom = (camera as any).zoom || 1.0;
+            const visibleW = canvas.width / zoom;
+            const visibleH = canvas.height / zoom;
+            camera.x = Math.floor(player.worldX - visibleW / 2 + ((camera as any).offsetX || 0));
+            camera.y = Math.floor(player.worldY - visibleH / 2 + ((camera as any).offsetY || 0));
+        }
 
         // 7. Atualização do rodapé/UI de coordenadas e posições
         if (posXEl) posXEl.innerText = player.tileX.toString();

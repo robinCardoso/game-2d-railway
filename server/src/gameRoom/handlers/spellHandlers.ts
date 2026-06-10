@@ -5,6 +5,7 @@ import { buildRoomKey } from '../../../../shared/roomKey.js';
 import { listEquippedSpellIds } from '../../../../shared/spellBar.js';
 import { validateCharacterSpellBar } from '../../../../shared/spellSlots.js';
 import type { VocationId } from '../../../../shared/types/character.js';
+import type { BroadcastCreatureEvent } from '../contextTypes.js';
 import { applyExperienceGain } from '../../../../src/game/experience.js';
 import { replaceCharacterSpellSlots } from '../../db/repositories/spellSlots.repo.js';
 import { isDatabaseConfigured } from '../../db/pool.js';
@@ -23,7 +24,8 @@ export interface SpellHandlerContext {
     roomKey: (player: Pick<ConnectedPlayer, 'mapId' | 'instanceId'>) => string;
     send: (socket: WebSocket, message: ServerMessage) => void;
     broadcastToRoom: (room: string, message: ServerMessage) => void;
-    sendPlayerResources: (player: ConnectedPlayer) => void;
+    broadcastCreatureEvent: BroadcastCreatureEvent;
+    sendPlayerResources: (player: ConnectedPlayer, force?: boolean) => void;
     creatures: RoomCreatureManager;
     spellCatalog: SpellCatalogStore;
     vocations: VocationStore;
@@ -84,6 +86,7 @@ export function handleCastSpell(
             code: outcome.code ?? 'SPELL_CAST_FAILED',
             message: spellCastErrorMessage(outcome.code),
         });
+        ctx.sendPlayerResources(player, true);
         return;
     }
 
@@ -93,11 +96,15 @@ export function handleCastSpell(
     ctx.sendPlayerResources(player);
 
     if (outcome.damaged) {
-        ctx.broadcastToRoom(room, outcome.damaged);
+        ctx.broadcastCreatureEvent(room, msg.creatureId, outcome.damaged);
     }
 
     if (outcome.died) {
-        ctx.broadcastToRoom(room, outcome.died);
+        ctx.broadcastCreatureEvent(room, msg.creatureId, outcome.died, {
+            tileX: outcome.died.tileX,
+            tileY: outcome.died.tileY,
+            z: outcome.died.z,
+        });
 
         const gain = applyExperienceGain(player.experience, outcome.died.xpReward);
         player.experience = gain.experience;

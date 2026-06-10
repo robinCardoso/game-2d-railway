@@ -8,9 +8,16 @@ import {
     parseClientMessage,
     PROTOCOL_VERSION,
 } from '../../shared/protocol.js';
+import {
+    filterCreatureSnapshotsForViewer,
+    filterPlayerSnapshotsForViewer,
+    isTileInSpectatorRange,
+    type SpectatorTile,
+} from '../../shared/creatureSpectatorRange.js';
 import { buildRoomKey } from '../../shared/roomKey.js';
 import type { MapCollisionStore } from './MapCollisionStore.js';
 import type { MapInstanceStore } from './MapInstanceStore.js';
+import type { BroadcastCreatureEvent } from './gameRoom/contextTypes.js';
 import { handleChatSend, type ChatHandlerContext } from './gameRoom/handlers/chatHandlers.js';
 import {
     handleAttack,
@@ -101,7 +108,7 @@ export class GameRoom {
             this.collision,
             options.creaturePresets,
             options.vocations,
-            (room, message) => this.broadcastToRoom(room, message),
+            (room, message, event) => this.broadcastToSpectators(room, message, event),
             (room) => this.playersInRoomAsRefs(room)
         );
         this.creatures.start();
@@ -137,13 +144,20 @@ export class GameRoom {
     }
 
     private sendCreatureSync(socket: WebSocket, room: string, mapId: string, instanceId?: string): void {
+        const player = this.getPlayerBySocket(socket);
         const snapshots = this.creatures.ensureRoom(room, mapId, instanceId);
+        const creatures = player
+            ? filterCreatureSnapshotsForViewer(
+                  { tileX: player.tileX, tileY: player.tileY, z: player.z },
+                  snapshots
+              )
+            : snapshots;
         this.send(socket, {
             type: 'creature_sync',
             v: PROTOCOL_VERSION,
             mapId,
             instanceId,
-            creatures: snapshots,
+            creatures,
         });
     }
 
@@ -156,20 +170,83 @@ export class GameRoom {
     }
 
     private send(socket: WebSocket, message: ServerMessage): void {
-        if (socket.readyState === socket.OPEN) {
-            socket.send(JSON.stringify(message));
-        }
+        if (socket.readyState !== socket.OPEN) return;
+        socket.send(JSON.stringify(message));
     }
 
     private broadcastToRoom(room: string, message: ServerMessage, exceptId?: string): void {
         const payload = JSON.stringify(message);
         for (const p of this.players.values()) {
-            if (exceptId && p.id === exceptId) continue;
-            if (this.roomKey(p) !== room) continue;
-            if (p.socket.readyState === p.socket.OPEN) {
+            if (exceptId && p.id === exceptId) {
+                continue;
+            } else if (this.roomKey(p) !== room) {
+                continue;
+            } else if (p.socket.readyState === p.socket.OPEN) {
                 p.socket.send(payload);
             }
         }
+    }
+
+    private broadcastToSpectators(
+        room: string,
+        message: ServerMessage,
+        event: SpectatorTile,
+        exceptId?: string
+    ): void {
+        const payload = JSON.stringify(message);
+        for (const p of this.players.values()) {
+            if (exceptId && p.id === exceptId) {
+                continue;
+            } else if (this.roomKey(p) !== room) {
+                continue;
+            } else if (
+                !isTileInSpectatorRange(
+                    { tileX: p.tileX, tileY: p.tileY, z: p.z },
+                    event
+                )
+            ) {
+                continue;
+            } else if (p.socket.readyState === p.socket.OPEN) {
+                p.socket.send(payload);
+            }
+        }
+    }
+
+    private broadcastCreatureEvent(
+        room: string,
+        creatureId: string,
+        message: ServerMessage,
+        eventTile?: SpectatorTile
+    ): void {
+        const tile = eventTile ?? this.creatures.getCreatureTile(room, creatureId);
+        if (tile) {
+            this.broadcastToSpectators(room, message, tile);
+        } else {
+            this.broadcastToRoom(room, message);
+        }
+    }
+
+    private bindBroadcastCreatureEvent(): BroadcastCreatureEvent {
+        return (room, creatureId, message, eventTile) =>
+            this.broadcastCreatureEvent(room, creatureId, message, eventTile);
+    }
+
+    private broadcastToPlayerSpectators(
+        room: string,
+        message: ServerMessage,
+        event: SpectatorTile,
+        exceptId?: string
+    ): void {
+        this.broadcastToSpectators(room, message, event, exceptId);
+    }
+
+    private playersVisibleToViewer(
+        viewer: Pick<ConnectedPlayer, 'tileX' | 'tileY' | 'z'>,
+        room: string
+    ): PlayerSnapshot[] {
+        const viewerTile = { tileX: viewer.tileX, tileY: viewer.tileY, z: viewer.z };
+        const all = this.playersInRoom(room);
+        return filterPlayerSnapshotsForViewer(viewerTile, all);
     }
 
     private playersInRoom(room: string, exceptId?: string): PlayerSnapshot[] {
@@ -205,10 +282,10 @@ export class GameRoom {
         this.sendPlayerResources(player);
     }
 
-    private sendPlayerResources(player: ConnectedPlayer): void {
+    private sendPlayerResources(player: ConnectedPlayer, force = false): void {
         const payload = snapshotPlayerResources(player);
         const prev = this.lastSentResources.get(player.id);
-        if (!playerResourcesChanged(prev, payload)) return;
+        if (!force && !playerResourcesChanged(prev, payload)) return;
         this.lastSentResources.set(player.id, payload);
         this.send(player.socket, {
             type: 'player_resources',
@@ -230,7 +307,9 @@ export class GameRoom {
             roomKey: (player) => this.roomKey(player),
             send: (socket, message) => this.send(socket, message),
             broadcastToRoom: (room, message) => this.broadcastToRoom(room, message),
-            sendPlayerResources: (player) => this.sendPlayerResources(player),
+            broadcastCreatureEvent: this.bindBroadcastCreatureEvent(),
+            sendPlayerResources: (player: ConnectedPlayer, force?: boolean) =>
+                this.sendPlayerResources(player, force),
             creatures: this.creatures,
             spellCatalog: this.spellCatalog,
             vocations: this.vocations,
@@ -252,6 +331,8 @@ export class GameRoom {
             send: (socket, message) => this.send(socket, message),
             broadcastToRoom: (room, message, exceptId) =>
                 this.broadcastToRoom(room, message, exceptId),
+            broadcastToPlayerSpectators: (room, message, event, exceptId) =>
+                this.broadcastToPlayerSpectators(room, message, event, exceptId),
             roomKey: (player) => this.roomKey(player),
             isWalkable: (mapId, tileX, tileY, z) => this.isWalkable(mapId, tileX, tileY, z),
             rejectMove: (player, code, message, logDetail) =>
@@ -272,7 +353,11 @@ export class GameRoom {
             roomKey: (player) => this.roomKey(player),
             send: (socket, message) => this.send(socket, message),
             broadcastToRoom: (room, message) => this.broadcastToRoom(room, message),
-            sendPlayerResources: (player) => this.sendPlayerResources(player),
+            broadcastToPlayerSpectators: (room, message, event) =>
+                this.broadcastToPlayerSpectators(room, message, event),
+            broadcastCreatureEvent: this.bindBroadcastCreatureEvent(),
+            sendPlayerResources: (player: ConnectedPlayer, force?: boolean) =>
+                this.sendPlayerResources(player, force),
             sendPositionCorrection: (player) => this.sendPositionCorrection(player),
             persistPlayerPosition: (player, immediate) =>
                 this.persistPlayerPosition(player, immediate),
@@ -310,7 +395,10 @@ export class GameRoom {
             send: (socket, message) => this.send(socket, message),
             broadcastToRoom: (room, message, exceptId) =>
                 this.broadcastToRoom(room, message, exceptId),
-            sendPlayerResources: (player) => this.sendPlayerResources(player),
+            broadcastToPlayerSpectators: (room, message, event, exceptId) =>
+                this.broadcastToPlayerSpectators(room, message, event, exceptId),
+            sendPlayerResources: (player: ConnectedPlayer, force?: boolean) =>
+                this.sendPlayerResources(player, force),
             sendPositionCorrection: (player) => this.sendPositionCorrection(player),
             collision: this.collision,
             instances: this.instances,
@@ -345,7 +433,8 @@ export class GameRoom {
                 return true;
             },
             roomKey: (player) => this.roomKey(player),
-            playersInRoom: (room) => this.playersInRoom(room),
+            playersVisibleToViewer: (viewer, room) =>
+                this.playersVisibleToViewer(viewer, room),
             sendCreatureSync: (socket, room, mapId, instanceId) =>
                 this.sendCreatureSync(socket, room, mapId, instanceId),
             sendPositionCorrection: (player) => this.sendPositionCorrection(player),
@@ -359,7 +448,8 @@ export class GameRoom {
             getPlayers: () => this.players.values(),
             getPlayerById: (playerId) => this.players.get(playerId),
             roomKey: (player) => this.roomKey(player),
-            playersInRoom: (room) => this.playersInRoom(room),
+            playersVisibleToViewer: (viewer, room) =>
+                this.playersVisibleToViewer(viewer, room),
             creatures: this.creatures,
         };
     }
@@ -566,11 +656,15 @@ export class GameRoom {
         if (player) {
             this.instances.untrackPlayer(player.instanceId, playerId);
             console.log(`[GameRoom] ${player.name} (${playerId}) saiu de ${room}`);
-            this.broadcastToRoom(room, {
-                type: 'player_left',
-                v: PROTOCOL_VERSION,
-                playerId,
-            });
+            this.broadcastToPlayerSpectators(
+                room,
+                {
+                    type: 'player_left',
+                    v: PROTOCOL_VERSION,
+                    playerId,
+                },
+                { tileX: player.tileX, tileY: player.tileY, z: player.z }
+            );
         }
     }
 

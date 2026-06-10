@@ -7,7 +7,7 @@
   "offsetY": 0,
   "gapX": 0,
   "gapY": 0,
-  "anchorX": -10,
+  "anchorX": -15,
   "anchorY": 0,
   "corpseAnchorY": 18,
   "sheetLayout": "horizontal",
@@ -128,5 +128,5 @@
       "loop": false
     }
   },
-  "updatedAt": "2026-06-09T02:08:41.818Z"
+  "updatedAt": "2026-06-10T01:56:52.517Z"
 }

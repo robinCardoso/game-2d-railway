@@ -3,13 +3,15 @@ import type { PlayerSnapshot, ServerMessage } from '../../../../shared/protocol.
 import { PROTOCOL_VERSION } from '../../../../shared/protocol.js';
 import type { ConnectedPlayer } from '../types.js';
 
+type ViewerTile = Pick<ConnectedPlayer, 'tileX' | 'tileY' | 'z'>;
+
 export const RESYNC_MIN_INTERVAL_MS = 2000;
 
 export interface ResyncHandlerContext {
     getPlayerBySocket: (socket: WebSocket) => ConnectedPlayer | undefined;
     tryAcquireResyncSlot: (playerId: string, nowMs: number) => boolean;
     roomKey: (player: Pick<ConnectedPlayer, 'mapId' | 'instanceId'>) => string;
-    playersInRoom: (room: string) => PlayerSnapshot[];
+    playersVisibleToViewer: (viewer: ViewerTile, room: string) => PlayerSnapshot[];
     sendCreatureSync: (
         socket: WebSocket,
         room: string,
@@ -31,7 +33,7 @@ export function handleResyncRequest(ctx: ResyncHandlerContext, socket: WebSocket
     ctx.send(socket, {
         type: 'state_sync',
         v: PROTOCOL_VERSION,
-        players: ctx.playersInRoom(room),
+        players: ctx.playersVisibleToViewer(player, room),
     });
     ctx.sendCreatureSync(socket, room, player.mapId, player.instanceId);
     ctx.sendPositionCorrection(player);

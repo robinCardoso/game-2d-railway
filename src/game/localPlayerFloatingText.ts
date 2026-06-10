@@ -9,6 +9,7 @@ import {
     drawFloatingDamages,
     pruneFloatingDamages,
     type FloatingDamageEntry,
+    type FloatingDamageMotion,
 } from './floatingCombatText';
 
 export interface LocalPlayerFloatingText {
@@ -20,7 +21,8 @@ export interface LocalPlayerFloatingText {
         ctx: CanvasRenderingContext2D,
         anchorCenterX: number,
         anchorTopY: number,
-        nowMs: number
+        nowMs: number,
+        motion?: FloatingDamageMotion
     ): void;
 }
 
@@ -48,9 +50,9 @@ export function createLocalPlayerFloatingText(): LocalPlayerFloatingText {
             return entries.length;
         },
 
-        draw(ctx, anchorCenterX, anchorTopY, nowMs): void {
+        draw(ctx, anchorCenterX, anchorTopY, nowMs, motion = 'linear'): void {
             if (entries.length === 0) return;
-            drawFloatingDamages(ctx, entries, anchorCenterX, anchorTopY, nowMs);
+            drawFloatingDamages(ctx, entries, anchorCenterX, anchorTopY, nowMs, motion);
         },
     };
 }

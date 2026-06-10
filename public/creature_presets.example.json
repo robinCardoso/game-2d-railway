@@ -5,7 +5,18 @@
     "configPath": "tiles/characters/creatures/rat.json",
     "description": "Rato pequeno — exemplo",
     "color": "#a3a3a3",
-    "visualSize": "tiny"
+    "visualSize": "tiny",
+    "walkStepMs": 220
+  },
+  {
+    "name": "Magao Bruto",
+    "type": "monster",
+    "configPath": "tiles/characters/monstros/trolls/magao_bruto.json",
+    "description": "Troll lento — exemplo boss",
+    "color": "#fb7185",
+    "visualSize": "boss",
+    "walkStepMs": 500,
+    "chaseBehavior": "melee"
   },
   {
     "name": "Shopkeeper",
