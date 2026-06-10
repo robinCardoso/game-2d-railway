@@ -12,6 +12,7 @@
     "build": "tsc && vite build && npm run build --prefix server",
     "start": "npm run start --prefix server",
     "start:railway": "npm run build && npm run start",
+    "pack": "node scripts/pack-assets.mjs",
     "preview": "vite preview",
     "test": "vitest run && node scripts/check-calibrator-listeners.mjs",
     "migrate:character-calibration": "node scripts/migrate-character-calibration.mjs",

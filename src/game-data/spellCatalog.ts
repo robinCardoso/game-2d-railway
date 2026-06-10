@@ -4,6 +4,7 @@ import {
     type SpellDefinition,
 } from './spellCatalogTypes';
 import { resolveApiUrl } from '../shared/apiUrl';
+import { assetLoader } from './assetLoader';
 
 const CATALOG_URL = '/spell_catalog.json';
 
@@ -33,13 +34,20 @@ export function getSpellCatalogEntries(): readonly SpellDefinition[] {
 /** Carrega `public/spell_catalog.json`. */
 export async function loadSpellCatalog(): Promise<SpellCatalogDocument> {
     try {
-        const res = await fetch(resolveApiUrl(CATALOG_URL), { cache: 'no-store' });
-        if (!res.ok) {
-            console.warn('[SpellCatalog] spell_catalog.json ausente — catálogo vazio.');
-            rebuildIndex({ spells: [] });
-            return catalog;
+        let raw;
+        if (assetLoader.isPackaged()) {
+            raw = await assetLoader.getJson<SpellCatalogDocument>('spell_catalog.json');
+            if (!raw) throw new Error('spell_catalog.json não encontrado no pacote assets.pak');
+        } else {
+            const res = await fetch(resolveApiUrl(CATALOG_URL), { cache: 'no-store' });
+            if (!res.ok) {
+                console.warn('[SpellCatalog] spell_catalog.json ausente — catálogo vazio.');
+                rebuildIndex({ spells: [] });
+                return catalog;
+            }
+            raw = await res.json();
         }
-        rebuildIndex(sanitizeSpellCatalogDocument(await res.json()));
+        rebuildIndex(sanitizeSpellCatalogDocument(raw));
         console.log(`[SpellCatalog] ${catalog.spells.length} magia(s) carregada(s).`);
         return catalog;
     } catch (err) {

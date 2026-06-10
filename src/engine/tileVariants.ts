@@ -42,13 +42,23 @@ export function formatVariantGroupLabel(groupKey: string, manifest?: VariantGrou
         .join(' ');
 }
 
+import { assetLoader } from '../game-data/assetLoader';
+
 export async function loadVariantGroupManifest(): Promise<VariantGroupManifest> {
     if (manifestCache) return manifestCache;
     try {
-        const res = await fetch(resolveApiUrl('/tile_variant_groups.json'));
-        if (res.ok) {
-            manifestCache = (await res.json()) as VariantGroupManifest;
-            return manifestCache;
+        if (assetLoader.isPackaged()) {
+            const raw = await assetLoader.getJson<VariantGroupManifest>('tile_variant_groups.json');
+            if (raw) {
+                manifestCache = raw;
+                return manifestCache;
+            }
+        } else {
+            const res = await fetch(resolveApiUrl('/tile_variant_groups.json'));
+            if (res.ok) {
+                manifestCache = (await res.json()) as VariantGroupManifest;
+                return manifestCache;
+            }
         }
     } catch {
         // optional manifest

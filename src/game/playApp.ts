@@ -72,6 +72,7 @@ import { GameEntity } from '../character/entity';
 import { respawnEntitiesFromSpawns } from '../character/respawnEntities';
 import { loadCreaturePresets } from '../editor/creaturePresets';
 import { loadItemCatalog } from '../game-data/itemCatalog';
+import { assetLoader } from '../game-data/assetLoader';
 import { createDefaultCharacterSpeed, type CharacterSpeedState } from '../character/movementSpeed';
 import { SpeedBuffManager } from '../character/speedBuffs';
 import { resolveFullStepDuration } from '../character/characterMovement';
@@ -496,6 +497,7 @@ function respawnEntities(): void {
 
 /** Recarrega presets (visualSize/drawScale) e respawna NPCs — útil após editar mob no Studio. */
 async function reloadCreaturePresetsForPlay(): Promise<void> {
+    await assetLoader.initialize();
     await loadItemCatalog();
     await loadCreaturePresets();
     if (usesServerCreatures()) {
