@@ -62,6 +62,7 @@ Arquivos:
 - Random de loot **só no servidor** — nunca no `draw()` do cliente
 - `implemented: false` bloqueia drop (validação em `applyAutolootGrants`)
 - Dev sem PostgreSQL: inventário em memória (`devInventoryStore.ts`) por `characterId`
+- **Railway `DATA_ROOT`:** volume pode ter `item_catalog.json` antigo/vazio — boot mescla do repo (`catalogVolumeSync.ts`); servidor e `/item_catalog.json` fazem fallback se ainda vazio
 
 ## Backlog
 

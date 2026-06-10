@@ -98,7 +98,14 @@ export async function grantMobAutoloot(
         : getDevCharacterInventory(player.characterId);
 
     const { inventory, granted, overflow } = applyAutolootGrants(current, rolled, catalog);
-    if (granted.length === 0) return;
+    if (granted.length === 0) {
+        if (rolled.length > 0 && catalog.items.length === 0) {
+            console.error(
+                '[grantMobAutoloot] Loot rolado mas catálogo vazio — verifique item_catalog.json no volume.'
+            );
+        }
+        return;
+    }
 
     const saved = await persistAutolootInventory(player, inventory);
     if (!saved) return;

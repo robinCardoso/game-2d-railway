@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { syncCatalogFilesFromRepo } from './catalogVolumeSync.js';
 import { env } from './env.js';
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
@@ -100,6 +101,9 @@ function seedDataRoot(dataRoot: string): void {
     for (const file of publicFiles) {
         copyFileIfMissing(path.join(repoPublic, file), path.join(dataRoot, file));
     }
+
+    // Volume antigo pode ter item_catalog vazio — mescla novos itens/loot do repo
+    syncCatalogFilesFromRepo(repoPublic, dataRoot);
 
     copyFileIfMissing(
         path.join(projectRoot, 'src/game-data/default/vocations.json'),
