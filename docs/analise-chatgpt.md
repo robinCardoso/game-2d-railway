@@ -1,89 +1,104 @@
-# Análise escala OTC — implementações P1
+Pontos de atenção sérios
+1. Risco de peso no Play
 
-Checklist derivado da análise de paridade com OTC/TFS. Detalhes de rede e AOI: [multiplayer-remote-players.md](./multiplayer-remote-players.md).
+Esse commit adiciona bastante lógica no Play: painel de detalhes, clique em slot, equipar/desequipar, render de 50 slots, abas de bolsa, cálculo de bônus, sync por WS e update do estado local. O próprio plano mostra que o fluxo agora passa por UI → mutate → validate → save → servidor → WebSocket → UI.
 
-Última revisão: **2026-06-10**
+Isso não é errado, mas no seu projeto você já sentiu “peso” e lag depois de várias melhorias. Então agora eu não colocaria mais nenhuma feature grande antes de medir:
 
----
+1. Abrir inventário parado
+2. Abrir inventário enquanto anda
+3. Matar mob com inventário aberto
+4. Receber autoloot com inventário aberto
+5. Equipar/desequipar repetidamente
+6. Testar com 2 jogadores online
 
-## Implementações concluídas (P1 escala)
+Se o FPS cair quando abre inventário, o problema provavelmente está em renderização/recriação de DOM. O ideal é o grid de 50 slots ser criado uma vez e depois só atualizar textContent, className, src e estados necessários.
 
-### 1. AOI de combate e eventos PvP ✅
+2. Migrations merecem revisão antes de produção
 
-`attackHandlers.ts` usa `broadcastToPlayerSpectators` (retângulo 25×20 de `creatureSpectatorRange.ts`) para:
+A migration 007_inventory_bags.sql altera a primary key de character_backpack_slots. Isso é correto para suportar múltiplas bolsas, mas pode dar problema se já houver dados duplicados ou se alguma query antiga ainda assume primary key por (character_id, slot_index).
 
-- `player_damaged`
-- `player_died`
-- `player_respawned`
+Antes de rodar em produção, eu validaria:
 
-Mesmo padrão de `player_moved`, `player_joined`, `player_left` e eventos de criatura.
+select character_id, slot_index, count(*)
+from character_backpack_slots
+group by character_id, slot_index
+having count(*) > 1;
 
-**Teste:** `pvp.test.ts` — jogador longe não recebe `player_damaged`.
+E depois:
 
----
+select character_id, bag_index, slot_index, count(*)
+from character_backpack_slots
+group by character_id, bag_index, slot_index
+having count(*) > 1;
 
-### 2. Cap de aggro por jogador (estilo OTC) ✅
+Se tiver duplicidade, a migration pode falhar.
 
-`MONSTER_MAX_ACTIVE_CHASERS_PER_TARGET = 10` em `shared/creatureChase.ts`.
+3. Segurança: o servidor precisa continuar sendo a autoridade
 
-- Servidor: `RoomCreatureManager` — só os N mobs mais próximos **em aproximação** rodam chase por alvo; mobs já no alcance melee mantêm IA.
-- Offline: `npcAI.ts` — mesma regra para packs grandes no Play SP.
+A implementação diz que o PUT /inventory valida o inventário e que o servidor sincroniza GameRoom.equipment + WS inventory_updated. Isso é exatamente o caminho certo.
 
-**Helper:** `shouldMonsterApproachChase()` + testes em `creatureChase.test.ts`.
+Mas eu revisaria estes pontos:
 
----
+O cliente não pode:
+- criar item novo no inventário;
+- aumentar quantidade de item;
+- mover item para bolsa bloqueada;
+- equipar item não implementado;
+- equipar item no slot errado;
+- equipar item que não existe no inventário salvo;
+- alterar attackBonus, defenseBonus, speedBonus pelo payload;
+- mandar unlockedBagSlots maior que o salvo no banco.
 
-### 3. Viewport cull no Play (cliente) ✅
+O servidor deve recalcular tudo usando o catálogo oficial, não aceitar estatística enviada pelo cliente.
 
-`collectNpcDepthDrawables` / `collectRemoteDepthDrawables` recebem `viewport` de `playApp.ts` (mesmo bounds do chão visível).
+4. unlocked_bag_slots precisa ser regra de produto, não só visual
 
-**Teste:** `depthSortDraw.viewport.test.ts`.
+A migration adiciona unlocked_bag_slots com default 3 e check entre 1 e 5. Isso está correto para seu plano de 5 abas com 2 bloqueadas.
 
----
+Mas a UI precisa refletir isso de forma clara:
 
-### 4. Tick de IA só no aware range (servidor) ✅
+Aba 1: liberada
+Aba 2: liberada
+Aba 3: liberada
+Aba 4: bloqueada / Comprar
+Aba 5: bloqueada / Comprar
 
-`RoomCreatureManager` filtra chase com `creatureHasPlayerInAwareRange()` — mobs sem jogador no retângulo 25×20 não rodam IA de perseguição.
+E o servidor precisa bloquear qualquer tentativa de salvar item em bag_index >= unlocked_bag_slots.
 
-**Helper:** `creatureHasPlayerInAwareRange()` em `creatureSpectatorRange.ts`.
+Minha conclusão
 
----
+Essa implementação foi boa e estruturalmente importante. Ela não parece uma gambiarra; ela começou a transformar o inventário em um sistema real de RPG: equipamento, bolsas, slots, autoloot e sincronização online.
 
-### 5. Velocidade de caminhada por mob (`walkStepMs`) ✅
+Mas agora o próximo passo não deveria ser adicionar mais interface ou mais sistema. O próximo passo deveria ser um commit só de estabilização:
 
-- Campo opcional em `creature_presets.json` / `mobPresetTypes.ts`
-- Editor: **Criar → Mobs Stats** → campo **Velocidade de caminhada (ms/tile)**
-- Servidor: `RoomCreatureManager` + `tickMonsterChaseStep` usam `walkStepMs` no gate e no `stepDurationMs` do protocolo
-- Offline: `npcAI.ts` sincroniza `moveSpeedPx` com o preset
+Commit recomendado:
+chore: harden inventory performance and validation
 
-**Testes:** `creatureChase.test.ts` — `walkStepMs` e facing aggro.
+Com foco em:
 
----
+1. Garantir que o servidor rejeita qualquer inventário adulterado.
+2. Medir FPS com inventário aberto/fechado.
+3. Evitar recriar 50 slots no DOM a cada update.
+4. Confirmar que autoloot não trava quando todas as bolsas liberadas estão cheias.
+5. Confirmar que bolsa 4 e 5 bloqueadas não aceitam item via request manual.
+6. Confirmar que bônus de arma/escudo atualizam no combate sem precisar relogar.
+7. Confirmar que migrations rodam em banco já populado.
+Checklist de teste que eu faria agora
+[ ] Criar personagem novo → começa com 3 bolsas liberadas.
+[ ] Abrir inventário → mostra 5 abas, 2 bloqueadas.
+[ ] Matar mob → item entra na bolsa 1.
+[ ] Encher bolsa 1 → próximo loot entra na bolsa 2.
+[ ] Encher bolsas 1, 2 e 3 → loot excedente falha com mensagem/log claro.
+[ ] Tentar salvar item na bolsa 4 via request manual → servidor rejeita.
+[ ] Equipar wooden_shield → vai para shield, não body.
+[ ] Equipar leather_armor → vai para body.
+[ ] Equipar iron_sword → vai para weapon.
+[ ] Equipar segunda arma → arma antiga volta para primeira posição livre.
+[ ] Mochila cheia + desequipar → falha com mensagem clara.
+[ ] Equipar arma com attackBonus → dano muda no servidor.
+[ ] Recarregar página → inventário/equipamentos continuam corretos.
+[ ] Dois jogadores online → equipar item envia `inventory_updated` sem quebrar sessão.
+[ ] FPS antes/depois abrindo inventário.
 
-## Movimento WS — correção rubber-band (jun/2026) ✅
-
-Em produção (latência Railway), `MOVEMENT_TOO_FAST` gerava `position_correction` e o jogador **voltava** visualmente na diagonal.
-
-- Servidor: `MOVEMENT_TOO_FAST` → só `error`, **sem** `position_correction`
-- Cliente: `forceResyncPosition()` reenvia o tile quando o intervalo já passou
-- Tolerância rate limit: `stepDurationMs × 0.80`
-
-Ver [multiplayer-remote-players.md](./multiplayer-remote-players.md) §2.2.
-
----
-
-## Backlog maior (depois)
-
-| Item | Quando |
-|------|--------|
-| `stepDurationMs` calculado no servidor | play público / anti-cheat |
-| `move_request` (intenção, não posição) | refactor de movimento |
-| BFS pathfinding (cardinal) | ✅ `findCardinalPathFirstStep` em `creatureChase.ts` |
-| Buffer snapshots atrasado 100–150ms | remotos mais suaves |
-| `stages.json` por level | substitui `GAME_RATE_EXP` global |
-
----
-
-Referência OTC: `otc-server-main` (local, se disponível).
-
-Índice geral: [recent-features-jun-2026.md](./recent-features-jun-2026.md).
+Minha opinião direta: pode seguir com essa base, mas agora precisa “travar qualidade” antes de avançar. Inventário é um sistema central; se ele ficar pesado ou inseguro, tudo depois — loot, loja, trade, upgrade, drop no chão, baú, compra de bolsa — vai herdar o problema.
