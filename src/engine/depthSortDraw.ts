@@ -403,7 +403,7 @@ export function collectNpcDepthDrawables(
     out?: DepthDrawable[]
 ): DepthDrawable[] {
     const drawables = out ?? [];
-    if (out) out.length = 0;
+    // Append only — não limpar `out` (itens já no buffer).
     const zoom = camera.zoom ?? 1;
     const showMonsterNames = options?.showMonsterNames ?? options?.drawNames ?? true;
     const showHealthBars = options?.showHealthBars ?? true;
@@ -500,7 +500,7 @@ export function collectCombatTargetRingDrawable(
     out?: DepthDrawable[]
 ): DepthDrawable[] {
     const drawables = out ?? [];
-    if (out) out.length = 0;
+    // Append only — não limpar `out` (itens já no buffer).
     if (!targetId) return drawables;
 
     // Tenta encontrar nos npcs (monstros)
@@ -597,7 +597,7 @@ export function collectRemoteDepthDrawables(
     out?: DepthDrawable[]
 ): DepthDrawable[] {
     const drawables = out ?? [];
-    if (out) out.length = 0;
+    // Append only — não limpar `out` (itens já no buffer).
     const zoom = camera.zoom ?? 1;
     const showPlayerNames = render?.showPlayerNames ?? true;
     const showHealthBars = render?.showHealthBars ?? true;

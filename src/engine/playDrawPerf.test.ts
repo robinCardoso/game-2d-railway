@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { ENGINE_CONFIG } from '../engine/config';
 import { computeDepthSortFingerprint, DepthSortFingerprintCache } from '../engine/depthSortCache';
 import type { DepthDrawable } from '../engine/depthSortDraw';
-import { floorHasVisibleContentInView } from '../engine/floorViewportVisibility';
+import { collectCombatTargetRingDrawable, collectNpcDepthDrawables } from '../engine/depthSortDraw';
 import { createEmptyLayerMap, setLayerCell } from '../engine/mapPaintLayers';
+import { floorHasVisibleContentInView } from '../engine/floorViewportVisibility';
 import { createEmptyWorldMap, ensureAllFloors } from '../engine/worldMap';
 
 function drawable(sortY: number, sortX = 0): DepthDrawable {
@@ -158,5 +159,25 @@ describe('floorHasVisibleContentInView', () => {
                 occupiedFloorZs: occupied,
             })
         ).toBe(true);
+    });
+});
+
+describe('depth sort buffer append', () => {
+    it('collectCombatTargetRingDrawable não limpa itens já no buffer compartilhado', () => {
+        const buffer: DepthDrawable[] = [{ sortY: 100, sortX: 0, draw: () => {} }];
+        collectCombatTargetRingDrawable([], [], null, 0, { x: 0, y: 0 }, 32, 0, buffer);
+        expect(buffer).toHaveLength(1);
+    });
+
+    it('cadeia Play: item + anel + mob permanecem no mesmo buffer (regressão árvore/target)', () => {
+        const buffer: DepthDrawable[] = [{ sortY: 50, sortX: 10, draw: () => {} }];
+        const afterRing = [{ sortY: 80, sortX: 20, draw: () => {} }];
+        buffer.push(...afterRing);
+
+        collectNpcDepthDrawables([], 0, { x: 0, y: 0 }, 32, undefined, buffer);
+        buffer.push({ sortY: 120, sortX: 30, draw: () => {} });
+
+        expect(buffer).toHaveLength(3);
+        expect(buffer.map((d) => d.sortY)).toEqual([50, 80, 120]);
     });
 });
