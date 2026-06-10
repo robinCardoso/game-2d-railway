@@ -9,7 +9,7 @@
     "dev:web": "vite",
     "dev:server": "npm run dev --prefix server",
     "server": "npm run start --prefix server",
-    "build:assets": "node scripts/pack-assets.mjs",
+    "build:assets": "node scripts/write-pack-public-key.mjs && node scripts/pack-assets.mjs",
     "build": "npm run build:assets && tsc && vite build && npm run build --prefix server",
     "start": "npm run start --prefix server",
     "start:railway": "npm run build && npm run start",
