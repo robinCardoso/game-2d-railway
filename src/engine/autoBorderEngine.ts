@@ -111,6 +111,23 @@ export function buildBorderMaskTileIndex(
     return index;
 }
 
+let cachedBorderMaskKey = '';
+let cachedBorderMaskIndex: Map<number, number> | null = null;
+
+/** Índice mask→tileId cacheado até `invalidateBorderDrawCache()`. */
+export function getBorderMaskTileIndexCached(
+    registry: TileRegistry,
+    borderSetId: string
+): Map<number, number> {
+    const key = `${borderSetId}:${Object.keys(registry).length}`;
+    if (cachedBorderMaskIndex && cachedBorderMaskKey === key) {
+        return cachedBorderMaskIndex;
+    }
+    cachedBorderMaskIndex = buildBorderMaskTileIndex(registry, borderSetId);
+    cachedBorderMaskKey = key;
+    return cachedBorderMaskIndex;
+}
+
 interface GrassNeighbors {
     n: boolean;
     e: boolean;
@@ -309,6 +326,8 @@ const borderDrawTileIdsCache = new Map<string, readonly number[]>();
 /** Limpa cache de render de bordas (mapa carregado, undo, reload de tiles). */
 export function invalidateBorderDrawCache(): void {
     borderDrawTileIdsCache.clear();
+    cachedBorderMaskKey = '';
+    cachedBorderMaskIndex = null;
 }
 
 /** Invalida células afetadas após recálculo regional (vizinhos incluídos via halo). */

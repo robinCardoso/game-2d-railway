@@ -37,8 +37,10 @@ import {
     collectNpcDepthDrawables,
     collectRemoteDepthDrawables,
     drawDepthSorted,
-    sortDepthDrawables,
+    type DepthDrawable,
 } from '../engine/depthSortDraw';
+import { DepthSortFingerprintCache } from '../engine/depthSortCache';
+import { floorHasVisibleContentInView } from '../engine/floorViewportVisibility';
 import { drawRegistryTile, isMapBorderTile } from '../engine/tileDraw';
 import { SpriteAnimationController } from '../character/spriteAnimation';
 import type { CharacterSpriteConfig } from '../character/spriteAnimation';
@@ -60,7 +62,7 @@ import { createDefaultCharacterSpeed, type CharacterSpeedState } from '../charac
 import { SpeedBuffManager } from '../character/speedBuffs';
 import { resolveFullStepDuration } from '../character/characterMovement';
 import { createEmptyLayerMap, getLayerCell, type LayerMap } from '../engine/mapPaintLayers';
-import { collectBorderDrawTileIdsCached, buildBorderMaskTileIndex, invalidateBorderDrawCache } from '../engine/autoBorderEngine';
+import { collectBorderDrawTileIdsCached, getBorderMaskTileIndexCached, invalidateBorderDrawCache } from '../engine/autoBorderEngine';
 import { DEFAULT_GAME_DATA } from '../game-data/default';
 import { getMapEntry, MAP_REGISTRY, type MapEntry } from '../engine/mapRegistry';
 import { resolveEffectiveSpawn } from '../world/spawnResolver';
@@ -204,6 +206,10 @@ let teardownPageVisibility: (() => void) | null = null;
 let appLifecycleController: AppLifecycleController | null = null;
 let resyncController: ResyncController | null = null;
 let clientDiagnostics: ClientDiagnosticsController | null = null;
+
+/** Buffer reutilizado no Y-sort do draw — evita alocar arrays a cada andar/frame. */
+const playDepthDrawBuffer: DepthDrawable[] = [];
+const playDepthSortCache = new DepthSortFingerprintCache();
 
 
 import { getClientRuntimeConfig } from './runtime/runtimeEnv';
@@ -478,6 +484,7 @@ function applyLoadedMap(loaded: ReturnType<typeof loadMapFromJson>): void {
     resetPortalTriggerState();
     updateActiveMapHud();
     invalidateBorderDrawCache();
+    playDepthSortCache.clear();
 }
 
 function getMapById(mapId: string): MapEntry | undefined {
@@ -1183,7 +1190,7 @@ function draw(): void {
     const camState = { x: camX, y: camY, zoom };
 
     const borderDrawCtx = getPlayBorderDrawContext();
-    const borderMaskIndex = buildBorderMaskTileIndex(
+    const borderMaskIndex = getBorderMaskTileIndexCached(
         borderDrawCtx.registry,
         borderDrawCtx.borderSetId
     );
@@ -1192,7 +1199,43 @@ function draw(): void {
     const viewW = canvas.width / zoom;
     const viewH = canvas.height / zoom;
 
+    const remotePlayers =
+        currentMapId && gameNet
+            ? gameNet.getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId())
+            : [];
+    const remoteEntries = remotePlayers.length
+        ? remoteSprites.buildRemoteDepthEntries(remotePlayers)
+        : [];
+
+    const occupiedFloorZs = new Set<number>();
+    for (const entity of getPlayEntities()) {
+        occupiedFloorZs.add(entity.worldZ);
+    }
+    for (const remote of remotePlayers) {
+        occupiedFloorZs.add(remote.z);
+    }
+
+    const renderOpts = getPlayRenderOptions();
+    const playEntities = getPlayEntities();
+    const viewport = { startX, endX, startY, endY };
+
     getAllFloorZs().forEach((z) => {
+        if (
+            !floorHasVisibleContentInView({
+                z,
+                startX,
+                endX,
+                startY,
+                endY,
+                playerWorldZ: player.worldZ,
+                worldMap,
+                grassOverlay: grassOverlayMap,
+                itemsOverlay: itemsOverlayMap,
+                occupiedFloorZs,
+            })
+        ) {
+            return;
+        }
         const isAbove = z > player.worldZ;
         let playerUnder = false;
         if (isAbove && worldMap[z]?.[player.tileY]?.[player.tileX] !== -1) {
@@ -1241,16 +1284,12 @@ function draw(): void {
         }
 
         // Pass 2: Y-sort — itens, NPCs, remotos e jogador local por profundidade (pé)
-        const remoteEntries = (currentMapId && gameNet)
-            ? remoteSprites.buildRemoteDepthEntries(gameNet.getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId()))
-            : [];
+        playDepthDrawBuffer.length = 0;
 
-        const renderOpts = getPlayRenderOptions();
-
-        const depthDrawables = [
-            ...collectItemDepthDrawables({
+        collectItemDepthDrawables(
+            {
                 z,
-                viewport: { startX, endX, startY, endY },
+                viewport,
                 itemsOverlay: itemsOverlayMap,
                 registry: TILE_TYPES,
                 camera: camState,
@@ -1259,35 +1298,45 @@ function draw(): void {
                 viewHeight: viewH,
                 mapSize: activeMapSize,
                 edgeFadePx: DEFAULT_ITEM_EDGE_FADE_PX,
-            }),
-            ...collectCombatTargetRingDrawable(
-                getPlayEntities(),
-                remoteEntries,
-                getPlayCombatTargetId(),
-                z,
-                camState,
-                TILE_SIZE_SCREEN,
-                nowMs
-            ),
-            ...collectNpcDepthDrawables(getPlayEntities(), z, camState, TILE_SIZE_SCREEN, {
+                out: playDepthDrawBuffer,
+            }
+        );
+
+        collectCombatTargetRingDrawable(
+            playEntities,
+            remoteEntries,
+            getPlayCombatTargetId(),
+            z,
+            camState,
+            TILE_SIZE_SCREEN,
+            nowMs,
+            playDepthDrawBuffer
+        );
+
+        collectNpcDepthDrawables(
+            playEntities,
+            z,
+            camState,
+            TILE_SIZE_SCREEN,
+            {
                 showMonsterNames: renderOpts.showMonsterNames,
                 showHealthBars: renderOpts.showHealthBars,
                 showFloatingDamage: renderOpts.showFloatingDamage,
                 highlightEntityId: getPlayCombatHoverId(),
                 nowMs,
-            }),
-        ];
+            },
+            playDepthDrawBuffer
+        );
 
         if (remoteEntries.length > 0) {
-            depthDrawables.push(
-                ...collectRemoteDepthDrawables(
-                    remoteEntries,
-                    z,
-                    camState,
-                    TILE_SIZE_SCREEN,
-                    nowMs,
-                    renderOpts
-                )
+            collectRemoteDepthDrawables(
+                remoteEntries,
+                z,
+                camState,
+                TILE_SIZE_SCREEN,
+                nowMs,
+                renderOpts,
+                playDepthDrawBuffer
             );
         }
 
@@ -1310,11 +1359,11 @@ function draw(): void {
             showPlayerNames: renderOpts.showPlayerNames,
             showHealthBars: renderOpts.showHealthBars,
         });
-        if (localDrawable) depthDrawables.push(localDrawable);
+        if (localDrawable) playDepthDrawBuffer.push(localDrawable);
 
-        sortDepthDrawables(depthDrawables);
+        playDepthSortCache.sortIfDirty(z, playDepthDrawBuffer);
         ctx.globalAlpha = 1;
-        drawDepthSorted(ctx, depthDrawables);
+        drawDepthSorted(ctx, playDepthDrawBuffer);
 
         if (
             renderOpts.showFloatingDamage &&
@@ -1842,6 +1891,7 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
         };
     });
     invalidateBorderDrawCache();
+    playDepthSortCache.clear();
     setWorldEntryStage('map', 'done');
 
     setPlayCombatHubBridge({

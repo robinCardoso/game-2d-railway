@@ -312,6 +312,8 @@ export function collectItemDepthDrawables(options: {
     /** Fade gradual na borda em px; 0 = sem fade (só corrige o pop). */
     edgeFadePx?: number;
     shouldIncludeTile?: (tileId: number) => boolean;
+    /** Reutiliza buffer — evita alocar array novo a cada frame. */
+    out?: DepthDrawable[];
 }): DepthDrawable[] {
     const {
         z,
@@ -326,9 +328,11 @@ export function collectItemDepthDrawables(options: {
         viewportMarginTiles = DEFAULT_ITEM_VIEWPORT_MARGIN_TILES,
         edgeFadePx = 0,
         shouldIncludeTile,
+        out,
     } = options;
     const emptyTileId = ENGINE_CONFIG.EMPTY_TILE_ID;
-    const drawables: DepthDrawable[] = [];
+    const drawables = out ?? [];
+    if (out) out.length = 0;
     const { startX, endX, startY, endY } = viewport;
     const margin = Math.max(0, viewportMarginTiles);
     const maxIdx = mapSize !== undefined ? mapSize - 1 : Number.MAX_SAFE_INTEGER;
@@ -395,9 +399,11 @@ export function collectNpcDepthDrawables(
         showFloatingDamage?: boolean;
         highlightEntityId?: string | null;
         nowMs?: number;
-    }
+    },
+    out?: DepthDrawable[]
 ): DepthDrawable[] {
-    const drawables: DepthDrawable[] = [];
+    const drawables = out ?? [];
+    if (out) out.length = 0;
     const zoom = camera.zoom ?? 1;
     const showMonsterNames = options?.showMonsterNames ?? options?.drawNames ?? true;
     const showHealthBars = options?.showHealthBars ?? true;
@@ -490,9 +496,12 @@ export function collectCombatTargetRingDrawable(
     z: number,
     camera: DepthSortCamera,
     tileSize: number,
-    nowMs: number
+    nowMs: number,
+    out?: DepthDrawable[]
 ): DepthDrawable[] {
-    if (!targetId) return [];
+    const drawables = out ?? [];
+    if (out) out.length = 0;
+    if (!targetId) return drawables;
 
     // Tenta encontrar nos npcs (monstros)
     const targetNpc = npcs.find((npc) => npc.id === targetId);
@@ -502,7 +511,7 @@ export function collectCombatTargetRingDrawable(
             targetNpc.worldZ !== z ||
             !shouldDrawCreatureCorpse(targetNpc, nowMs)
         ) {
-            return [];
+            return drawables;
         }
         
         let sortY = targetNpc.worldY + tileSize - 1.0;
@@ -515,30 +524,29 @@ export function collectCombatTargetRingDrawable(
         
         const sortX = targetNpc.worldX + tileSize / 2;
         const zoom = camera.zoom ?? 1;
-        return [
-            {
-                sortY,
-                sortX,
-                draw: (drawCtx) => {
-                    drawCombatTargetRing(
-                        drawCtx,
-                        targetNpc.worldX,
-                        targetNpc.worldY,
-                        camera.x,
-                        camera.y,
-                        tileSize,
-                        zoom,
-                        nowMs
-                    );
-                },
+        drawables.push({
+            sortY,
+            sortX,
+            draw: (drawCtx) => {
+                drawCombatTargetRing(
+                    drawCtx,
+                    targetNpc.worldX,
+                    targetNpc.worldY,
+                    camera.x,
+                    camera.y,
+                    tileSize,
+                    zoom,
+                    nowMs
+                );
             },
-        ];
+        });
+        return drawables;
     }
 
     // Se não for monstro, tenta encontrar nos jogadores remotos
     const targetRemote = remotes.find((r) => r.id === targetId);
     if (targetRemote) {
-        if (targetRemote.z !== z) return [];
+        if (targetRemote.z !== z) return drawables;
         const worldX = targetRemote.worldX ?? targetRemote.tileX * tileSize;
         const worldY = targetRemote.worldY ?? targetRemote.tileY * tileSize;
         
@@ -553,27 +561,26 @@ export function collectCombatTargetRingDrawable(
 
         const sortX = worldX + tileSize / 2;
         const zoom = camera.zoom ?? 1;
-        return [
-            {
-                sortY,
-                sortX,
-                draw: (drawCtx) => {
-                    drawCombatTargetRing(
-                        drawCtx,
-                        worldX,
-                        worldY,
-                        camera.x,
-                        camera.y,
-                        tileSize,
-                        zoom,
-                        nowMs
-                    );
-                },
+        drawables.push({
+            sortY,
+            sortX,
+            draw: (drawCtx) => {
+                drawCombatTargetRing(
+                    drawCtx,
+                    worldX,
+                    worldY,
+                    camera.x,
+                    camera.y,
+                    tileSize,
+                    zoom,
+                    nowMs
+                );
             },
-        ];
+        });
+        return drawables;
     }
 
-    return [];
+    return drawables;
 }
 
 export function collectRemoteDepthDrawables(
@@ -586,9 +593,11 @@ export function collectRemoteDepthDrawables(
         showPlayerNames?: boolean;
         showHealthBars?: boolean;
         showFloatingDamage?: boolean;
-    }
+    },
+    out?: DepthDrawable[]
 ): DepthDrawable[] {
-    const drawables: DepthDrawable[] = [];
+    const drawables = out ?? [];
+    if (out) out.length = 0;
     const zoom = camera.zoom ?? 1;
     const showPlayerNames = render?.showPlayerNames ?? true;
     const showHealthBars = render?.showHealthBars ?? true;

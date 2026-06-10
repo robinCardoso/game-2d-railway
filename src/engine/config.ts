@@ -23,13 +23,17 @@ export function collisionHitboxSize(tileSize: number = ENGINE_CONFIG.TILE_SIZE):
     );
 }
 
-/** Lista ordenada de todos os Z (-7 … +7). */
-export function getAllFloorZs(): number[] {
+const ALL_FLOOR_ZS: readonly number[] = (() => {
     const floors: number[] = [];
     for (let z = ENGINE_CONFIG.MIN_FLOOR_Z; z <= ENGINE_CONFIG.MAX_FLOOR_Z; z++) {
         floors.push(z);
     }
     return floors;
+})();
+
+/** Lista ordenada de todos os Z (-7 … +7). Retorno compartilhado — não mutar. */
+export function getAllFloorZs(): readonly number[] {
+    return ALL_FLOOR_ZS;
 }
 
 export function clampFloorZ(z: number): number {
