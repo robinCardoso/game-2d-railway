@@ -2,7 +2,7 @@
 
 Documento oficial de deploy. Rascunho histórico: [`.cursor/plans/railway.md`](../.cursor/plans/railway.md).
 
-Última revisão: **2026-06-05**
+Última revisão: **2026-06-10**
 
 ---
 
@@ -107,9 +107,12 @@ O servidor grava em `/data`:
 
 - `maps/` — JSON editáveis
 - `tiles/` — sprites de mapa e personagens
-- `tile_catalog.json`, `auto_border_sets.json`, `creature_presets.json`, `outfit_presets.json`
+- `tile_catalog.json`, `auto_border_sets.json`, `creature_presets.json`, `outfit_presets.json`, `spell_catalog.json`
+- `tiles/effects/**` — ícones e VFX de magias (seed do repo; uploads do Studio vão para o volume)
 
 Na primeira execução, o boot copia seeds do repositório para `/data` se os diretórios estiverem vazios.
+
+**Magias em produção:** magias criadas só no Studio ficam no volume (`spell_catalog.json` + PNGs uploadados). Ícones versionados no git entram via seed de `tiles/effects/` no deploy. Ver [spell-system.md](./spell-system.md).
 
 ### 4. Variáveis de ambiente
 
@@ -127,12 +130,15 @@ Na primeira execução, o boot copia seeds do repositório para `/data` se os di
 | `WS_POSITION_SAVE_INTERVAL_MS` | Opcional | Debounce save posição (padrão `20000`) |
 | `REQUIRE_WS_TICKET` | Auto | `true` em produção com `DATABASE_URL`; `false` força dev sem ticket |
 | `CLIENT_ORIGIN` | Recomendado | `https://seu-app.up.railway.app` |
+| `GAME_RATE_EXP` | Opcional | Multiplicador global de XP (padrão `1`); ver [game-rates.md](./game-rates.md) |
 | `STUDIO_MOCK_GM` | Dev only | `true` = APIs Studio sem JWT (não usar em prod) |
+| `STUDIO_ENABLED` | Prod | `false` por padrão — bloqueia APIs de escrita GM; leitura (`list-maps`, etc.) permanece |
 
 **Build do frontend** (variáveis `VITE_*` no Railway ou CI):
 
 | Variável build | Descrição |
 |----------------|-----------|
+| `VITE_STUDIO_ENABLED` | `false` em build de produção (padrão); `true` só para builds com Studio |
 | `VITE_STUDIO_GUARD` | `true` em produção |
 | `VITE_GAME_SERVER_WS` | Deixar vazio = same-origin `wss://` |
 | `VITE_USE_SERVER_WS_TICKET` | Dev: força `POST /api/ws-ticket` |
@@ -165,7 +171,7 @@ Registre com e-mail `*@gm.dev` (ex.: `gm@gm.dev`) — o servidor define `role=gm
 | `/login.html` | Login (JWT API) |
 | `/characters.html` | Lista de personagens |
 | `/play.html` | Jogo + WS conectado |
-| `/studio.html` | Editor GM (exige `can_access_studio`) |
+| `/studio.html` | Editor GM — **somente dev local** (produção redireciona para `/`) |
 | `/health` | JSON `{ status: "ok", phase: "railway-d", ... }` |
 | `/tiles/...` | Sprites PNG |
 
@@ -233,6 +239,9 @@ O frontend envia `Authorization: Bearer <token>` em rotas autenticadas (`apiFetc
 | `/data/auto_border_sets.json` | Conjuntos auto-borda | idem |
 | `/data/creature_presets.json` | Presets NPC/monster | idem |
 | `/data/outfit_presets.json` | Presets de outfit | idem |
+| `/data/spell_catalog.json` | Catálogo de magias | `public/spell_catalog.json` fallback |
+| `/data/tiles/effects/spells/icons/` | Ícones hotbar 32×32 | `/tiles/effects/spells/icons/...` |
+| `/data/tiles/effects/spells/cast/` | VFX conjuração | `/tiles/effects/spells/cast/...` |
 
 **Baked no build (`dist/`):** HTML, JS, CSS, cópia inicial de `public/maps/` e catálogos. Edições vão para o volume quando `DATA_ROOT` está definido.
 

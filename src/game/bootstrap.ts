@@ -51,6 +51,7 @@ document.getElementById('logoutPlayMobile')?.addEventListener('click', (e) => vo
 
 const params = new URLSearchParams(location.search);
 const characterId = params.get('characterId');
+const overrideMapId = params.get('mapId') ?? undefined;
 
 if (!characterId) {
     location.href = 'characters.html';
@@ -64,7 +65,7 @@ if (!characterId) {
             const versionOk = await enforceDesktopVersionGate();
             if (versionOk) {
                 track('first_world_enter', { characterId });
-                await startPlay(character, session.userId);
+                await startPlay(character, session.userId, { overrideMapId });
             }
         }
     } catch {

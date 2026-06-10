@@ -6,10 +6,8 @@ import { listEquippedSpellIds } from '../../../../shared/spellBar.js';
 import { validateCharacterSpellBar } from '../../../../shared/spellSlots.js';
 import type { VocationId } from '../../../../shared/types/character.js';
 import type { BroadcastCreatureEvent } from '../contextTypes.js';
-import {
-    grantKillExperience,
-    scaleMobKillXpReward,
-} from '../../game/grantKillExperience.js';
+import { scaleMobKillXpReward } from '../../game/grantKillExperience.js';
+import { applyCreatureKillRewards } from './creatureKillRewards.js';
 import { replaceCharacterSpellSlots } from '../../db/repositories/spellSlots.repo.js';
 import { isDatabaseConfigured } from '../../db/pool.js';
 import { loadServerSpellCatalog } from '../../game/serverSpellCatalog.js';
@@ -24,6 +22,8 @@ import type { ConnectedPlayer } from '../types.js';
 
 export interface SpellHandlerContext {
     getPlayerBySocket: (socket: WebSocket) => ConnectedPlayer | undefined;
+    getPlayerById: (playerId: string) => ConnectedPlayer | undefined;
+    getPlayersInRoom: (room: string) => ConnectedPlayer[];
     roomKey: (player: Pick<ConnectedPlayer, 'mapId' | 'instanceId'>) => string;
     send: (socket: WebSocket, message: ServerMessage) => void;
     broadcastToRoom: (room: string, message: ServerMessage) => void;
@@ -111,15 +111,26 @@ export function handleCastSpell(
             z: diedMsg.z,
         });
 
-        grantKillExperience(player, scaledXp, {
-            send: ctx.send,
-            progressPersistence: ctx.progressPersistence,
-            onAfterGrant: () => {
-                recalcPlayerMaxStats(player, ctx.vocations);
-                ctx.sendPlayerResources(player);
-                void syncPlayerLearnedSpells(player);
+        applyCreatureKillRewards(
+            {
+                creatures: ctx.creatures,
+                room,
+                creatureId: msg.creatureId,
+                send: ctx.send,
+                progressPersistence: ctx.progressPersistence,
+                getPlayerById: ctx.getPlayerById,
+                getPlayersInRoom: ctx.getPlayersInRoom,
+                onAfterXp: (p, gain) => {
+                    recalcPlayerMaxStats(p, ctx.vocations);
+                    ctx.sendPlayerResources(p);
+                    if (gain.leveledUp) {
+                        void syncPlayerLearnedSpells(p);
+                    }
+                },
             },
-        });
+            player,
+            diedMsg
+        );
     }
 }
 

@@ -90,6 +90,7 @@ import {
     isInsideMapInstance,
 } from '../engine/mapInstance';
 import { DEFAULT_WS_PORT } from '../../shared/protocol';
+import { canAdjacentStep, type TilePos } from '../../shared/tileWalkable';
 import { MONSTER_STEP_MS } from '../../shared/creatureChase';
 import { GameNetClient } from '../net/gameNetClient';
 import { RemotePlayerSpriteManager } from '../net/remotePlayerSprites';
@@ -107,7 +108,7 @@ import {
     tickPlayHudMinimap,
 } from './ui/playHudMinimap';
 import { updatePlayHudPing, updatePlayHudStatus, resetPlayHudStatusCache } from './ui/playHudStatusUi';
-import { initPlayHudInventory } from './ui/playHudInventory';
+import { applyPlayInventorySnapshot, initPlayHudInventory } from './ui/playHudInventory';
 import { bindPlayChatNetwork, createPlayChatNetHandlers } from './chat/playChatController';
 import { getPlayDefaultZoom, getPlayHudQuality, getNetworkRenderDelayMs, getPlayRenderOptions } from './ui/playHudSettings';
 import {
@@ -1011,6 +1012,45 @@ function canCommitPlayerStepToTile(destTileX: number, destTileY: number, z: numb
     return isWalkable(wx, wy, z).walkable;
 }
 
+function isTerrainWalkableAtTile(tx: number, ty: number, z: number): boolean {
+    return isTerrainWalkable(tx * TILE_SIZE_SCREEN, ty * TILE_SIZE_SCREEN, z).walkable;
+}
+
+/** Alinha validação de `move` WS com o servidor (terreno + canto) e criaturas no destino. */
+function validateOutgoingNetworkMove(from: TilePos, to: TilePos): boolean {
+    if (!canAdjacentStep(from, to, isTerrainWalkableAtTile)) {
+        return false;
+    }
+    const wx = to.tileX * TILE_SIZE_SCREEN;
+    const wy = to.tileY * TILE_SIZE_SCREEN;
+    return isWalkable(wx, wy, to.z).walkable;
+}
+
+function validateSteppingDestForNetwork(tileX: number, tileY: number, z: number): boolean {
+    const wx = tileX * TILE_SIZE_SCREEN;
+    const wy = tileY * TILE_SIZE_SCREEN;
+    return isWalkable(wx, wy, z).walkable;
+}
+
+/** Rollback sem slide quando o servidor rejeita passo (INVALID_STEP / NOT_WALKABLE). */
+function rollbackLocalMovementToServer(): void {
+    const { serverTileX, serverTileY, serverZ } = movementPrediction;
+    movementPrediction.pending.length = 0;
+    positionCorrectionSlide.active = false;
+    gridMovement.stepping = false;
+    gridMovement.activeStepFacing = null;
+    resetGridMovementInputState(gridMovement);
+
+    if (
+        player.tileX !== serverTileX ||
+        player.tileY !== serverTileY ||
+        player.worldZ !== serverZ
+    ) {
+        player.worldZ = clampFloorZ(serverZ);
+        syncGridPlayerVisual(player, TILE_SIZE_SCREEN, serverTileX, serverTileY);
+    }
+}
+
 function isEntityAtTile(tx: number, ty: number, z: number, excludeId?: string): boolean {
     if (excludeId !== 'player' && isPlayerOccupyingTile(tx, ty, z)) {
         return true;
@@ -1677,6 +1717,14 @@ function setupNetwork(
             spellBar: getPlaySpellBarState(),
         }),
         isMovementStepping: () => gridMovement.stepping,
+        getServerAuthoritativeTile: () => ({
+            tileX: movementPrediction.serverTileX,
+            tileY: movementPrediction.serverTileY,
+            z: movementPrediction.serverZ,
+        }),
+        validateOutgoingMove: validateOutgoingNetworkMove,
+        validateSteppingDest: validateSteppingDestForNetwork,
+        onMovementRejected: rollbackLocalMovementToServer,
         onPositionCorrection: (pos) => {
             if (pos.mapId !== (currentMapId ?? char.spawnMapId)) return;
             const reconcile = reconcileMovementPrediction(
@@ -1750,6 +1798,9 @@ function setupNetwork(
             }
         },
         onChatMessage: chatHandlers.onChatMessage,
+        onInventoryUpdated: ({ inventory }) => {
+            applyPlayInventorySnapshot(inventory);
+        },
         onCreatureSync: ({ mapId, instanceId, creatures }) => {
             if (!currentMapId || mapId !== currentMapId) return;
             logPlayJoinTimeline('onCreatureSync', {
@@ -1893,7 +1944,16 @@ function setupNetwork(
     }
 }
 
-export async function startPlay(character: CharacterRow, accountId: string): Promise<void> {
+export interface PlayBootOptions {
+    /** Dev/GM: carrega mapa específico em vez do mapa do personagem. */
+    overrideMapId?: string;
+}
+
+export async function startPlay(
+    character: CharacterRow,
+    accountId: string,
+    options?: PlayBootOptions
+): Promise<void> {
     activeCharacter = character;
     resetPlayCombatInput();
     resetPlaySpellCooldowns();
@@ -1975,20 +2035,27 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
 
     await prepareMapRegistry();
 
+    const overrideMapId =
+        import.meta.env.DEV && options?.overrideMapId?.trim()
+            ? options.overrideMapId.trim()
+            : undefined;
+
     const entry =
+        (overrideMapId ? getMapById(overrideMapId) : undefined) ??
         getMapById(character.mapId) ??
         getMapById(character.spawnMapId) ??
         getMapById('rookgaard') ??
         MAP_REGISTRY[0];
     if (!entry) throw new Error('Mapa inicial não encontrado.');
 
-    const savedSpawn = character.position
-        ? {
-              x: character.position.x,
-              y: character.position.y,
-              z: character.position.z,
-          }
-        : undefined;
+    const savedSpawn =
+        overrideMapId || !character.position
+            ? undefined
+            : {
+                  x: character.position.x,
+                  y: character.position.y,
+                  z: character.position.z,
+              };
 
     setWorldEntryStage('map', 'active', 'Carregando mapa inicial...');
     showLoading('Carregando mundo…');

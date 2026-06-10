@@ -60,6 +60,14 @@ function tilesDevPlugin(): Plugin {
     };
 }
 
+function isStudioBuildEnabled(): boolean {
+    if (process.env.VITE_STUDIO_ENABLED === 'true') return true;
+    if (process.env.VITE_STUDIO_ENABLED === 'false') return false;
+    return process.env.NODE_ENV !== 'production';
+}
+
+const studioBuildEnabled = isStudioBuildEnabled();
+
 export default defineConfig({
     base: './',
     plugins: [tilesDevPlugin()],
@@ -68,7 +76,9 @@ export default defineConfig({
         rollupOptions: {
             input: {
                 main: path.resolve(__dirname, 'index.html'),
-                studio: path.resolve(__dirname, 'studio.html'),
+                ...(studioBuildEnabled
+                    ? { studio: path.resolve(__dirname, 'studio.html') }
+                    : {}),
                 play: path.resolve(__dirname, 'play.html'),
                 login: path.resolve(__dirname, 'login.html'),
                 register: path.resolve(__dirname, 'register.html'),

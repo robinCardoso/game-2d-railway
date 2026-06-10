@@ -19,13 +19,18 @@ function wrap(
     };
 }
 
-export function createStudioRouter(): Router {
+export function createStudioRouter(options?: { writesEnabled?: boolean }): Router {
     const router = Router();
+    const writesEnabled = options?.writesEnabled !== false;
 
     // Rotas de leitura públicas (necessárias para o boot do game client)
     router.get('/list-maps', wrap(() => studioService.listMaps()));
     router.get('/list-auto-border-sets', wrap(() => studioService.listAutoBorderSets()));
     router.get('/list-tile-properties', wrap(() => studioService.listTileProperties()));
+
+    if (!writesEnabled) {
+        return router;
+    }
 
     // Rotas privadas (requer autenticação de GM)
     router.use(requireStudioGuard);

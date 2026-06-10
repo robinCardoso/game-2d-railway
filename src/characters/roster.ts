@@ -1,6 +1,7 @@
 import './roster.css';
 import '../ui/player-flow-mobile.css';
 import { requireAuth, signOut, getProfile } from '../shared/authGuard';
+import { isStudioClientEnabled } from '../shared/studioClient';
 import { enforceDesktopVersionGate, initDesktopClientShell } from '../ui/initDesktopClient';
 import {
     listCharacters,
@@ -49,7 +50,7 @@ emailEl.textContent = session.email;
 
 const profile = await getProfile();
 const { isStudioMobileBlocked } = await import('../game/runtime/platform');
-if (!profile?.canAccessStudio || isStudioMobileBlocked()) {
+if (!isStudioClientEnabled() || !profile?.canAccessStudio || isStudioMobileBlocked()) {
     studioLink.style.display = 'none';
 }
 
@@ -360,6 +361,11 @@ enterBtn.addEventListener('click', async () => {
 
         markWorldEntryPending(selected?.name);
         const characterId = selectedId;
+        try {
+            localStorage.setItem('game2d_last_character_id', characterId);
+        } catch {
+            /* ignore */
+        }
         location.href = `play.html?characterId=${encodeURIComponent(characterId)}`;
     } catch (err) {
         setWorldEntryStage('character', 'error');

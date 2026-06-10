@@ -16,6 +16,7 @@
     "test": "vitest run && node scripts/check-calibrator-listeners.mjs",
     "migrate:character-calibration": "node scripts/migrate-character-calibration.mjs",
     "generate:spell-cast-sprites": "node scripts/generate-spell-cast-sprites.mjs",
+    "generate:item-icons": "node scripts/generate-item-icon-sprites.mjs",
     "generate:spell-icons": "node scripts/generate-spell-icon-sprites.mjs --update-catalog",
     "test:calibrator": "node scripts/check-calibrator-listeners.mjs",
     "electron:compile": "tsc -p desktop/electron/tsconfig.json && node scripts/write-electron-dist-package.mjs",

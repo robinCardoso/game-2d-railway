@@ -117,8 +117,17 @@ Em `npm run dev`, o Vite faz **proxy** de `/api/*` para o Express (`:8787`). Imp
 4. **Animações no calibrador:** Persistência e troca `estado_direção` via `characterAnimationDraft.ts` (calibrador + painel lateral). Modais reabertos (`openCharacterCalibrator`): **todos** os listeners com `bind(..., { signal })` + `activeCalibratorSession`; nunca `addEventListener` nu em `#calibratorModal`. Rodar `npm test` (inclui `check-calibrator-listeners`).
 5. **Calibração de personagem (arquivo lateral):** Gravação em `{nome}.calibration.json` ao lado de `{nome}.json` — fonte de verdade para `frameWidth/Height`, margens, gaps, âncoras, `sheetLayout` e `animations`. `save-character` grava sidecar + JSON principal **enxuto** (`stripCalibrationFromConfig`). Load usa `fetchCharacterConfigMerged`. Migração explícita: `npm run migrate:character-calibration` (não escrever em `list-characters`). Não listar `*.calibration.json` como personagem (`getJsonFiles`).
 
+## Studio editor-only — NÃO REGREDIR
+
+- **`editorOnly: true`** em `studio/bootstrap.ts` — Studio não roda `NpcAI`, `PlayerMovement`, `respawnEntities` nem portais ao andar.
+- Navegação: **`editorCamera.ts`** (pan espaço/meio/WASD/setas); sem avatar no canvas.
+- Spawns: marcadores estáticos na aba Spawns; combate/movimento de mobs só no **Play**.
+- **Produção:** `STUDIO_ENABLED=false` + build sem `studio.html`; editar local → `git push` → deploy.
+- Testar mapa: botão **Testar no Play** → `play.html?mapId=` (dev).
+
 ## Checklist antes de alterar este subsistema
 
+- [ ] Studio ainda não roda simulação de jogo (`isEditorOnly`)?
 - [ ] Registry ainda registra em ordem determinística de path?
 - [ ] Map load ainda passa `TILE_TYPES` para `loadMapFromJson` / `loadMapFile`?
 - [ ] Random só em `resolvePaintTileId`, não no draw?

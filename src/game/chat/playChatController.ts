@@ -3,7 +3,6 @@ import type { GameNetClient } from '../../net/gameNetClient';
 import { appendChatMessage } from './playChatStore';
 import {
     initPlayChatDock,
-    seedPlayChatMockMessages,
     setPlayChatCooldown,
     setPlayChatSendHandler,
 } from '../ui/playChatDock';
@@ -36,7 +35,6 @@ export function unbindPlayChatNetwork(): void {
 
 export function initPlayChatController(): void {
     initPlayChatDock();
-    seedPlayChatMockMessages();
 
     setPlayChatSendHandler((channel, text) => {
         boundClient?.sendChat(channel, text);

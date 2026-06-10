@@ -6,6 +6,7 @@ configureStudioBoot({
     skipCharacterPreset: true,
     skipGameNet: true,
     hidePlayerSprite: true,
+    editorOnly: true,
 });
 
 const enforceStudioGuard =

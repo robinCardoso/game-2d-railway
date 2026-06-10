@@ -127,11 +127,17 @@ export function createApp(getOnline: (() => number) | undefined, collision: MapC
     app.get('/api/desktop/version', desktopVersionHandler);
     app.get('/api/game-rates', gameRatesHandler);
     studioService.setCollisionStore(collision);
-    app.use('/api', createStudioRouter());
+    app.use('/api', createStudioRouter({ writesEnabled: env.studioEnabled }));
 
-    app.get('/stucio.html', (_req, res) => {
-        res.redirect(302, '/studio.html');
-    });
+    if (env.studioEnabled) {
+        app.get('/stucio.html', (_req, res) => {
+            res.redirect(302, '/studio.html');
+        });
+    } else {
+        app.get(['/studio.html', '/stucio.html'], (_req, res) => {
+            res.redirect(302, '/');
+        });
+    }
 
     // /tiles com proteção path traversal
     app.use('/tiles', (req: Request, res: Response, next: NextFunction) => {

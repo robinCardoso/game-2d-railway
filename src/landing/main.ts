@@ -2,9 +2,14 @@ import './landing.css';
 import { getSession } from '../shared/authGuard';
 import { track } from '../shared/analytics';
 import { initDesktopClientShell } from '../ui/initDesktopClient';
+import { isStudioClientEnabled } from '../shared/studioClient';
 
 initDesktopClientShell();
 track('landing_view');
+
+if (!isStudioClientEnabled()) {
+    document.getElementById('studioFooterLink')?.remove();
+}
 
 void (async () => {
     const session = await getSession();

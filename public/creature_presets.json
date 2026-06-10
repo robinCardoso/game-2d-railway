@@ -13,6 +13,29 @@
     "xpReward": 250,
     "race": "humanoid",
     "chaseBehavior": "melee",
-    "attackRange": 1
+    "attackRange": 1,
+    "walkStepMs": 500,
+    "loot": [
+      {
+        "itemId": "gold_coin",
+        "chance": 100
+      },
+      {
+        "itemId": "health_potion",
+        "chance": 60
+      },
+      {
+        "itemId": "leather_armor",
+        "chance": 25
+      },
+      {
+        "itemId": "warrior_ring",
+        "chance": 8
+      },
+      {
+        "itemId": "boots_of_haste",
+        "chance": 3
+      }
+    ]
   }
 ]

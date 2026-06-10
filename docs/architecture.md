@@ -4,22 +4,29 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  EDITOR (ADM) — index.html + src/editor/* (futuro)          │
-│  Pintar mapa, undo, tileset, dev tools, export              │
+│  STUDIO (GM, local) — studio.html + src/editor/* + src/main.ts │
+│  Editor de mapas puro: câmera livre, sem IA/combate; dev only  │
+│  Publicação: git → deploy; Play consome /maps/ em produção     │
 └───────────────────────────┬─────────────────────────────────┘
                             │ usa API pública
 ┌───────────────────────────▼─────────────────────────────────┐
 │  ENGINE — src/engine/ + src/movement/ + src/character/        │
-│  Mapa, tiles, colisão, escadas, grid, speed, terreno          │
+│  Mapa, tiles, colisão, escadas, grid, speed, Y-sort, combate  │
 └───────────────────────────┬─────────────────────────────────┘
                             │ lê dados
 ┌───────────────────────────▼─────────────────────────────────┐
-│  DADOS — JSON de mapa, itemDefinitions, assets/tiles/         │
+│  DADOS — maps/, tile_catalog, creature_presets, spell_catalog │
+│  tiles/** (mapa, effects, characters)                         │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│  CLIENTE JOGADOR (futuro) — conta IndexedDB, char, cidade   │
-│  Não misturar com editor; consome a mesma ENGINE            │
+│  PLAY — play.html + src/playApp.ts + src/game/* + src/net/*   │
+│  Auth JWT, WS multiplayer, HUD, magias, inventário, combate   │
+└───────────────────────────┬─────────────────────────────────┘
+                            │ WebSocket + REST
+┌───────────────────────────▼─────────────────────────────────┐
+│  SERVIDOR — server/ (Express + GameRoom WS)                   │
+│  Auth, personagens, Studio APIs, movimento/combate autoritativo│
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -31,7 +38,12 @@
 | `src/movement/` | Grid, passos, tween, escadas (chama engine) |
 | `src/character/` | Speed, equip, buffs, terreno no passo |
 | `src/functions/` | tileConfig, roles, history (editor + regras) |
-| `src/main.ts` | **Shell do editor ADM** (enquanto não há `src/editor/`) |
+| `src/main.ts` | Bootstrap do **Studio** (`studio.html`) — `editorOnly`, `editorCamera.ts` |
+| `src/game/playApp.ts` | Bootstrap do **Play** (`play.html`) — loop 60 FPS, rede, combate |
+| `src/net/` | Cliente WS (`gameNetClient.ts`), jogadores remotos, predição |
+| `src/game/` | UI Play (HUD, magias, inventário), efeitos de spell cast |
+| `server/` | Express, PostgreSQL, `GameRoom` WebSocket, APIs Studio |
+| `shared/` | Protocolo WS, tile walkable, creature chase, game rates |
 
 ## Tiles
 
@@ -61,7 +73,7 @@ Resumo:
 - **Artefatos:** `public/maps/*.json`, `public/maps/map.schema.json`, `public/tile_catalog.json`
 - **Export/import:** `serializeMapDocument` / `loadMapFromJson` em `src/engine/worldMap.ts`
 - **Legado:** `floors` (grade densa) e `sparseTiles` (`[x,y,z,id][]`) ainda carregam
-- Cliente futuro carrega o mesmo JSON (fetch ou IndexedDB de mapas publicados)
+- Play e Studio carregam o mesmo JSON via fetch (`/maps/` ou volume `DATA_ROOT`)
 
 ## O que NÃO vai na engine
 
@@ -75,12 +87,22 @@ Resumo:
 - UI: `#floorSelector` gerado por `editor/floorSelector.ts` (grade 5 colunas, scroll)
 - Mapas importados recebem `ensureAllFloors()` — andares ausentes viram vazio (`-1`)
 
-## Roadmap engine (antes do cliente jogador)
+## Play e multiplayer
+
+- Entrada: `play.html` → auth → personagem → `POST /api/ws-ticket` → WS `join`
+- Movimento autoritativo no servidor; cliente prediz e corrige — ver [multiplayer-remote-players.md](./multiplayer-remote-players.md)
+- Combate PvE/PvP, magias, XP: `server/src/combat/`, `grantKillExperience.ts`
+- Magias: catálogo `spell_catalog.json`, ícones `tiles/effects/spells/icons/` — ver [spell-system.md](./spell-system.md)
+- Rate XP: `GAME_RATE_EXP` — ver [game-rates.md](./game-rates.md)
+
+Índice de features recentes: [recent-features-jun-2026.md](./recent-features-jun-2026.md).
+
+## Roadmap engine (itens em aberto)
 
 1. ✅ `worldMap` + `MapDocument` v1 (esparso + legado)
 2. ✅ Colisão e escadas em `engine/collision.ts`
 3. ✅ Andares -7 … +7
-3. ⬜ `facing` (N/S/E/O) no grid — ver `docs/character-sprite-engine.md`
-4. ⬜ `CharacterRenderer` + Character Studio (sprites separados dos tiles)
-5. ⬜ `GameLoop` tipado (update/draw injetável)
-6. ⬜ Publicar mapa (arquivo estático ou API)
+4. ✅ Play cliente + WS + combate básico
+5. ⬜ `move_request` (intenção em vez de posição absoluta)
+6. ⬜ Loot de mobs (campo já existe em presets)
+7. ⬜ `stages.json` por level (substituir rate global de XP)
