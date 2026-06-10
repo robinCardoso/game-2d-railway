@@ -149,7 +149,7 @@ export interface GameNetClientOptions {
     onServerError?: (payload: { code: string; message: string; retryAfterMs?: number }) => void;
     onChatMessage?: (msg: ChatBroadcastMessage) => void;
     /** Após `welcome` — sincronizar XP local com o servidor (dev/mock). */
-    onWelcome?: (payload: { health: number; maxHealth: number }) => void;
+    onWelcome?: (payload: { health: number; maxHealth: number; rateExp?: number }) => void;
 }
 
 /**
@@ -577,6 +577,7 @@ export class GameNetClient {
                 this.options.onWelcome?.({
                     health: msg.health,
                     maxHealth: msg.maxHealth,
+                    rateExp: msg.rateExp,
                 });
                 break;
             case 'instance_assigned':

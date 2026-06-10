@@ -12,6 +12,7 @@ import { createCharacterSpellsRouter } from './routes/characterSpells.js';
 import { createWsTicketRouter } from './routes/wsTicket.js';
 import { createStudioRouter } from './routes/studio/index.js';
 import { desktopVersionHandler } from './routes/desktopVersion.js';
+import { gameRatesHandler } from './routes/gameRates.js';
 import { studioService } from './studio/studioService.js';
 import { isDatabaseConfigured } from './db/pool.js';
 import type { MapCollisionStore } from './MapCollisionStore.js';
@@ -124,6 +125,7 @@ export function createApp(getOnline: (() => number) | undefined, collision: MapC
     app.use('/api/characters', createCharactersRouter((mapId) => collision.getMapSpawn(mapId)));
     app.use('/api/ws-ticket', createWsTicketRouter(collision));
     app.get('/api/desktop/version', desktopVersionHandler);
+    app.get('/api/game-rates', gameRatesHandler);
     studioService.setCollisionStore(collision);
     app.use('/api', createStudioRouter());
 

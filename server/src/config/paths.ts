@@ -95,6 +95,7 @@ function seedDataRoot(dataRoot: string): void {
         'outfit_presets.json',
         'item_catalog.json',
         'tile_variant_groups.json',
+        'game_rates.json',
     ];
     for (const file of publicFiles) {
         copyFileIfMissing(path.join(repoPublic, file), path.join(dataRoot, file));

@@ -6,7 +6,10 @@ import type { VocationId } from '../../../../shared/types/character.js';
 import type { SpectatorTile } from '../../../../shared/creatureSpectatorRange.js';
 import type { BroadcastCreatureEvent } from '../contextTypes.js';
 import { getLevelFromExp, calculateStatsForLevel } from '../../../../src/engine/character/calculateStats.js';
-import { applyExperienceGain } from '../../../../src/game/experience.js';
+import {
+    grantKillExperience,
+    scaleMobKillXpReward,
+} from '../../game/grantKillExperience.js';
 import { ZoneType } from '../../../../src/engine/zones.js';
 import { processAttack } from '../../combat/combat.js';
 import type { MapCollisionStore } from '../../MapCollisionStore.js';
@@ -371,33 +374,22 @@ function handlePveAttack(
     }
 
     if (outcome.died) {
-        ctx.broadcastCreatureEvent(room, msg.creatureId, outcome.died, {
-            tileX: outcome.died.tileX,
-            tileY: outcome.died.tileY,
-            z: outcome.died.z,
+        const scaledXp = scaleMobKillXpReward(outcome.died.xpReward);
+        const diedMsg = { ...outcome.died, xpReward: scaledXp };
+        ctx.broadcastCreatureEvent(room, msg.creatureId, diedMsg, {
+            tileX: diedMsg.tileX,
+            tileY: diedMsg.tileY,
+            z: diedMsg.z,
         });
 
-        const gain = applyExperienceGain(player.experience, outcome.died.xpReward);
-        player.experience = gain.experience;
-        player.level = gain.level;
-        void syncPlayerLearnedSpells(player);
-
-        ctx.send(player.socket, {
-            type: 'player_progress',
-            v: PROTOCOL_VERSION,
-            playerId: player.id,
-            level: gain.level,
-            experience: gain.experience,
-            leveledUp: gain.leveledUp,
+        grantKillExperience(player, scaledXp, {
+            send: ctx.send,
+            progressPersistence: ctx.progressPersistence,
+            onAfterGrant: (p, gain) => {
+                if (gain.leveledUp) {
+                    void syncPlayerLearnedSpells(p);
+                }
+            },
         });
-
-        if (player.characterId && player.accountId) {
-            void ctx.progressPersistence.saveNow({
-                characterId: player.characterId,
-                accountId: player.accountId,
-                level: gain.level,
-                experience: gain.experience,
-            });
-        }
     }
 }

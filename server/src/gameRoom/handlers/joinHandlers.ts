@@ -24,6 +24,7 @@ import type { RoomCreatureManager } from '../../game/RoomCreatureManager.js';
 import type { VocationStore } from '../../game/VocationStore.js';
 import { createChatRateLimitState } from '../../chat/chatService.js';
 import { hydratePlayerEquipment, hydratePlayerSpellBar } from '../playerLoadout.js';
+import { getServerGameRates } from '../../config/gameRates.js';
 import { ConnectedPlayer, DEFAULT_APPEARANCE } from '../types.js';
 
 export interface JoinHandlerContext {
@@ -242,6 +243,7 @@ export function handleJoin(
         maxHealth: player.maxHealth,
         players: others,
         creatures: creatureSnapshots,
+        rateExp: getServerGameRates().rateExp,
     });
     ctx.sendPlayerResources(player);
 

@@ -116,7 +116,9 @@ import {
     PLAY_ZOOM_STEPS,
     snapPlayZoom,
 } from './playZoom';
+import { loadClientGameRates, resetPlayExpRateState, setPlayExpRateFromServer } from '../game-data/gameRates';
 import { getExpProgress, normalizeCharacterProgress } from './experience';
+import { updatePlayHudExpRateBanner } from './playExpRateUi';
 import { serverStateStore } from '../net/serverStateStore';
 import { shouldCelebrateSessionLevelUp } from './playProgress';
 import { getPlayBorderConfig, loadPlayBorderConfig } from './playBorderConfig';
@@ -1716,7 +1718,9 @@ function setupNetwork(
                 respawnEntities();
             }
         },
-        onWelcome: ({ health, maxHealth }) => {
+        onWelcome: ({ health, maxHealth, rateExp }) => {
+            setPlayExpRateFromServer(rateExp);
+            updatePlayHudExpRateBanner(rateExp);
             logPlayJoinTimeline('welcome received');
             player.health = health;
             player.maxHealth = maxHealth;
@@ -1894,6 +1898,7 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
     resetPlayCombatInput();
     resetPlaySpellCooldowns();
     resetSpellCastEffects();
+    resetPlayExpRateState();
     resetPlayHudStatusCache();
     resetPlayCombatHubCooldownTracking();
     ensureCombatTargetRingLoaded();
@@ -1916,6 +1921,8 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
 
     await loadRuntimeVocations();
     await loadSpellCatalog();
+    await loadClientGameRates();
+    updatePlayHudExpRateBanner();
 
     const progress = normalizeCharacterProgress(character.experience, character.level);
     character.experience = progress.experience;

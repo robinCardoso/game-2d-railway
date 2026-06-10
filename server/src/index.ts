@@ -9,12 +9,14 @@ import { SpellCatalogStore } from './game/SpellCatalogStore.js';
 import { VocationStore } from './game/VocationStore.js';
 import { runMigrations } from './db/migrate.js';
 import { env } from './config/env.js';
+import { getServerGameRates } from './config/gameRates.js';
 import { initServerMapRegistry } from './mapRegistry.js';
 
 await runMigrations();
 
 const mapEntries = initServerMapRegistry();
 console.log(`[game-2d-server] Mapas registrados: ${mapEntries.map((m) => m.id).join(', ')}`);
+console.log(`[game-2d-server] GAME_RATE_EXP = ${getServerGameRates().rateExp}`);
 
 if (env.isProduction && !env.requireWsTicket) {
     console.warn(

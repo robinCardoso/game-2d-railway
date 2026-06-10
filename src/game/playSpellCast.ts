@@ -12,6 +12,8 @@ import { createEmptyEquipment } from '../../shared/inventory';
 import { getItemCatalog } from '../game-data/itemCatalog';
 import { getLastPlayInventory } from './ui/playHudInventory';
 import { beginCreatureDeath } from './creatureDeathLifecycle';
+import { applyExpRate } from '../../shared/gameRates';
+import { getPlayExpRate } from '../game-data/gameRates';
 import { applyExperienceGain } from './experience';
 import {
     getPlayCombatTarget,
@@ -216,12 +218,12 @@ export function tryCastSpellFromSlot(
 
     if (target.combatHealth <= 0) {
         beginCreatureDeath(target, options.nowMs);
-        const { xpReward } = target;
-        const gain = applyExperienceGain(options.character.experience ?? 0, xpReward);
+        const scaledXp = applyExpRate(target.xpReward, getPlayExpRate());
+        const gain = applyExperienceGain(options.character.experience ?? 0, scaledXp);
         options.character.experience = gain.experience;
         options.character.level = gain.level;
         options.characterSpeed.level = gain.level;
-        options.callbacks.onMonsterKilled(target, xpReward);
+        options.callbacks.onMonsterKilled(target, scaledXp);
         options.callbacks.onProgressUpdated({
             experience: gain.experience,
             level: gain.level,

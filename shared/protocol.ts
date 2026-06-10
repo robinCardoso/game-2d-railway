@@ -233,6 +233,8 @@ export interface WelcomeMessage {
     players: PlayerSnapshot[];
     /** Criaturas autoritativas da sala (mobs compartilhados). */
     creatures?: CreatureSnapshot[];
+    /** Multiplicador global de XP (1 = normal, 2 = double EXP). */
+    rateExp?: number;
 }
 
 /** Enviado ao entrar em mapa instanciado após `map_change` (já conectado). */

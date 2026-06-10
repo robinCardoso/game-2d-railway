@@ -6,6 +6,8 @@ import type { VocationId } from '../../shared/types/character';
 import type { GameEntity } from '../character/entity';
 import type { CharacterRow } from '../shared/types';
 import type { CharacterSpeedState } from '../character/movementSpeed';
+import { applyExpRate } from '../../shared/gameRates';
+import { getPlayExpRate } from '../game-data/gameRates';
 import { applyExperienceGain } from './experience';
 import { beginCreatureDeath } from './creatureDeathLifecycle';
 import { isPlayerInAttackRange, resolvePlayerAttackProfile } from '../../shared/playerAttack';
@@ -380,12 +382,12 @@ function executeAttack(
         if (combatTarget?.id === target.id) {
             combatTarget = null;
         }
-        const { xpReward } = target;
-        const gain = applyExperienceGain(options.character.experience ?? 0, xpReward);
+        const scaledXp = applyExpRate(target.xpReward, getPlayExpRate());
+        const gain = applyExperienceGain(options.character.experience ?? 0, scaledXp);
         options.character.experience = gain.experience;
         options.character.level = gain.level;
         options.characterSpeed.level = gain.level;
-        options.callbacks.onMonsterKilled(target, xpReward);
+        options.callbacks.onMonsterKilled(target, scaledXp);
         options.callbacks.onProgressUpdated({
             experience: gain.experience,
             level: gain.level,
