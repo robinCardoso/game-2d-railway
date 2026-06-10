@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="/src/game/play-inventory.css" />
     <link rel="stylesheet" href="/src/game/play-settings.css" />
     <link rel="stylesheet" href="/src/game/play-hud-chat.css" />
+    <link rel="stylesheet" href="/src/game/play-hud-quality.css" />
     <link rel="stylesheet" href="/src/game/play-mobile.css" />
     <link rel="stylesheet" href="/src/ui/player-flow-mobile.css" />
     <meta name="theme-color" content="#12141a" />
@@ -598,6 +599,15 @@
                 <span>Mostrar ping</span>
                 <input type="checkbox" data-setting="showPing" checked />
               </label>
+              <label>
+                <span>Qualidade da interface</span>
+                <select id="playHudQualitySelect" class="settings-select">
+                  <option value="high">Alta</option>
+                  <option value="medium">Média</option>
+                  <option value="light">Leve</option>
+                </select>
+              </label>
+              <p class="settings-hint">Modo leve reduz blur, animações e dano flutuante. Overlay de perf: F9 ou <code>debug.play.perf</code>.</p>
             </div>
             <div class="settings-section" data-settings-section="controls" hidden>
               <p class="settings-placeholder">Controles — em breve.</p>

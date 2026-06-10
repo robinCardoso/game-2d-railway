@@ -1,3 +1,4 @@
+import { markHudUpdate } from '../debug/playPerformanceMonitor';
 import type { SpellBarSlot } from './playSpellBar';
 import { getSpellForSlot } from './playSpellBar';
 import { getPlayAttackCooldownProgress } from '../playCombat';
@@ -13,6 +14,8 @@ export interface PlayCombatHubBridge {
 }
 
 let bridge: PlayCombatHubBridge | null = null;
+const lastSlotCooldownActive: Record<SpellBarSlot, boolean> = { 1: false, 2: false, 3: false };
+let lastAttackCooldownActive = false;
 
 export function setPlayCombatHubBridge(next: PlayCombatHubBridge | null): void {
     bridge = next;
@@ -30,10 +33,18 @@ function updateCooldownRing(
     host?.classList.toggle('is-on-cooldown', progress.active);
 }
 
-function refreshSpellSlotUi(slot: SpellBarSlot): void {
+function updateSpellSlotCooldown(
+    slot: SpellBarSlot,
+    progress: { active: boolean; percent: number }
+): void {
+    const btn = document.getElementById(`playCombatSlot${slot}`);
+    const cooldownEl = btn?.querySelector<HTMLElement>('.play-combat-hub__spell-cooldown');
+    updateCooldownRing(cooldownEl ?? null, progress, btn);
+}
+
+function refreshSpellSlotContent(slot: SpellBarSlot): void {
     const btn = document.getElementById(`playCombatSlot${slot}`) as HTMLButtonElement | null;
     const iconImg = btn?.querySelector<HTMLImageElement>('.play-combat-hub__spell-icon img');
-    const cooldownEl = btn?.querySelector<HTMLElement>('.play-combat-hub__spell-cooldown');
     const spell = getSpellForSlot(slot);
 
     if (iconImg) {
@@ -48,19 +59,21 @@ function refreshSpellSlotUi(slot: SpellBarSlot): void {
             delete btn.dataset.mock;
         }
     }
-    if (bridge && cooldownEl) {
-        updateCooldownRing(
-            cooldownEl,
-            getSpellSlotCooldownProgress(slot, bridge.nowMs()),
-            btn
-        );
-    }
 }
 
 export function refreshPlayCombatHubSpells(): void {
-    refreshSpellSlotUi(1);
-    refreshSpellSlotUi(2);
-    refreshSpellSlotUi(3);
+    markHudUpdate('spellBar');
+    refreshSpellSlotContent(1);
+    refreshSpellSlotContent(2);
+    refreshSpellSlotContent(3);
+    if (bridge) {
+        const now = bridge.nowMs();
+        for (const slot of [1, 2, 3] as SpellBarSlot[]) {
+            const progress = getSpellSlotCooldownProgress(slot, now);
+            updateSpellSlotCooldown(slot, progress);
+            lastSlotCooldownActive[slot] = progress.active;
+        }
+    }
 }
 
 export function initPlayCombatHub(): void {
@@ -98,11 +111,28 @@ export function tickPlayCombatHub(): void {
     if (!bridge) return;
     const now = bridge.nowMs();
 
-    const attackBtn = document.getElementById('playCombatAttackBtn');
-    const attackCd = attackBtn?.querySelector<HTMLElement>('.play-combat-hub__attack-cooldown');
-    updateCooldownRing(attackCd ?? null, getPlayAttackCooldownProgress(now));
+    const attackProgress = getPlayAttackCooldownProgress(now);
+    if (attackProgress.active || lastAttackCooldownActive) {
+        markHudUpdate('spellBar');
+        const attackBtn = document.getElementById('playCombatAttackBtn');
+        const attackCd = attackBtn?.querySelector<HTMLElement>('.play-combat-hub__attack-cooldown');
+        updateCooldownRing(attackCd ?? null, attackProgress, attackBtn);
+    }
+    lastAttackCooldownActive = attackProgress.active;
 
-    refreshSpellSlotUi(1);
-    refreshSpellSlotUi(2);
-    refreshSpellSlotUi(3);
+    for (const slot of [1, 2, 3] as SpellBarSlot[]) {
+        const progress = getSpellSlotCooldownProgress(slot, now);
+        if (progress.active || lastSlotCooldownActive[slot]) {
+            markHudUpdate('spellBar');
+            updateSpellSlotCooldown(slot, progress);
+        }
+        lastSlotCooldownActive[slot] = progress.active;
+    }
+}
+
+export function resetPlayCombatHubCooldownTracking(): void {
+    lastAttackCooldownActive = false;
+    lastSlotCooldownActive[1] = false;
+    lastSlotCooldownActive[2] = false;
+    lastSlotCooldownActive[3] = false;
 }

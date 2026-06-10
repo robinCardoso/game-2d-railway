@@ -10,6 +10,7 @@ import type {
 import { PROTOCOL_VERSION } from '../../shared/protocol';
 import { sameRoom } from '../../shared/roomKey';
 import { getMapEntry } from '../engine/mapRegistry';
+import { recordPlayWsMessage } from '../game/debug/playPerformanceMonitor';
 import { applyServerMessageToStore, recordPingSent, resetServerStateStore } from './serverStateStore';
 import { detectRuntimePlatform } from '../game/runtime/platform';
 import { getClientRuntimeConfig } from '../game/runtime/runtimeEnv';
@@ -531,6 +532,7 @@ export class GameNetClient {
         // Aplica estado autoritativo ANTES dos callbacks — garante consistência
         // mesmo se o render loop estiver pausado (Electron minimizado, browser throttlado).
         applyServerMessageToStore(msg);
+        recordPlayWsMessage(msg.type);
 
         switch (msg.type) {
             case 'welcome':

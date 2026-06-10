@@ -15,6 +15,7 @@ export interface LocalPlayerFloatingText {
     spawnXp(xp: number, nowMs: number): void;
     spawnDamage(damage: number, nowMs: number): void;
     tick(nowMs: number): void;
+    getActiveCount(): number;
     draw(
         ctx: CanvasRenderingContext2D,
         anchorCenterX: number,
@@ -41,6 +42,10 @@ export function createLocalPlayerFloatingText(): LocalPlayerFloatingText {
 
         tick(nowMs: number): void {
             entries = pruneFloatingDamages(entries, nowMs);
+        },
+
+        getActiveCount(): number {
+            return entries.length;
         },
 
         draw(ctx, anchorCenterX, anchorTopY, nowMs): void {

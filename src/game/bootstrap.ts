@@ -12,6 +12,7 @@ import { initPlayHudSettings } from './ui/playHudSettings';
 import { initPlayCombatHub } from './ui/playCombatHub';
 import { initPlaySpellModal } from './ui/playSpellModal';
 import { initPlayChatController } from './chat/playChatController';
+import { initPlayPerformanceMonitor } from './debug/playPerformanceMonitor';
 import { startPlay, stopLocationAutosave } from './playApp';
 
 resumeWorldEntryOverlayIfPending();
@@ -23,6 +24,7 @@ initPlayChatController();
 initPlayHudMinimap();
 initPlayCombatHub();
 initPlaySpellModal();
+initPlayPerformanceMonitor();
 initPlayMobileHud();
 
 initDesktopClientShell();

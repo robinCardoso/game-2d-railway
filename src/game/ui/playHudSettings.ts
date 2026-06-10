@@ -7,6 +7,7 @@ import {
 
 const STORAGE_PREFIX = 'elarion.play.';
 const DEFAULT_ZOOM_KEY = 'defaultZoom';
+const HUD_QUALITY_KEY = 'hudQuality';
 
 export type PlaySettingKey =
     | 'showPlayerNames'
@@ -15,6 +16,8 @@ export type PlaySettingKey =
     | 'showFloatingDamage'
     | 'showCoordinates'
     | 'showPing';
+
+export type PlayHudQuality = 'high' | 'medium' | 'light';
 
 const DEFAULTS: Record<PlaySettingKey, boolean> = {
     showPlayerNames: true,
@@ -46,6 +49,29 @@ export function setPlaySetting(key: PlaySettingKey, value: boolean): void {
         /* ignore */
     }
     applyPlaySettings();
+}
+
+export function getPlayHudQuality(): PlayHudQuality {
+    try {
+        const raw = localStorage.getItem(`${STORAGE_PREFIX}${HUD_QUALITY_KEY}`);
+        if (raw === 'medium' || raw === 'light') return raw;
+    } catch {
+        /* ignore */
+    }
+    return 'high';
+}
+
+export function setPlayHudQuality(quality: PlayHudQuality): void {
+    try {
+        localStorage.setItem(`${STORAGE_PREFIX}${HUD_QUALITY_KEY}`, quality);
+    } catch {
+        /* ignore */
+    }
+    applyPlayHudQuality();
+}
+
+function applyPlayHudQuality(): void {
+    document.documentElement.dataset.playHudQuality = getPlayHudQuality();
 }
 
 /** Preferências que afetam o render do canvas (lidas a cada frame no Play). */
@@ -88,12 +114,17 @@ export function getPlayZoomStepOptions(): ReadonlyArray<{ value: number; label: 
 }
 
 export function getPlayRenderOptions(): PlayRenderOptions {
-    return {
+    const quality = getPlayHudQuality();
+    const base = {
         showPlayerNames: getPlaySetting('showPlayerNames'),
         showMonsterNames: getPlaySetting('showMonsterNames'),
         showHealthBars: getPlaySetting('showHealthBars'),
         showFloatingDamage: getPlaySetting('showFloatingDamage'),
     };
+    if (quality === 'light') {
+        return { ...base, showFloatingDamage: false };
+    }
+    return base;
 }
 
 function applyPlaySettings(): void {
@@ -113,6 +144,8 @@ function applyPlaySettings(): void {
 }
 
 export function initPlayHudSettings(): void {
+    applyPlayHudQuality();
+
     document.querySelectorAll<HTMLInputElement>('[data-setting]').forEach((input) => {
         const key = input.dataset.setting as PlaySettingKey | undefined;
         if (!key || !(key in DEFAULTS)) return;
@@ -121,6 +154,17 @@ export function initPlayHudSettings(): void {
             setPlaySetting(key, input.checked);
         });
     });
+
+    const qualitySelect = document.getElementById('playHudQualitySelect') as HTMLSelectElement | null;
+    if (qualitySelect) {
+        qualitySelect.value = getPlayHudQuality();
+        qualitySelect.addEventListener('change', () => {
+            const next = qualitySelect.value as PlayHudQuality;
+            if (next === 'high' || next === 'medium' || next === 'light') {
+                setPlayHudQuality(next);
+            }
+        });
+    }
 
     document.querySelectorAll<HTMLButtonElement>('[data-settings-tab]').forEach((tab) => {
         tab.addEventListener('click', () => {

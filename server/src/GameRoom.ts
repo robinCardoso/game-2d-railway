@@ -1,42 +1,56 @@
 import type { WebSocket } from 'ws';
 import type {
     ClientMessage,
-    PlayerAppearance,
     PlayerSnapshot,
     ServerMessage,
 } from '../../shared/protocol.js';
 import {
-    isValidTile,
-    MIN_SERVER_STEP_DURATION_MS,
     parseClientMessage,
-    parseStepDurationMs,
     PROTOCOL_VERSION,
-    SERVER_MAP_SIZE,
 } from '../../shared/protocol.js';
 import { buildRoomKey } from '../../shared/roomKey.js';
-import { canAdjacentStep } from '../../shared/tileWalkable.js';
 import type { MapCollisionStore } from './MapCollisionStore.js';
 import type { MapInstanceStore } from './MapInstanceStore.js';
-import { isInstancedMap, getServerMapEntry } from './mapRegistry.js';
+import { handleChatSend, type ChatHandlerContext } from './gameRoom/handlers/chatHandlers.js';
 import {
-    calculateEquipmentAttackBonus,
-    calculateEquipmentDefenseBonus,
-} from '../../shared/equipmentBonuses.js';
-import { createEmptyEquipment, type CharacterEquipmentState } from '../../shared/inventory.js';
-import { processAttack } from './combat/combat.js';
-import { isDatabaseConfigured } from './db/pool.js';
-import { getCharacterInventory } from './db/repositories/inventory.repo.js';
+    handleAttack,
+    type AttackHandlerContext,
+} from './gameRoom/handlers/attackHandlers.js';
 import {
-    getCharacterSpellSlots,
-    replaceCharacterSpellSlots,
-} from './db/repositories/spellSlots.repo.js';
-import { syncEligibleLearnedSpells } from './db/repositories/characterSpells.repo.js';
-import { loadServerItemCatalog } from './game/itemCatalogStore.js';
-import { loadServerSpellCatalog } from './game/serverSpellCatalog.js';
-import { verifyEnterTicket } from './enterTicket.js';
+    handleJoin,
+    type JoinHandlerContext,
+} from './gameRoom/handlers/joinHandlers.js';
 import {
-    clearSteppingDest,
-    computeSteppingDestExpiresAtMs,
+    handleMove,
+    MOVE_REJECTION_THROTTLE_MS,
+    type MoveHandlerContext,
+} from './gameRoom/handlers/moveHandlers.js';
+import {
+    handleProgressSync,
+    type ProgressHandlerContext,
+} from './gameRoom/handlers/progressHandlers.js';
+import {
+    handleResyncRequest,
+    RESYNC_MIN_INTERVAL_MS,
+    type ResyncHandlerContext,
+} from './gameRoom/handlers/resyncHandlers.js';
+import {
+    handleCastSpell,
+    handleSpellBarSync,
+    type SpellHandlerContext,
+} from './gameRoom/handlers/spellHandlers.js';
+import {
+    playerResourcesChanged,
+    recalcPlayerMaxStats,
+    snapshotPlayerResources,
+} from './gameRoom/playerVitals.js';
+import {
+    startPeriodicSnapshots,
+    stopPeriodicSnapshots,
+    type PeriodicSnapshotContext,
+} from './gameRoom/periodicSnapshots.js';
+import { ConnectedPlayer, type PlayerResourcesSnapshot } from './gameRoom/types.js';
+import {
     expireStaleSteppingDest,
 } from '../../shared/steppingDestReserve.js';
 import { PositionPersistence } from './game/PositionPersistence.js';
@@ -45,94 +59,12 @@ import { RoomCreatureManager } from './game/RoomCreatureManager.js';
 import type { CreaturePresetStore } from './game/CreaturePresetStore.js';
 import type { SpellCatalogStore } from './game/SpellCatalogStore.js';
 import type { VocationStore } from './game/VocationStore.js';
-import { applyExperienceGain } from '../../src/game/experience.js';
-import { getLevelFromExp, calculateStatsForLevel } from '../../src/engine/character/calculateStats.js';
-import type { VocationId } from '../../shared/types/character.js';
-import { ZoneType } from '../../src/engine/zones.js';
 import { env } from './config/env.js';
 import { shouldAcceptClientProgressSync } from '../../shared/progressSyncPolicy.js';
-import { isPlayerInAttackRange, resolvePlayerAttackProfile } from '../../shared/playerAttack.js';
-import { listEquippedSpellIds, type SpellBarState } from '../../shared/spellBar.js';
-import { computeEligibleSpellIds } from '../../shared/characterSpells.js';
 import {
-    resolveSpellBarOrDefaults,
-    validateCharacterSpellBar,
-} from '../../shared/spellSlots.js';
-import { resolveServerPlayerStepDurationMs } from './game/playerMovement.js';
-import {
-    buildPlayerChatBroadcast,
     buildServerChatBroadcast,
-    checkChatRateLimit,
-    createChatRateLimitState,
-    getGlobalChatRecipients,
-    getLocalChatRecipients,
-    isGuildChatEnabled,
-    recordChatSend,
     sendChatToPlayers,
-    type ChatRateLimitState,
 } from './chat/chatService.js';
-
-/** Tolerância de jitter de rede no intervalo mínimo entre passos (0.85 = 15% mais rápido que o step). */
-const MOVE_RATE_LIMIT_TOLERANCE = 0.85;
-/** Intervalo mínimo entre `error` + `position_correction` por rejeição de movimento (anti-spam). */
-const MOVE_REJECTION_THROTTLE_MS = 400;
-const DEFAULT_ATTACK_COOLDOWN_MS = 550;
-const RESYNC_MIN_INTERVAL_MS = 2000;
-
-/** Intervalo entre state_sync periódico (ms). 0 = desabilitado. */
-const STATE_SNAPSHOT_INTERVAL_MS = Number(process.env['PLAYER_STATE_SNAPSHOT_INTERVAL_MS'] ?? 1000);
-/** Intervalo entre creature_sync periódico (ms). 0 = desabilitado. */
-const CREATURE_SNAPSHOT_INTERVAL_MS_CFG = Number(process.env['CREATURE_SNAPSHOT_INTERVAL_MS'] ?? 1000);
-
-const DEFAULT_APPEARANCE: PlayerAppearance = {
-    outfitId: 'knight',
-    spriteSheetUrl: 'tiles/characters/vocations/male/knight.png',
-    gender: 'male',
-    vocationId: 'knight',
-};
-
-interface ConnectedPlayer {
-    id: string;
-    name: string;
-    characterId?: string;
-    accountId?: string;
-    direction: 'north' | 'south' | 'east' | 'west';
-    appearance: PlayerAppearance;
-    mapId: string;
-    instanceId?: string;
-    tileX: number;
-    tileY: number;
-    z: number;
-    /** Última duração de passo reportada pelo cliente (interpolação remota). */
-    lastStepDurationMs?: number;
-    /** 0 = primeiro passo após join sempre aceito. */
-    lastMoveAcceptedAtMs: number;
-    /** Intervalo real entre os últimos passos aceitos (ms) — calibra rate limit. */
-    lastObservedMoveIntervalMs: number;
-    /** Última rejeição de movimento com resposta ao cliente (throttle de spam). */
-    /** Tile reservado durante deslize (colisão de mobs; posição autoritativa ainda é tileX/tileY). */
-    steppingDestTileX?: number;
-    steppingDestTileY?: number;
-    steppingDestExpiresAtMs?: number;
-    level: number;
-    experience: number;
-    health: number;
-    maxHealth: number;
-    mana: number;
-    maxMana: number;
-    lastAttackAtMs: number;
-    spellCooldownUntil: Record<string, number>;
-    groupCooldownUntil: Record<string, number>;
-    lastMoveRejectionSentAtMs: number;
-    /** Equipamento carregado do PostgreSQL no join (autoritativo no servidor). */
-    equipment: CharacterEquipmentState;
-    /** Magias nos slots F1–F3 (carregadas do PostgreSQL no join). */
-    spellBar: SpellBarState;
-    /** Magias aprendidas (PostgreSQL + desbloqueio automático por level). */
-    learnedSpellIds: string[];
-    socket: WebSocket;
-    chatRateLimit: ChatRateLimitState;
-}
 
 export interface GameRoomOptions {
     requireWsTicket?: boolean;
@@ -145,6 +77,7 @@ export interface GameRoomOptions {
 export class GameRoom {
     private players = new Map<string, ConnectedPlayer>();
     private socketToPlayerId = new Map<WebSocket, string>();
+    private lastSentResources = new Map<string, PlayerResourcesSnapshot>();
     private readonly requireWsTicket: boolean;
     private readonly positionPersistence: PositionPersistence;
     private readonly progressPersistence: ProgressPersistence;
@@ -172,7 +105,7 @@ export class GameRoom {
             (room) => this.playersInRoomAsRefs(room)
         );
         this.creatures.start();
-        this.startPeriodicSnapshots();
+        this.snapshotTimer = startPeriodicSnapshots(this.periodicSnapshotContext());
     }
 
     private playersInRoomAsRefs(room: string): Array<{
@@ -268,57 +201,167 @@ export class GameRoom {
     }
 
     private recalcPlayerMaxHealth(player: ConnectedPlayer): void {
-        const vocationId = (player.appearance.vocationId || 'knight') as VocationId;
-        const vocationConfig = this.vocations.get(vocationId);
-        const stats = vocationConfig
-            ? calculateStatsForLevel(vocationConfig, player.level)
-            : { health: 100, mana: 50 };
-        player.maxHealth = stats.health;
-        player.maxMana = stats.mana;
-        player.mana = Math.min(player.mana, player.maxMana);
-        player.health = Math.min(player.health, player.maxHealth);
+        recalcPlayerMaxStats(player, this.vocations);
         this.sendPlayerResources(player);
     }
 
     private sendPlayerResources(player: ConnectedPlayer): void {
+        const payload = snapshotPlayerResources(player);
+        const prev = this.lastSentResources.get(player.id);
+        if (!playerResourcesChanged(prev, payload)) return;
+        this.lastSentResources.set(player.id, payload);
         this.send(player.socket, {
             type: 'player_resources',
             v: PROTOCOL_VERSION,
             playerId: player.id,
-            health: player.health,
-            maxHealth: player.maxHealth,
-            mana: player.mana,
-            maxMana: player.maxMana,
+            ...payload,
         });
     }
 
-    private spellCastErrorMessage(code?: string): string {
-        switch (code) {
-            case 'SPELL_NOT_EQUIPPED':
-                return 'Esta magia não está equipada nos seus slots.';
-            case 'SPELL_NOT_LEARNED':
-                return 'Você ainda não aprendeu esta magia.';
-            case 'SPELL_NOT_ALLOWED_FOR_VOCATION':
-            case 'VOCATION_BLOCKED':
-                return 'Sua vocação não pode usar esta magia.';
-            case 'SPELL_LEVEL_TOO_LOW':
-            case 'LEVEL_TOO_LOW':
-                return 'Level insuficiente para esta magia.';
-            case 'NOT_ENOUGH_MANA':
-                return 'Mana insuficiente.';
-            case 'SPELL_COOLDOWN':
-                return 'Aguarde o cooldown da magia.';
-            case 'GROUP_COOLDOWN':
-                return 'Aguarde o cooldown do grupo de magias.';
-            case 'OUT_OF_RANGE':
-                return 'Alvo fora de alcance.';
-            case 'CREATURE_NOT_FOUND':
-                return 'Alvo inválido.';
-            case 'SPELL_NOT_IMPLEMENTED':
-                return 'Magia ainda não disponível.';
-            default:
-                return 'Não foi possível conjurar a magia.';
-        }
+    private getPlayerBySocket(socket: WebSocket): ConnectedPlayer | undefined {
+        const playerId = this.socketToPlayerId.get(socket);
+        if (!playerId) return undefined;
+        return this.players.get(playerId);
+    }
+
+    private spellHandlerContext(): SpellHandlerContext {
+        return {
+            getPlayerBySocket: (socket) => this.getPlayerBySocket(socket),
+            roomKey: (player) => this.roomKey(player),
+            send: (socket, message) => this.send(socket, message),
+            broadcastToRoom: (room, message) => this.broadcastToRoom(room, message),
+            sendPlayerResources: (player) => this.sendPlayerResources(player),
+            creatures: this.creatures,
+            spellCatalog: this.spellCatalog,
+            vocations: this.vocations,
+            progressPersistence: this.progressPersistence,
+        };
+    }
+
+    private chatHandlerContext(): ChatHandlerContext {
+        return {
+            getPlayerBySocket: (socket) => this.getPlayerBySocket(socket),
+            getAllPlayers: () => [...this.players.values()],
+            send: (socket, message) => this.send(socket, message),
+        };
+    }
+
+    private moveHandlerContext(): MoveHandlerContext {
+        return {
+            getPlayerBySocket: (socket) => this.getPlayerBySocket(socket),
+            send: (socket, message) => this.send(socket, message),
+            broadcastToRoom: (room, message, exceptId) =>
+                this.broadcastToRoom(room, message, exceptId),
+            roomKey: (player) => this.roomKey(player),
+            isWalkable: (mapId, tileX, tileY, z) => this.isWalkable(mapId, tileX, tileY, z),
+            rejectMove: (player, code, message, logDetail) =>
+                this.rejectMove(player, code, message, logDetail),
+            persistPlayerPosition: (player, immediate) =>
+                this.persistPlayerPosition(player, immediate),
+            sendCreatureSync: (socket, room, mapId, instanceId) =>
+                this.sendCreatureSync(socket, room, mapId, instanceId),
+            toSnapshot: (player) => this.toSnapshot(player),
+            instances: this.instances,
+        };
+    }
+
+    private attackHandlerContext(): AttackHandlerContext {
+        return {
+            getPlayerBySocket: (socket) => this.getPlayerBySocket(socket),
+            getPlayerById: (playerId) => this.players.get(playerId),
+            roomKey: (player) => this.roomKey(player),
+            send: (socket, message) => this.send(socket, message),
+            broadcastToRoom: (room, message) => this.broadcastToRoom(room, message),
+            sendPlayerResources: (player) => this.sendPlayerResources(player),
+            sendPositionCorrection: (player) => this.sendPositionCorrection(player),
+            persistPlayerPosition: (player, immediate) =>
+                this.persistPlayerPosition(player, immediate),
+            recalcPlayerMaxHealth: (player) => this.recalcPlayerMaxHealth(player),
+            collision: this.collision,
+            creatures: this.creatures,
+            vocations: this.vocations,
+            progressPersistence: this.progressPersistence,
+        };
+    }
+
+    private joinHandlerContext(): JoinHandlerContext {
+        return {
+            requireWsTicket: this.requireWsTicket,
+            hasSocketMapping: (socket) => this.socketToPlayerId.has(socket),
+            disconnectSocket: (socket) => this.handleDisconnect(socket),
+            kickDuplicateCharacter: (characterId, exceptSocket) => {
+                for (const existing of this.players.values()) {
+                    if (existing.characterId === characterId && existing.socket !== exceptSocket) {
+                        existing.socket.close();
+                        this.handleDisconnect(existing.socket);
+                    }
+                }
+            },
+            playerIdExists: (id) => this.players.has(id),
+            generatePlayerId: () => this.generatePlayerId(),
+            registerPlayer: (id, player, socket) => {
+                this.players.set(id, player);
+                this.socketToPlayerId.set(socket, id);
+                this.instances.trackPlayer(player.instanceId, id);
+            },
+            isWalkable: (mapId, tileX, tileY, z) => this.isWalkable(mapId, tileX, tileY, z),
+            playersInRoom: (room, exceptId) => this.playersInRoom(room, exceptId),
+            toSnapshot: (player) => this.toSnapshot(player),
+            send: (socket, message) => this.send(socket, message),
+            broadcastToRoom: (room, message, exceptId) =>
+                this.broadcastToRoom(room, message, exceptId),
+            sendPlayerResources: (player) => this.sendPlayerResources(player),
+            sendPositionCorrection: (player) => this.sendPositionCorrection(player),
+            collision: this.collision,
+            instances: this.instances,
+            creatures: this.creatures,
+            vocations: this.vocations,
+            positionPersistence: this.positionPersistence,
+            getOnlineCount: () => this.players.size,
+        };
+    }
+
+    private progressHandlerContext(): ProgressHandlerContext {
+        return {
+            shouldAcceptClientProgress: () =>
+                shouldAcceptClientProgressSync({
+                    isProduction: env.isProduction,
+                    allowClientProgressSync: env.allowClientProgressSync,
+                    requireWsTicket: this.requireWsTicket,
+                }),
+            getPlayerBySocket: (socket) => this.getPlayerBySocket(socket),
+            recalcPlayerMaxHealth: (player) => this.recalcPlayerMaxHealth(player),
+            send: (socket, message) => this.send(socket, message),
+        };
+    }
+
+    private resyncHandlerContext(): ResyncHandlerContext {
+        return {
+            getPlayerBySocket: (socket) => this.getPlayerBySocket(socket),
+            tryAcquireResyncSlot: (playerId, nowMs) => {
+                const last = this.lastResyncRequestAtMs.get(playerId) ?? 0;
+                if (nowMs - last < RESYNC_MIN_INTERVAL_MS) return false;
+                this.lastResyncRequestAtMs.set(playerId, nowMs);
+                return true;
+            },
+            roomKey: (player) => this.roomKey(player),
+            playersInRoom: (room) => this.playersInRoom(room),
+            sendCreatureSync: (socket, room, mapId, instanceId) =>
+                this.sendCreatureSync(socket, room, mapId, instanceId),
+            sendPositionCorrection: (player) => this.sendPositionCorrection(player),
+            send: (socket, message) => this.send(socket, message),
+        };
+    }
+
+    private periodicSnapshotContext(): PeriodicSnapshotContext {
+        return {
+            getOnlineCount: () => this.players.size,
+            getPlayers: () => this.players.values(),
+            getPlayerById: (playerId) => this.players.get(playerId),
+            roomKey: (player) => this.roomKey(player),
+            playersInRoom: (room) => this.playersInRoom(room),
+            creatures: this.creatures,
+        };
     }
 
     private isWalkable(mapId: string, tileX: number, tileY: number, z: number): boolean {
@@ -370,96 +413,6 @@ export class GameRoom {
             message,
         });
         this.sendPositionCorrection(player);
-    }
-
-    private resolvePlayerEquipmentBonuses(player: ConnectedPlayer): {
-        attackBonus: number;
-        defenseBonus: number;
-    } {
-        const catalog = loadServerItemCatalog();
-        return {
-            attackBonus: calculateEquipmentAttackBonus(player.equipment, catalog),
-            defenseBonus: calculateEquipmentDefenseBonus(player.equipment, catalog),
-        };
-    }
-
-    private async hydratePlayerEquipment(player: ConnectedPlayer): Promise<void> {
-        if (!isDatabaseConfigured()) return;
-        if (!player.characterId || !player.accountId) return;
-        try {
-            const inventory = await getCharacterInventory(player.characterId, player.accountId);
-            if (inventory) {
-                player.equipment = inventory.equipment;
-            }
-        } catch (err) {
-            console.warn(
-                `[GameRoom] falha ao carregar equipamento de ${player.characterId}:`,
-                err
-            );
-        }
-    }
-
-    private async syncPlayerLearnedSpells(player: ConnectedPlayer): Promise<void> {
-        const vocationId = (player.appearance.vocationId || 'knight') as VocationId;
-        const catalog = loadServerSpellCatalog();
-        if (!isDatabaseConfigured() || !player.characterId || !player.accountId) {
-            player.learnedSpellIds = computeEligibleSpellIds(catalog, vocationId, player.level);
-            return;
-        }
-        try {
-            const learned = await syncEligibleLearnedSpells(
-                player.characterId,
-                player.accountId,
-                vocationId,
-                player.level,
-                catalog
-            );
-            player.learnedSpellIds = learned ?? computeEligibleSpellIds(catalog, vocationId, player.level);
-        } catch (err) {
-            console.warn(
-                `[GameRoom] falha ao sincronizar magias aprendidas de ${player.characterId}:`,
-                err
-            );
-            player.learnedSpellIds = computeEligibleSpellIds(catalog, vocationId, player.level);
-        }
-    }
-
-    private async hydratePlayerSpellBar(player: ConnectedPlayer): Promise<void> {
-        if (!player.characterId || !player.accountId) return;
-        const vocationId = (player.appearance.vocationId || 'knight') as VocationId;
-        await this.syncPlayerLearnedSpells(player);
-        if (!isDatabaseConfigured()) {
-            player.spellBar = resolveSpellBarOrDefaults({}, vocationId);
-            return;
-        }
-        try {
-            const stored =
-                (await getCharacterSpellSlots(player.characterId, player.accountId)) ?? {};
-            const bar = resolveSpellBarOrDefaults(stored, vocationId);
-            player.spellBar = bar;
-
-            if (!stored.slot1 && !stored.slot2 && !stored.slot3) {
-                const catalog = loadServerSpellCatalog();
-                const validated = validateCharacterSpellBar(bar, catalog, {
-                    vocationId,
-                    level: player.level,
-                    learnedSpellIds: player.learnedSpellIds,
-                });
-                if (validated.ok) {
-                    await replaceCharacterSpellSlots(
-                        player.characterId,
-                        player.accountId,
-                        validated.value
-                    );
-                }
-            }
-        } catch (err) {
-            console.warn(
-                `[GameRoom] falha ao carregar spell bar de ${player.characterId}:`,
-                err
-            );
-            player.spellBar = resolveSpellBarOrDefaults({}, vocationId);
-        }
     }
 
     private persistPlayerPosition(player: ConnectedPlayer, immediate = false): void {
@@ -534,45 +487,7 @@ export class GameRoom {
         socket: WebSocket,
         msg: Extract<ClientMessage, { type: 'chat_send' }>
     ): void {
-        const playerId = this.socketToPlayerId.get(socket);
-        if (!playerId) return;
-        const player = this.players.get(playerId);
-        if (!player) return;
-
-        if (msg.channel === 'guild' && !isGuildChatEnabled()) {
-            this.send(socket, {
-                type: 'error',
-                v: PROTOCOL_VERSION,
-                code: 'CHAT_CHANNEL_DISABLED',
-                message: 'Canal de guilda ainda não está disponível.',
-            });
-            return;
-        }
-
-        const nowMs = Date.now();
-        const limit = checkChatRateLimit(player.chatRateLimit, msg.channel, msg.text, nowMs);
-        if (!limit.ok) {
-            this.send(socket, {
-                type: 'error',
-                v: PROTOCOL_VERSION,
-                code: limit.code,
-                message:
-                    limit.code === 'CHAT_COOLDOWN'
-                        ? 'Aguarde antes de enviar outra mensagem.'
-                        : 'Mensagem duplicada — aguarde um pouco.',
-                retryAfterMs: limit.retryAfterMs,
-            });
-            return;
-        }
-
-        recordChatSend(player.chatRateLimit, msg.channel, msg.text, nowMs);
-        const broadcast = buildPlayerChatBroadcast(msg.channel, player, msg.text, nowMs);
-        const allPlayers = [...this.players.values()];
-        const recipients =
-            msg.channel === 'global'
-                ? getGlobalChatRecipients(allPlayers)
-                : getLocalChatRecipients(player, allPlayers);
-        sendChatToPlayers(recipients, broadcast);
+        handleChatSend(this.chatHandlerContext(), socket, msg);
     }
 
     /** Mensagens de loot/sistema geradas pelo servidor (fase futura: hooks de combate). */
@@ -589,229 +504,7 @@ export class GameRoom {
         socket: WebSocket,
         msg: Extract<ClientMessage, { type: 'join' }>
     ): void {
-        if (this.socketToPlayerId.has(socket)) {
-            this.handleDisconnect(socket);
-        }
-
-        if (this.requireWsTicket && !msg.enterTicket) {
-            this.send(socket, {
-                type: 'error',
-                v: PROTOCOL_VERSION,
-                code: 'MISSING_TICKET',
-                message: 'Ticket de entrada obrigatório. Use POST /api/ws-ticket.',
-            });
-            return;
-        }
-
-        let joinName = msg.name.slice(0, 32) || 'Jogador';
-        let characterId: string | undefined;
-        let accountId: string | undefined;
-        let direction: ConnectedPlayer['direction'] = msg.direction ?? 'south';
-        let appearance: PlayerAppearance = msg.appearance ?? DEFAULT_APPEARANCE;
-        let joinMapId = msg.mapId;
-        let joinTileX = msg.tileX;
-        let joinTileY = msg.tileY;
-        let joinZ = msg.z;
-        let joinExperience = msg.experience ?? 0;
-
-        if (msg.enterTicket) {
-            const ticket = verifyEnterTicket(msg.enterTicket);
-            if (!ticket) {
-                this.send(socket, {
-                    type: 'error',
-                    v: PROTOCOL_VERSION,
-                    code: 'INVALID_TICKET',
-                    message: 'Ticket de entrada inválido ou expirado.',
-                });
-                return;
-            }
-            joinName = ticket.name.slice(0, 32);
-            characterId = ticket.characterId;
-            accountId = ticket.accountId;
-            direction = ticket.direction;
-            joinMapId = ticket.mapId;
-            joinTileX = ticket.tileX;
-            joinTileY = ticket.tileY;
-            joinZ = ticket.z;
-            joinExperience = ticket.experience;
-            if (ticket.appearance) {
-                appearance = ticket.appearance;
-            }
-        }
-
-        if (characterId) {
-            for (const existing of this.players.values()) {
-                if (existing.characterId === characterId && existing.socket !== socket) {
-                    existing.socket.close();
-                    this.handleDisconnect(existing.socket);
-                }
-            }
-        }
-
-        if (!isValidTile(joinMapId, joinTileX, joinTileY, joinZ)) {
-            this.send(socket, {
-                type: 'error',
-                v: PROTOCOL_VERSION,
-                code: 'INVALID_TILE',
-                message: `Tile inválido (${joinTileX},${joinTileY},${joinZ}) mapa ${SERVER_MAP_SIZE}×${SERVER_MAP_SIZE}.`,
-            });
-            return;
-        }
-
-        let { instanceId } = msg;
-        if (isInstancedMap(joinMapId)) {
-            instanceId = this.instances.resolveInstanceId(joinMapId, instanceId);
-        } else {
-            instanceId = undefined;
-        }
-
-        const resolvedJoin = this.collision.resolveJoinPosition(
-            joinMapId,
-            joinTileX,
-            joinTileY,
-            joinZ
-        );
-        joinTileX = resolvedJoin.tileX;
-        joinTileY = resolvedJoin.tileY;
-        joinZ = resolvedJoin.z;
-
-        if (!this.isWalkable(joinMapId, joinTileX, joinTileY, joinZ)) {
-            this.send(socket, {
-                type: 'error',
-                v: PROTOCOL_VERSION,
-                code: 'NOT_WALKABLE',
-                message: 'Posição inicial não é walkable no template do mapa.',
-            });
-            return;
-        }
-
-        const id = msg.playerId && !this.players.has(msg.playerId)
-            ? msg.playerId.slice(0, 64)
-            : this.generatePlayerId();
-
-        const room = buildRoomKey(joinMapId, instanceId);
-        const roomWasEmpty = this.playersInRoom(room).length === 0;
-        const joinExp = Math.max(0, Math.floor(joinExperience));
-        const joinLevelFromExp = getLevelFromExp(joinExp);
-
-        const player: ConnectedPlayer = {
-            id,
-            name: joinName,
-            characterId,
-            accountId,
-            direction,
-            appearance,
-            mapId: joinMapId,
-            instanceId,
-            tileX: joinTileX,
-            tileY: joinTileY,
-            z: joinZ,
-            lastMoveAcceptedAtMs: 0,
-            lastObservedMoveIntervalMs: 0,
-            lastMoveRejectionSentAtMs: 0,
-            level: joinLevelFromExp,
-            experience: joinExp,
-            health: 100, // will be overwritten below
-            maxHealth: 100,
-            mana: 50,
-            maxMana: 50,
-            lastAttackAtMs: 0,
-            spellCooldownUntil: {},
-            groupCooldownUntil: {},
-            equipment: createEmptyEquipment(),
-            spellBar: resolveSpellBarOrDefaults({}, appearance.vocationId),
-            learnedSpellIds: [],
-            socket,
-            chatRateLimit: createChatRateLimitState(),
-        };
-
-        const pVocationId = (appearance.vocationId || 'knight') as VocationId;
-        const pVocationConfig = this.vocations.get(pVocationId);
-        const pStats = pVocationConfig
-            ? calculateStatsForLevel(pVocationConfig, joinLevelFromExp)
-            : { health: 100, mana: 50 };
-        player.maxHealth = pStats.health;
-        player.maxMana = pStats.mana;
-        player.mana = pStats.mana;
-        
-        // Use health from ticket if valid, otherwise default to max health
-        if (msg.enterTicket) {
-            const ticket = verifyEnterTicket(msg.enterTicket);
-            if (ticket && ticket.health !== undefined && ticket.health !== null && ticket.health > 0) {
-                player.health = Math.min(ticket.health, player.maxHealth);
-            } else {
-                player.health = player.maxHealth;
-            }
-        } else {
-            player.health = player.maxHealth;
-        }
-
-        this.players.set(id, player);
-        this.socketToPlayerId.set(socket, id);
-        this.instances.trackPlayer(instanceId, id);
-
-        if (characterId && accountId) {
-            void this.hydratePlayerEquipment(player);
-            void this.hydratePlayerSpellBar(player);
-        }
-
-        const platformLog = msg.platform ? `[${msg.platform}]` : '[web/unknown]';
-        const versionLog = msg.clientBuildVersion ? `v${msg.clientBuildVersion}` : 'v?';
-        console.log(`[GameRoom] ${joinName} (${id}) entrou em ${room} ${platformLog} ${versionLog}`);
-
-        const others = this.playersInRoom(room, id);
-        const joinNowMs = Date.now();
-        const creatureSnapshots = this.creatures.ensureRoom(room, joinMapId, instanceId);
-        if (roomWasEmpty) {
-            this.creatures.armRoomWakeDelay(room, joinNowMs);
-        }
-
-        this.send(socket, {
-            type: 'welcome',
-            v: PROTOCOL_VERSION,
-            playerId: id,
-            instanceId,
-            health: player.health,
-            maxHealth: player.maxHealth,
-            players: others,
-            creatures: creatureSnapshots,
-        });
-        this.sendPlayerResources(player);
-
-        if (
-            msg.tileX !== joinTileX ||
-            msg.tileY !== joinTileY ||
-            msg.z !== joinZ ||
-            msg.mapId !== joinMapId
-        ) {
-            this.sendPositionCorrection(player);
-        }
-
-        if (resolvedJoin.corrected && characterId && accountId) {
-            void this.positionPersistence.saveNow({
-                characterId,
-                accountId,
-                mapId: joinMapId,
-                tileX: joinTileX,
-                tileY: joinTileY,
-                z: joinZ,
-                direction,
-            });
-        }
-
-        this.broadcastToRoom(
-            room,
-            {
-                type: 'player_joined',
-                v: PROTOCOL_VERSION,
-                player: this.toSnapshot(player),
-            },
-            id
-        );
-
-        console.log(
-            `[GameRoom] ${player.name} (${id}) → sala ${room} @ ${joinTileX},${joinTileY},${joinZ} — ${this.players.size} online`
-        );
+        handleJoin(this.joinHandlerContext(), socket, msg);
     }
 
     private handleMove(
@@ -819,740 +512,39 @@ export class GameRoom {
         msg: Extract<ClientMessage, { type: 'move' } | { type: 'map_change' }>,
         isMapChange: boolean
     ): void {
-        const playerId = this.socketToPlayerId.get(socket);
-        if (!playerId) return;
-
-        const player = this.players.get(playerId);
-        if (!player) return;
-
-        if (!isValidTile(msg.mapId, msg.tileX, msg.tileY, msg.z)) {
-            this.rejectMove(
-                player,
-                'INVALID_TILE',
-                'Movimento rejeitado: coordenadas fora dos limites.'
-            );
-            return;
-        }
-
-        let { instanceId } = msg;
-        if (isInstancedMap(msg.mapId)) {
-            if (!instanceId && player.instanceId) {
-                instanceId = player.instanceId;
-            }
-            if (!instanceId) {
-                instanceId = this.instances.resolveInstanceId(msg.mapId);
-            }
-        } else {
-            instanceId = undefined;
-        }
-
-        const steppingDestTileX = msg.type === 'move' ? msg.steppingDestTileX : undefined;
-        const steppingDestTileY = msg.type === 'move' ? msg.steppingDestTileY : undefined;
-        const isSteppingReserveOnly =
-            !isMapChange &&
-            msg.type === 'move' &&
-            steppingDestTileX !== undefined &&
-            steppingDestTileY !== undefined &&
-            msg.tileX === player.tileX &&
-            msg.tileY === player.tileY &&
-            msg.z === player.z &&
-            player.mapId === msg.mapId &&
-            (player.instanceId ?? undefined) === (instanceId ?? undefined);
-
-        if (isSteppingReserveOnly) {
-            if (!isValidTile(msg.mapId, steppingDestTileX, steppingDestTileY, msg.z)) {
-                return;
-            }
-            if (!this.isWalkable(msg.mapId, steppingDestTileX, steppingDestTileY, msg.z)) {
-                return;
-            }
-            const sameDest =
-                player.steppingDestTileX === steppingDestTileX &&
-                player.steppingDestTileY === steppingDestTileY;
-            player.steppingDestTileX = steppingDestTileX;
-            player.steppingDestTileY = steppingDestTileY;
-            const reserveStepMs = parseStepDurationMs(msg.stepDurationMs);
-            if (reserveStepMs !== undefined) {
-                player.lastStepDurationMs = reserveStepMs;
-            }
-            player.steppingDestExpiresAtMs = computeSteppingDestExpiresAtMs(
-                reserveStepMs ?? player.lastStepDurationMs
-            );
-            if (msg.direction) {
-                player.direction = msg.direction;
-            }
-            if (sameDest) {
-                return;
-            }
-            this.broadcastToRoom(
-                this.roomKey(player),
-                {
-                    type: 'player_moved',
-                    v: PROTOCOL_VERSION,
-                    playerId: player.id,
-                    tileX: steppingDestTileX,
-                    tileY: steppingDestTileY,
-                    z: player.z,
-                    mapId: player.mapId,
-                    instanceId: player.instanceId,
-                    direction: player.direction,
-                    stepDurationMs: player.lastStepDurationMs,
-                },
-                player.id
-            );
-            return;
-        }
-
-        clearSteppingDest(player);
-
-        if (!this.isWalkable(msg.mapId, msg.tileX, msg.tileY, msg.z)) {
-            this.rejectMove(
-                player,
-                'NOT_WALKABLE',
-                'Movimento rejeitado: tile bloqueado.'
-            );
-            return;
-        }
-
-        const from = {
-            tileX: player.tileX,
-            tileY: player.tileY,
-            z: player.z,
-        };
-        const to = { tileX: msg.tileX, tileY: msg.tileY, z: msg.z };
-
-        if (!isMapChange) {
-            const sameMap =
-                player.mapId === msg.mapId &&
-                player.instanceId === instanceId;
-            if (
-                sameMap &&
-                !canAdjacentStep(from, to, (x, y, z) =>
-                    this.isWalkable(msg.mapId, x, y, z)
-                )
-            ) {
-                this.rejectMove(
-                    player,
-                    'INVALID_STEP',
-                    'Movimento rejeitado: passo inválido (adjacente, diagonal ou canto bloqueado).'
-                );
-                return;
-            }
-
-            const tileChanged =
-                from.tileX !== to.tileX ||
-                from.tileY !== to.tileY ||
-                from.z !== to.z;
-            if (tileChanged) {
-                const now = Date.now();
-                const claimedStep =
-                    parseStepDurationMs(msg.stepDurationMs) ??
-                    player.lastStepDurationMs ??
-                    MIN_SERVER_STEP_DURATION_MS;
-                const serverFloorStep = resolveServerPlayerStepDurationMs(player);
-                const stepMs = Math.max(claimedStep, serverFloorStep);
-                const claimedMin = Math.round(stepMs * MOVE_RATE_LIMIT_TOLERANCE);
-                const floorMin = Math.round(
-                    MIN_SERVER_STEP_DURATION_MS * MOVE_RATE_LIMIT_TOLERANCE
-                );
-                let minInterval = Math.max(1, claimedMin);
-                if (player.lastObservedMoveIntervalMs > 0) {
-                    const observedMin = Math.round(
-                        player.lastObservedMoveIntervalMs * MOVE_RATE_LIMIT_TOLERANCE
-                    );
-                    // Não exigir mais que o ritmo real do cliente; floorMin impede speed hack
-                    minInterval = Math.min(claimedMin, Math.max(floorMin, observedMin));
-                }
-                const elapsed = now - player.lastMoveAcceptedAtMs;
-                if (player.lastMoveAcceptedAtMs > 0 && elapsed < minInterval) {
-                    this.rejectMove(
-                        player,
-                        'MOVEMENT_TOO_FAST',
-                        'Movimento rejeitado: aguarde o intervalo do passo.',
-                        `movimento rápido demais: ${player.name} ` +
-                            `${elapsed}ms < ${minInterval}ms (step ${stepMs}ms, obs ${player.lastObservedMoveIntervalMs}ms)`
-                    );
-                    return;
-                }
-            }
-        }
-
-        const oldRoom = this.roomKey(player);
-        const mapChanged =
-            player.mapId !== msg.mapId || player.instanceId !== instanceId;
-
-        player.mapId = msg.mapId;
-        player.instanceId = instanceId;
-        player.tileX = msg.tileX;
-        player.tileY = msg.tileY;
-        player.z = msg.z;
-        if (msg.direction) {
-            player.direction = msg.direction;
-        }
-        const stepMs = parseStepDurationMs(msg.stepDurationMs);
-        if (stepMs !== undefined) {
-            player.lastStepDurationMs = stepMs;
-        }
-
-        const newRoom = this.roomKey(player);
-
-        if (isMapChange && !isInstancedMap(player.mapId)) {
-            this.persistPlayerPosition(player, true);
-        } else if (!isInstancedMap(player.mapId)) {
-            this.persistPlayerPosition(player);
-        }
-
-        if (
-            isInstancedMap(player.mapId) &&
-            player.instanceId &&
-            (mapChanged || instanceId !== msg.instanceId)
-        ) {
-            this.send(socket, {
-                type: 'instance_assigned',
-                v: PROTOCOL_VERSION,
-                mapId: player.mapId,
-                instanceId: player.instanceId,
-            });
-        }
-
-        const payload: ServerMessage = {
-            type: 'player_moved',
-            v: PROTOCOL_VERSION,
-            playerId: player.id,
-            tileX: player.tileX,
-            tileY: player.tileY,
-            z: player.z,
-            mapId: player.mapId,
-            instanceId: player.instanceId,
-            direction: player.direction,
-            stepDurationMs: player.lastStepDurationMs,
-        };
-
-        if (mapChanged || oldRoom !== newRoom) {
-            this.broadcastToRoom(
-                oldRoom,
-                { type: 'player_left', v: PROTOCOL_VERSION, playerId: player.id },
-                player.id
-            );
-            this.broadcastToRoom(newRoom, payload, player.id);
-            this.broadcastToRoom(
-                newRoom,
-                {
-                    type: 'player_joined',
-                    v: PROTOCOL_VERSION,
-                    player: this.toSnapshot(player),
-                },
-                player.id
-            );
-            this.sendCreatureSync(player.socket, newRoom, player.mapId, player.instanceId);
-        } else {
-            this.broadcastToRoom(newRoom, payload, player.id);
-        }
-
-        const acceptedAt = Date.now();
-        if (isMapChange || mapChanged) {
-            player.lastMoveAcceptedAtMs = 0;
-            player.lastObservedMoveIntervalMs = 0;
-        } else {
-            if (player.lastMoveAcceptedAtMs > 0) {
-                player.lastObservedMoveIntervalMs =
-                    acceptedAt - player.lastMoveAcceptedAtMs;
-            }
-            player.lastMoveAcceptedAtMs = acceptedAt;
-        }
+        handleMove(this.moveHandlerContext(), socket, msg, isMapChange);
     }
 
     private handleProgressSync(
         socket: WebSocket,
         msg: Extract<ClientMessage, { type: 'progress_sync' }>
     ): void {
-        if (
-            !shouldAcceptClientProgressSync({
-                isProduction: env.isProduction,
-                allowClientProgressSync: env.allowClientProgressSync,
-                requireWsTicket: this.requireWsTicket,
-            })
-        ) {
-            return;
-        }
-
-        const playerId = this.socketToPlayerId.get(socket);
-        if (!playerId) return;
-        const player = this.players.get(playerId);
-        if (!player) return;
-
-        const clientExp = Math.max(0, Math.floor(msg.experience));
-        if (clientExp <= player.experience) return;
-
-        const prevLevel = player.level;
-        player.experience = clientExp;
-        player.level = getLevelFromExp(clientExp);
-        if (player.level !== prevLevel) {
-            this.recalcPlayerMaxHealth(player);
-            void this.syncPlayerLearnedSpells(player);
-        }
-
-        this.send(player.socket, {
-            type: 'player_progress',
-            v: PROTOCOL_VERSION,
-            playerId: player.id,
-            level: player.level,
-            experience: player.experience,
-            leveledUp: false,
-        });
+        handleProgressSync(this.progressHandlerContext(), socket, msg);
     }
 
     private handleResyncRequest(socket: WebSocket): void {
-        const playerId = this.socketToPlayerId.get(socket);
-        if (!playerId) return;
-        const player = this.players.get(playerId);
-        if (!player) return;
-
-        const nowMs = Date.now();
-        const last = this.lastResyncRequestAtMs.get(playerId) ?? 0;
-        if (nowMs - last < RESYNC_MIN_INTERVAL_MS) return;
-        this.lastResyncRequestAtMs.set(playerId, nowMs);
-
-        const room = this.roomKey(player);
-        this.send(socket, {
-            type: 'state_sync',
-            v: PROTOCOL_VERSION,
-            players: this.playersInRoom(room),
-        });
-        this.sendCreatureSync(socket, room, player.mapId, player.instanceId);
-        this.sendPositionCorrection(player);
-        this.send(socket, {
-            type: 'player_progress',
-            v: PROTOCOL_VERSION,
-            playerId: player.id,
-            level: player.level,
-            experience: player.experience,
-            leveledUp: false,
-        });
-    }
-
-    private resolveAttackCooldownMs(vocationId: VocationId, level: number): number {
-        const vocationConfig = this.vocations.get(vocationId);
-        if (!vocationConfig) return DEFAULT_ATTACK_COOLDOWN_MS;
-        const stats = calculateStatsForLevel(vocationConfig, level);
-        return Math.max(200, stats.attackSpeed || DEFAULT_ATTACK_COOLDOWN_MS);
+        handleResyncRequest(this.resyncHandlerContext(), socket);
     }
 
     private handleAttack(
         socket: WebSocket,
         msg: Extract<ClientMessage, { type: 'attack' }>
     ): void {
-        const playerId = this.socketToPlayerId.get(socket);
-        if (!playerId) return;
-
-        const player = this.players.get(playerId);
-        if (!player) return;
-
-        let { instanceId } = msg;
-        if (isInstancedMap(msg.mapId)) {
-            instanceId = player.instanceId ?? instanceId;
-        } else {
-            instanceId = undefined;
-        }
-
-        if (player.mapId !== msg.mapId || (player.instanceId ?? undefined) !== (instanceId ?? undefined)) {
-            return;
-        }
-
-        const room = this.roomKey(player);
-        const vocationId = (player.appearance.vocationId || 'knight') as VocationId;
-
-        // PvP Attack Interception
-        if (msg.creatureId.startsWith('p_')) {
-            const targetPlayer = this.players.get(msg.creatureId);
-            if (!targetPlayer) return;
-
-            if (targetPlayer.mapId !== player.mapId || targetPlayer.instanceId !== player.instanceId) {
-                return;
-            }
-
-            // 1. Check PvP Map Property
-            const mapEntry = getServerMapEntry(player.mapId);
-            if (mapEntry && mapEntry.pvpEnabled === false) {
-                this.send(player.socket, {
-                    type: 'error',
-                    v: PROTOCOL_VERSION,
-                    code: 'NO_PVP_MAP',
-                    message: 'Combate PvP não é permitido neste mapa.',
-                });
-                return;
-            }
-
-            // 2. Check PZ (Protection Zone) for attacker
-            const attackerZone = this.collision.getZoneIdAt(player.mapId, player.tileX, player.tileY, player.z);
-            if (attackerZone === ZoneType.PROTECTION_ZONE) {
-                this.send(player.socket, {
-                    type: 'error',
-                    v: PROTOCOL_VERSION,
-                    code: 'ATTACKER_IN_PZ',
-                    message: 'Você não pode atacar dentro de uma Protection Zone (PZ).',
-                });
-                return;
-            }
-
-            // 3. Check PZ (Protection Zone) for target
-            const targetZone = this.collision.getZoneIdAt(targetPlayer.mapId, targetPlayer.tileX, targetPlayer.tileY, targetPlayer.z);
-            if (targetZone === ZoneType.PROTECTION_ZONE) {
-                this.send(player.socket, {
-                    type: 'error',
-                    v: PROTOCOL_VERSION,
-                    code: 'TARGET_IN_PZ',
-                    message: 'O alvo está dentro de uma Protection Zone (PZ).',
-                });
-                return;
-            }
-
-            // 4. Attack Cooldown
-            const now = Date.now();
-            const cooldownMs = this.resolveAttackCooldownMs(vocationId, player.level);
-            if (now - player.lastAttackAtMs < cooldownMs) {
-                return;
-            }
-
-            const vocationConfig = this.vocations.get(vocationId);
-            if (!vocationConfig) return;
-
-            // 5. Alcance (mesma regra que PvE: isPlayerInAttackRange + attackProfile da vocação)
-            const attackProfile = resolvePlayerAttackProfile(vocationId, vocationConfig);
-            if (
-                !isPlayerInAttackRange(
-                    { tileX: player.tileX, tileY: player.tileY, z: player.z },
-                    {
-                        tileX: targetPlayer.tileX,
-                        tileY: targetPlayer.tileY,
-                        z: targetPlayer.z,
-                    },
-                    attackProfile
-                )
-            ) {
-                return;
-            }
-
-            // 6. Resolve combat stats and process damage
-            const targetVocationId = (targetPlayer.appearance.vocationId || 'knight') as VocationId;
-            const targetVocationConfig = this.vocations.get(targetVocationId);
-            const targetStats = targetVocationConfig ? calculateStatsForLevel(targetVocationConfig, targetPlayer.level) : { defense: 5 };
-
-            const attackerBonuses = this.resolvePlayerEquipmentBonuses(player);
-            const targetBonuses = this.resolvePlayerEquipmentBonuses(targetPlayer);
-
-            const damageResult = processAttack(
-                {
-                    id: player.id,
-                    name: player.name,
-                    vocation: vocationId,
-                    level: player.level,
-                },
-                {
-                    id: targetPlayer.id,
-                    name: targetPlayer.name,
-                    health: targetPlayer.health,
-                    maxHealth: targetPlayer.maxHealth,
-                    defense: targetStats.defense || 5,
-                },
-                attackProfile.attackType,
-                vocationConfig,
-                1.0,
-                {
-                    attackerAttackBonus: attackerBonuses.attackBonus,
-                    targetDefenseBonus: targetBonuses.defenseBonus,
-                }
-            );
-
-            player.lastAttackAtMs = now;
-            targetPlayer.health = Math.max(0, targetPlayer.health - damageResult.finalDamage);
-
-            this.broadcastToRoom(room, {
-                type: 'player_damaged',
-                v: PROTOCOL_VERSION,
-                playerId: targetPlayer.id,
-                health: targetPlayer.health,
-                maxHealth: targetPlayer.maxHealth,
-                damage: damageResult.finalDamage,
-                attackerPlayerId: player.id,
-            });
-            this.sendPlayerResources(targetPlayer);
-
-            this.persistPlayerPosition(targetPlayer);
-
-            if (targetPlayer.health <= 0) {
-                this.broadcastToRoom(room, {
-                    type: 'player_died',
-                    v: PROTOCOL_VERSION,
-                    playerId: targetPlayer.id,
-                    killerPlayerId: player.id,
-                });
-
-                const deathZone = this.collision.getZoneIdAt(
-                    targetPlayer.mapId,
-                    targetPlayer.tileX,
-                    targetPlayer.tileY,
-                    targetPlayer.z
-                );
-                if (deathZone !== ZoneType.PVP_ARENA) {
-                    const lostXp = Math.floor(targetPlayer.experience * 0.1);
-                    targetPlayer.experience = Math.max(0, targetPlayer.experience - lostXp);
-                    targetPlayer.level = getLevelFromExp(targetPlayer.experience);
-                    this.recalcPlayerMaxHealth(targetPlayer);
-                }
-
-                const spawn = this.collision.getMapSpawn(targetPlayer.mapId) ?? { x: 50, y: 50, z: 0 };
-                targetPlayer.tileX = spawn.x;
-                targetPlayer.tileY = spawn.y;
-                targetPlayer.z = spawn.z;
-                targetPlayer.health = targetPlayer.maxHealth;
-                targetPlayer.mana = targetPlayer.maxMana;
-
-                if (deathZone !== ZoneType.PVP_ARENA) {
-                    this.send(targetPlayer.socket, {
-                        type: 'player_progress',
-                        v: PROTOCOL_VERSION,
-                        playerId: targetPlayer.id,
-                        level: targetPlayer.level,
-                        experience: targetPlayer.experience,
-                        leveledUp: false,
-                        health: targetPlayer.health,
-                        maxHealth: targetPlayer.maxHealth,
-                    });
-
-                    if (targetPlayer.characterId && targetPlayer.accountId) {
-                        void this.progressPersistence.saveNow({
-                            characterId: targetPlayer.characterId,
-                            accountId: targetPlayer.accountId,
-                            level: targetPlayer.level,
-                            experience: targetPlayer.experience,
-                        });
-                    }
-                }
-
-                this.broadcastToRoom(room, {
-                    type: 'player_respawned',
-                    v: PROTOCOL_VERSION,
-                    playerId: targetPlayer.id,
-                    mapId: targetPlayer.mapId,
-                    instanceId: targetPlayer.instanceId,
-                    tileX: spawn.x,
-                    tileY: spawn.y,
-                    z: spawn.z,
-                    health: targetPlayer.health,
-                    maxHealth: targetPlayer.maxHealth,
-                    mana: targetPlayer.mana,
-                    maxMana: targetPlayer.maxMana,
-                });
-
-                this.sendPositionCorrection(targetPlayer);
-                this.persistPlayerPosition(targetPlayer, true);
-                this.sendPlayerResources(targetPlayer);
-            }
-            return;
-        }
-
-        const attackerBonuses = this.resolvePlayerEquipmentBonuses(player);
-
-        const outcome = this.creatures.processAttack(
-            room,
-            {
-                playerId: player.id,
-                tileX: player.tileX,
-                tileY: player.tileY,
-                z: player.z,
-                level: player.level,
-                vocationId,
-                lastAttackAtMs: player.lastAttackAtMs,
-                attackBonus: attackerBonuses.attackBonus,
-            },
-            msg.creatureId,
-            Date.now(),
-            this.resolveAttackCooldownMs(vocationId, player.level)
-        );
-
-        if (!outcome.ok) {
-            this.send(player.socket, {
-                type: 'attack_miss',
-                v: PROTOCOL_VERSION,
-                creatureId: msg.creatureId,
-                mapId: msg.mapId,
-                instanceId: instanceId ?? player.instanceId,
-                code: outcome.code,
-            });
-            return;
-        }
-
-        if (outcome.newLastAttackAtMs !== undefined) {
-            player.lastAttackAtMs = outcome.newLastAttackAtMs;
-        }
-
-        if (outcome.damaged) {
-            this.broadcastToRoom(room, outcome.damaged);
-        }
-
-        if (outcome.died) {
-            this.broadcastToRoom(room, outcome.died);
-
-            const gain = applyExperienceGain(player.experience, outcome.died.xpReward);
-            player.experience = gain.experience;
-            player.level = gain.level;
-            void this.syncPlayerLearnedSpells(player);
-
-            this.send(player.socket, {
-                type: 'player_progress',
-                v: PROTOCOL_VERSION,
-                playerId: player.id,
-                level: gain.level,
-                experience: gain.experience,
-                leveledUp: gain.leveledUp,
-            });
-
-            if (player.characterId && player.accountId) {
-                void this.progressPersistence.saveNow({
-                    characterId: player.characterId,
-                    accountId: player.accountId,
-                    level: gain.level,
-                    experience: gain.experience,
-                });
-            }
-        }
+        handleAttack(this.attackHandlerContext(), socket, msg);
     }
 
     private handleCastSpell(
         socket: WebSocket,
         msg: Extract<ClientMessage, { type: 'cast_spell' }>
     ): void {
-        const playerId = this.socketToPlayerId.get(socket);
-        if (!playerId) return;
-
-        const player = this.players.get(playerId);
-        if (!player) return;
-
-        const room = buildRoomKey(msg.mapId, msg.instanceId);
-        if (this.roomKey(player) !== room) return;
-
-        const spell = this.spellCatalog.getSpell(msg.spellId);
-        if (!spell) {
-            this.send(player.socket, {
-                type: 'error',
-                v: PROTOCOL_VERSION,
-                code: 'SPELL_NOT_FOUND',
-                message: 'Magia desconhecida.',
-            });
-            return;
-        }
-
-        const vocationId = (player.appearance.vocationId || 'knight') as VocationId;
-        const vocationConfig = this.vocations.get(vocationId);
-        const now = Date.now();
-
-        const outcome = this.creatures.processSpellCast(
-            room,
-            spell,
-            {
-                playerId: player.id,
-                tileX: player.tileX,
-                tileY: player.tileY,
-                z: player.z,
-                level: player.level,
-                vocationId,
-                mana: player.mana,
-                spellCooldownUntil: player.spellCooldownUntil,
-                groupCooldownUntil: player.groupCooldownUntil,
-                equippedSpellIds: listEquippedSpellIds(player.spellBar),
-                learnedSpellIds: player.learnedSpellIds,
-            },
-            msg.creatureId,
-            now,
-            vocationConfig
-        );
-
-        if (!outcome.ok) {
-            this.send(player.socket, {
-                type: 'error',
-                v: PROTOCOL_VERSION,
-                code: outcome.code ?? 'SPELL_CAST_FAILED',
-                message: this.spellCastErrorMessage(outcome.code),
-            });
-            return;
-        }
-
-        if (outcome.newMana !== undefined) player.mana = outcome.newMana;
-        if (outcome.spellCooldownUntil) player.spellCooldownUntil = outcome.spellCooldownUntil;
-        if (outcome.groupCooldownUntil) player.groupCooldownUntil = outcome.groupCooldownUntil;
-        this.sendPlayerResources(player);
-
-        if (outcome.damaged) {
-            this.broadcastToRoom(room, outcome.damaged);
-        }
-
-        if (outcome.died) {
-            this.broadcastToRoom(room, outcome.died);
-
-            const gain = applyExperienceGain(player.experience, outcome.died.xpReward);
-            player.experience = gain.experience;
-            player.level = gain.level;
-            this.recalcPlayerMaxHealth(player);
-            void this.syncPlayerLearnedSpells(player);
-
-            this.send(player.socket, {
-                type: 'player_progress',
-                v: PROTOCOL_VERSION,
-                playerId: player.id,
-                level: gain.level,
-                experience: gain.experience,
-                leveledUp: gain.leveledUp,
-            });
-
-            if (player.characterId && player.accountId) {
-                void this.progressPersistence.saveNow({
-                    characterId: player.characterId,
-                    accountId: player.accountId,
-                    level: gain.level,
-                    experience: gain.experience,
-                });
-            }
-        }
+        handleCastSpell(this.spellHandlerContext(), socket, msg);
     }
 
     private handleSpellBarSync(
         socket: WebSocket,
         msg: Extract<ClientMessage, { type: 'spell_bar_sync' }>
     ): void {
-        const playerId = this.socketToPlayerId.get(socket);
-        if (!playerId) return;
-        const player = this.players.get(playerId);
-        if (!player) return;
-
-        const catalogDoc = loadServerSpellCatalog();
-        const validated = validateCharacterSpellBar(msg, catalogDoc, {
-            vocationId: player.appearance.vocationId || 'knight',
-            level: player.level,
-            learnedSpellIds: player.learnedSpellIds,
-        });
-        if (!validated.ok) {
-            console.warn(
-                `[GameRoom] spell_bar_sync rejeitado para ${player.name}:`,
-                validated.errors.join('; ')
-            );
-            return;
-        }
-
-        player.spellBar = validated.value;
-
-        if (player.characterId && player.accountId && isDatabaseConfigured()) {
-            void replaceCharacterSpellSlots(
-                player.characterId,
-                player.accountId,
-                validated.value
-            ).catch((err) => {
-                console.warn(
-                    `[GameRoom] falha ao persistir spell bar de ${player.characterId}:`,
-                    err
-                );
-            });
-        }
+        handleSpellBarSync(this.spellHandlerContext(), socket, msg);
     }
 
     handleDisconnect(socket: WebSocket): void {
@@ -1569,6 +561,7 @@ export class GameRoom {
         this.players.delete(playerId);
         this.socketToPlayerId.delete(socket);
         this.lastResyncRequestAtMs.delete(playerId);
+        this.lastSentResources.delete(playerId);
 
         if (player) {
             this.instances.untrackPlayer(player.instanceId, playerId);
@@ -1586,95 +579,7 @@ export class GameRoom {
     }
 
     dispose(): void {
-        this.stopPeriodicSnapshots();
-    }
-
-    /**
-     * Inicia envio periódico de state_sync + creature_sync para todas as salas.
-     * Garante que clientes Electron minimizados recebam snapshots frequentes
-     * sem depender exclusivamente de resync_request.
-     *
-     * Não manda snapshot se a sala estiver vazia — evita processamento desnecessário.
-     */
-    private startPeriodicSnapshots(): void {
-        if (STATE_SNAPSHOT_INTERVAL_MS <= 0 && CREATURE_SNAPSHOT_INTERVAL_MS_CFG <= 0) return;
-
-        const interval = Math.min(
-            STATE_SNAPSHOT_INTERVAL_MS > 0 ? STATE_SNAPSHOT_INTERVAL_MS : Infinity,
-            CREATURE_SNAPSHOT_INTERVAL_MS_CFG > 0 ? CREATURE_SNAPSHOT_INTERVAL_MS_CFG : Infinity
-        );
-
-        if (!Number.isFinite(interval) || interval <= 0) return;
-
-        let lastStateSyncMs = 0;
-        let lastCreatureSyncMs = 0;
-
-        this.snapshotTimer = setInterval(() => {
-            if (this.players.size === 0) return;
-
-            const now = Date.now();
-
-            // Coleta salas com jogadores
-            const rooms = new Map<string, { mapId: string; instanceId?: string; players: string[] }>();
-            for (const p of this.players.values()) {
-                const key = this.roomKey(p);
-                if (!rooms.has(key)) {
-                    rooms.set(key, { mapId: p.mapId, instanceId: p.instanceId, players: [] });
-                }
-                rooms.get(key)!.players.push(p.id);
-            }
-
-            const sendState = STATE_SNAPSHOT_INTERVAL_MS > 0 &&
-                now - lastStateSyncMs >= STATE_SNAPSHOT_INTERVAL_MS;
-            const sendCreature = CREATURE_SNAPSHOT_INTERVAL_MS_CFG > 0 &&
-                now - lastCreatureSyncMs >= CREATURE_SNAPSHOT_INTERVAL_MS_CFG;
-
-            if (!sendState && !sendCreature) return;
-
-            for (const [room, info] of rooms) {
-                if (sendState) {
-                    const payload = JSON.stringify({
-                        type: 'state_sync',
-                        v: PROTOCOL_VERSION,
-                        players: this.playersInRoom(room),
-                    });
-                    for (const pid of info.players) {
-                        const p = this.players.get(pid);
-                        if (p && p.socket.readyState === p.socket.OPEN) {
-                            p.socket.send(payload);
-                        }
-                    }
-                }
-
-                if (sendCreature) {
-                    const snapshots = this.creatures.ensureRoom(room, info.mapId, info.instanceId);
-                    if (snapshots.length > 0) {
-                        const payload = JSON.stringify({
-                            type: 'creature_sync',
-                            v: PROTOCOL_VERSION,
-                            mapId: info.mapId,
-                            instanceId: info.instanceId,
-                            creatures: snapshots,
-                        });
-                        for (const pid of info.players) {
-                            const p = this.players.get(pid);
-                            if (p && p.socket.readyState === p.socket.OPEN) {
-                                p.socket.send(payload);
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (sendState) lastStateSyncMs = now;
-            if (sendCreature) lastCreatureSyncMs = now;
-        }, interval);
-    }
-
-    private stopPeriodicSnapshots(): void {
-        if (this.snapshotTimer) {
-            clearInterval(this.snapshotTimer);
-            this.snapshotTimer = null;
-        }
+        stopPeriodicSnapshots(this.snapshotTimer);
+        this.snapshotTimer = null;
     }
 }

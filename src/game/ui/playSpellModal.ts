@@ -9,7 +9,7 @@ import {
     type SpellBarSlot,
 } from './playSpellBar';
 import { refreshPlayCombatHubSpells } from './playCombatHub';
-import { openPlayPanel, onPlayPanelOpen } from './playHudPanels';
+import { openPlayPanel, onPlayPanelOpen, isPlayPanelOpen } from './playHudPanels';
 import { toast } from '../../utils/popup';
 
 type SpellFilter = 'all' | SpellGroup;
@@ -32,6 +32,7 @@ let activeCharacter: CharacterRow | null = null;
 let selectedSpellId: string | null = null;
 let targetSlot: SpellBarSlot = 1;
 let groupFilter: SpellFilter = 'all';
+let spellModalDirty = false;
 
 const EMPTY_ICON = '/ui/play-hud/combat/slot_empty.svg';
 
@@ -329,7 +330,10 @@ export function initPlaySpellModal(): void {
         if (name === 'spells') {
             closeFilterMenu();
             setMobileDetailOpen(false);
-            renderAll();
+            if (spellModalDirty || !selectedSpellId) {
+                spellModalDirty = false;
+                renderAll();
+            }
         }
     });
 
@@ -346,6 +350,11 @@ export function bindPlaySpellModalCharacter(character: CharacterRow): void {
 }
 
 export function refreshPlaySpellModal(): void {
+    if (!isPlayPanelOpen('spells')) {
+        spellModalDirty = true;
+        return;
+    }
+    spellModalDirty = false;
     renderAll();
 }
 

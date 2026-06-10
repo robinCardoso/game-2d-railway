@@ -23,6 +23,8 @@
 
 .play-panel[hidden] {
     display: none !important;
+    content-visibility: hidden;
+    contain: strict;
 }
 
 .play-panel-header {

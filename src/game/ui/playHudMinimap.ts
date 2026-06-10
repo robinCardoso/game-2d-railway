@@ -1,3 +1,5 @@
+import { getPlayHudQuality } from './playHudSettings';
+import { markHudUpdate } from '../debug/playPerformanceMonitor';
 import type { WorldMap } from '../../engine';
 import type { LayerMap } from '../../engine/mapPaintLayers';
 
@@ -31,6 +33,7 @@ let lastDrawKey = '';
 
 let canvas: HTMLCanvasElement | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
+let lightModeTickSkip = 0;
 
 function readZoomIndex(): number {
     try {
@@ -203,6 +206,12 @@ export function initPlayHudMinimap(): void {
 
 export function tickPlayHudMinimap(): void {
     if (!frameProvider || !ctx) return;
+
+    if (getPlayHudQuality() === 'light') {
+        lightModeTickSkip += 1;
+        if (lightModeTickSkip % 4 !== 0) return;
+    }
+
     const frame = frameProvider();
     if (!frame) return;
 
@@ -221,6 +230,7 @@ export function tickPlayHudMinimap(): void {
 
     if (!backgroundDirty && key === lastDrawKey) return;
 
+    markHudUpdate('minimap');
     drawMinimapFrame(frame);
     backgroundDirty = false;
     lastDrawKey = key;

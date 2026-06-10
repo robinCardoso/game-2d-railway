@@ -74,3 +74,15 @@
     font-size: 13px;
     padding: 16px 0;
 }
+
+.settings-hint {
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.45;
+    margin-top: 12px;
+}
+
+.settings-hint code {
+    font-size: 11px;
+    color: #94a3b8;
+}

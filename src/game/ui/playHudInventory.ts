@@ -5,6 +5,7 @@ import { getItemCatalogEntry } from '../../game-data/itemCatalog';
 import { drawItemIconFrame, fetchItemIconImage } from '../../game-data/itemIconRegistry';
 import { fetchCharacterInventory } from '../characterInventoryApi';
 import { onPlayPanelOpen } from './playHudPanels';
+import { markHudUpdate } from '../debug/playPerformanceMonitor';
 
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
     head: 'Cabeça',
@@ -166,6 +167,7 @@ export async function refreshPlayHudInventory(): Promise<void> {
         lastInventory = inventory;
         renderEquipment(inventory.equipment);
         renderBackpack(inventory.backpack);
+        markHudUpdate('inventory');
         setInventoryMessage(false, null);
     } catch (err) {
         setInventoryMessage(false, err instanceof Error ? err.message : 'Falha ao carregar inventário.');

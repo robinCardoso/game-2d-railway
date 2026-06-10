@@ -90,7 +90,7 @@ import {
     setPlayMinimapFrameProvider,
     tickPlayHudMinimap,
 } from './ui/playHudMinimap';
-import { updatePlayHudPing, updatePlayHudStatus } from './ui/playHudStatusUi';
+import { updatePlayHudPing, updatePlayHudStatus, resetPlayHudStatusCache } from './ui/playHudStatusUi';
 import { initPlayHudInventory } from './ui/playHudInventory';
 import { bindPlayChatNetwork, createPlayChatNetHandlers } from './chat/playChatController';
 import { getPlayDefaultZoom, getPlayRenderOptions } from './ui/playHudSettings';
@@ -126,12 +126,17 @@ import {
     setPlayCombatHubBridge,
     tickPlayCombatHub,
     refreshPlayCombatHubSpells,
+    resetPlayCombatHubCooldownTracking,
 } from './ui/playCombatHub';
 import { bindPlaySpellModalCharacter, refreshPlaySpellModal } from './ui/playSpellModal';
 import { resetPlaySpellCooldowns, tryCastSpellFromSlot } from './playSpellCast';
 import type { SpellBarSlot } from './ui/playSpellBar';
 import { toast } from '../utils/popup';
 import { ensureCombatTargetRingLoaded } from './combatTargetRing';
+import {
+    setPlayPerfMonitorContext,
+    tickPlayPerformanceMonitorFrame,
+} from './debug/playPerformanceMonitor';
 import { tickOfflineMonsterDeathAndRespawn } from './creatureDeathLifecycle';
 import { loadRuntimeVocations, getVocationById } from '../game-data/vocationRegistry';
 import { calculateStatsForLevel } from '../engine/character/calculateStats';
@@ -1153,7 +1158,7 @@ function setupPlayZoomControls(): void {
     document.getElementById('playZoomOut')?.addEventListener('click', () => stepPlayZoom(-1));
 
     window.addEventListener(PLAY_DEFAULT_ZOOM_CHANGED_EVENT, (event) => {
-        const detail = (event as CustomEvent<number>).detail;
+        const { detail } = event as CustomEvent<number>;
         if (typeof detail === 'number' && detail > 0) {
             setPlayZoom(detail);
         }
@@ -1380,8 +1385,22 @@ function handlePlayPageVisible(): void {
 }
 
 function loop(): void {
+    const frameStart = performance.now();
     update();
     draw();
+    tickPlayPerformanceMonitorFrame(performance.now() - frameStart);
+
+    const remoteCount =
+        currentMapId && gameNet
+            ? gameNet.getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId()).length
+            : 0;
+    setPlayPerfMonitorContext({
+        pingMs: serverStateStore.lastPingMs,
+        visiblePlayers: remoteCount + (activeCharacter ? 1 : 0),
+        visibleCreatures: getPlayEntities().filter((entity) => entity.type === 'monster').length,
+        floatingDamages: localPlayerFloats.getActiveCount(),
+    });
+
     requestAnimationFrame(loop);
 }
 
@@ -1671,6 +1690,8 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
     activeCharacter = character;
     resetPlayCombatInput();
     resetPlaySpellCooldowns();
+    resetPlayHudStatusCache();
+    resetPlayCombatHubCooldownTracking();
     ensureCombatTargetRingLoaded();
 
     if (isWorldEntryPending()) {

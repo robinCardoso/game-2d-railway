@@ -6,6 +6,11 @@ let closePanelsImpl: (() => void) | null = null;
 let openPanelImpl: ((name: PlayPanelName) => void) | null = null;
 const openListeners = new Set<PanelOpenListener>();
 
+export function isPlayPanelOpen(name: PlayPanelName): boolean {
+    const panel = document.querySelector<HTMLElement>(`[data-panel-name="${name}"]`);
+    return panel ? !panel.hidden : false;
+}
+
 export function openPlayPanel(name: PlayPanelName): void {
     openPanelImpl?.(name);
 }

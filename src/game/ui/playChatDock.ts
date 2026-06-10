@@ -10,6 +10,7 @@ import {
     subscribePlayChatStore,
     type ChatLogEntry,
 } from '../chat/playChatStore';
+import { markHudUpdate } from '../debug/playPerformanceMonitor';
 
 const DOCK_EXPANDED_KEY = 'play.chat.dock.expanded';
 
@@ -22,6 +23,8 @@ export type PlayChatSendHandler = (channel: ChatPlayerChannel, text: string) => 
 let sendHandler: PlayChatSendHandler | null = null;
 let cooldownUntilMs = 0;
 let cooldownTimer: ReturnType<typeof setInterval> | null = null;
+let lastRenderedChannel: ChatChannel | null = null;
+let lastRenderedEntryId: string | null = null;
 
 function readDockExpanded(): boolean {
     try {
@@ -145,17 +148,61 @@ function updateComposerState(): void {
     }
 }
 
+function appendEntryToLog(log: HTMLElement, entry: ChatLogEntry): void {
+    const empty = log.querySelector('.play-chat-dock__empty');
+    empty?.remove();
+    const div = document.createElement('div');
+    div.className = 'play-chat-dock__entry';
+    div.innerHTML = formatEntryHtml(entry);
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+}
+
+function renderLogFull(channel: ChatChannel): void {
+    const log = document.getElementById('playChatLog');
+    if (!log) return;
+    const entries = getChatMessages(channel);
+    markHudUpdate('chat');
+    lastRenderedChannel = channel;
+    if (entries.length === 0) {
+        log.innerHTML = '<p class="play-chat-dock__empty">Nenhuma mensagem ainda.</p>';
+        lastRenderedEntryId = null;
+        return;
+    }
+    log.innerHTML = entries.map((e) => `<div class="play-chat-dock__entry">${formatEntryHtml(e)}</div>`).join('');
+    log.scrollTop = log.scrollHeight;
+    lastRenderedEntryId = entries[entries.length - 1].id;
+}
+
 function renderLog(): void {
     const log = document.getElementById('playChatLog');
     if (!log) return;
     const channel = getActiveChatChannel();
     const entries = getChatMessages(channel);
-    if (entries.length === 0) {
-        log.innerHTML = '<p class="play-chat-dock__empty">Nenhuma mensagem ainda.</p>';
+
+    if (channel !== lastRenderedChannel || lastRenderedEntryId === null) {
+        renderLogFull(channel);
         return;
     }
-    log.innerHTML = entries.map((e) => `<div class="play-chat-dock__entry">${formatEntryHtml(e)}</div>`).join('');
-    log.scrollTop = log.scrollHeight;
+
+    if (entries.length === 0) {
+        renderLogFull(channel);
+        return;
+    }
+
+    const lastIdx = entries.findIndex((entry) => entry.id === lastRenderedEntryId);
+    if (lastIdx === -1) {
+        renderLogFull(channel);
+        return;
+    }
+
+    if (lastIdx === entries.length - 1) return;
+
+    markHudUpdate('chat');
+    for (let i = lastIdx + 1; i < entries.length; i++) {
+        appendEntryToLog(log, entries[i]);
+    }
+    lastRenderedEntryId = entries[entries.length - 1].id;
 }
 
 function renderTabs(): void {
