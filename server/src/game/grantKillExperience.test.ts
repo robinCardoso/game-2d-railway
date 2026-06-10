@@ -7,12 +7,15 @@ import {
     resetServerGameRatesForTests,
     setServerGameRatesForTests,
 } from '../config/gameRates.js';
-import type { ConnectedPlayer } from '../gameRoom/types.js';
+import { createChatRateLimitState } from '../chat/chatService.js';
+import { DEFAULT_APPEARANCE, type ConnectedPlayer } from '../gameRoom/types.js';
+import { createEmptyEquipment } from '../../../shared/inventory.js';
 
 function makePlayer(): ConnectedPlayer {
     return {
         id: 'p1',
         name: 'Hero',
+        appearance: DEFAULT_APPEARANCE,
         mapId: 'mainland',
         tileX: 10,
         tileY: 10,
@@ -25,14 +28,17 @@ function makePlayer(): ConnectedPlayer {
         mana: 50,
         maxMana: 50,
         lastAttackAtMs: 0,
+        lastMoveAcceptedAtMs: 0,
+        lastObservedMoveIntervalMs: 0,
+        lastMoveRejectionSentAtMs: 0,
         spellCooldownUntil: {},
         groupCooldownUntil: {},
-        equipment: { slots: {} },
+        equipment: createEmptyEquipment(),
         spellBar: {},
         learnedSpellIds: [],
         socket: { send: vi.fn() } as unknown as ConnectedPlayer['socket'],
-        chatRateLimit: { lastAtMs: 0, count: 0 },
-    } as ConnectedPlayer;
+        chatRateLimit: createChatRateLimitState(),
+    };
 }
 
 describe('grantKillExperience', () => {
