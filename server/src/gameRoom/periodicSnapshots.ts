@@ -1,5 +1,5 @@
-import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
-import type { PlayerSnapshot } from '../../../shared/protocol.js';
+import { PROTOCOL_VERSION, type PlayerSnapshot } from '../../../shared/protocol.js';
+import { hashCreatureSnapshots, hashPlayerSnapshots } from '../../../shared/snapshotSync.js';
 import type { RoomCreatureManager } from '../game/RoomCreatureManager.js';
 import type { ConnectedPlayer } from './types.js';
 
@@ -33,6 +33,8 @@ export function startPeriodicSnapshots(ctx: PeriodicSnapshotContext): ReturnType
 
     let lastStateSyncMs = 0;
     let lastCreatureSyncMs = 0;
+    const lastStateHashByRoom = new Map<string, number>();
+    const lastCreatureHashByRoom = new Map<string, number>();
 
     return setInterval(() => {
         if (ctx.getOnlineCount() === 0) return;
@@ -58,28 +60,14 @@ export function startPeriodicSnapshots(ctx: PeriodicSnapshotContext): ReturnType
 
         for (const [room, info] of rooms) {
             if (sendState) {
-                const payload = JSON.stringify({
-                    type: 'state_sync',
-                    v: PROTOCOL_VERSION,
-                    players: ctx.playersInRoom(room),
-                });
-                for (const pid of info.players) {
-                    const p = ctx.getPlayerById(pid);
-                    if (p && p.socket.readyState === p.socket.OPEN) {
-                        p.socket.send(payload);
-                    }
-                }
-            }
-
-            if (sendCreature) {
-                const snapshots = ctx.creatures.ensureRoom(room, info.mapId, info.instanceId);
-                if (snapshots.length > 0) {
+                const players = ctx.playersInRoom(room);
+                const stateHash = hashPlayerSnapshots(players);
+                if (lastStateHashByRoom.get(room) !== stateHash) {
+                    lastStateHashByRoom.set(room, stateHash);
                     const payload = JSON.stringify({
-                        type: 'creature_sync',
+                        type: 'state_sync',
                         v: PROTOCOL_VERSION,
-                        mapId: info.mapId,
-                        instanceId: info.instanceId,
-                        creatures: snapshots,
+                        players,
                     });
                     for (const pid of info.players) {
                         const p = ctx.getPlayerById(pid);
@@ -87,6 +75,31 @@ export function startPeriodicSnapshots(ctx: PeriodicSnapshotContext): ReturnType
                             p.socket.send(payload);
                         }
                     }
+                }
+            }
+
+            if (sendCreature) {
+                const snapshots = ctx.creatures.ensureRoom(room, info.mapId, info.instanceId);
+                if (snapshots.length > 0) {
+                    const creatureHash = hashCreatureSnapshots(snapshots);
+                    if (lastCreatureHashByRoom.get(room) !== creatureHash) {
+                        lastCreatureHashByRoom.set(room, creatureHash);
+                        const payload = JSON.stringify({
+                            type: 'creature_sync',
+                            v: PROTOCOL_VERSION,
+                            mapId: info.mapId,
+                            instanceId: info.instanceId,
+                            creatures: snapshots,
+                        });
+                        for (const pid of info.players) {
+                            const p = ctx.getPlayerById(pid);
+                            if (p && p.socket.readyState === p.socket.OPEN) {
+                                p.socket.send(payload);
+                            }
+                        }
+                    }
+                } else {
+                    lastCreatureHashByRoom.delete(room);
                 }
             }
         }

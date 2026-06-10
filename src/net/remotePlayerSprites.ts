@@ -116,12 +116,18 @@ export class RemotePlayerSpriteManager {
         }
     }
 
-    buildRemoteDepthEntries(players: PlayerSnapshot[]): RemotePlayerDepthEntry[] {
-        return players.map((player) => {
+    buildRemoteDepthEntries(
+        players: PlayerSnapshot[],
+        out?: RemotePlayerDepthEntry[]
+    ): RemotePlayerDepthEntry[] {
+        const entries = out ?? [];
+        if (out) out.length = 0;
+
+        for (const player of players) {
             const state = this.states.get(player.playerId);
             const fallbackX = player.tileX * TILE_SIZE;
             const fallbackY = player.tileY * TILE_SIZE;
-            return {
+            entries.push({
                 id: player.playerId,
                 tileX: player.tileX,
                 tileY: player.tileY,
@@ -136,8 +142,10 @@ export class RemotePlayerSpriteManager {
                 mana: player.mana,
                 maxMana: player.maxMana,
                 floatingDamages: state?.floatingDamages,
-            };
-        });
+            });
+        }
+
+        return entries;
     }
 
     tick(nowMs: number): void {

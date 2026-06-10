@@ -8,6 +8,7 @@ import type {
     ServerMessage,
 } from '../../shared/protocol';
 import { PROTOCOL_VERSION } from '../../shared/protocol';
+import { applyPlayerSnapshotList } from '../../shared/snapshotSync';
 import { sameRoom } from '../../shared/roomKey';
 import { getMapEntry } from '../engine/mapRegistry';
 import { recordPlayWsMessage } from '../game/debug/playPerformanceMonitor';
@@ -620,12 +621,7 @@ export class GameNetClient {
                 break;
             }
             case 'state_sync':
-                this.remotePlayers.clear();
-                for (const p of msg.players) {
-                    if (p.playerId !== this.localPlayerId) {
-                        this.remotePlayers.set(p.playerId, p);
-                    }
-                }
+                applyPlayerSnapshotList(this.remotePlayers, msg.players, this.localPlayerId ?? undefined);
                 break;
             case 'position_correction':
                 this.lastSynced = {

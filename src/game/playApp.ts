@@ -52,6 +52,12 @@ import {
     setGridStepDuration,
     syncGridPlayerVisual,
 } from '../movement/gridMovement';
+import {
+    beginPositionCorrectionSlide,
+    createPositionCorrectionSlide,
+    tickPositionCorrectionSlide,
+} from '../movement/positionCorrectionSlide';
+import type { RemotePlayerDepthEntry } from '../engine/depthSortDraw';
 import { PlayerMovement } from '../movement/playerMovement';
 import { NpcAI } from '../character/npcAI';
 import { GameEntity } from '../character/entity';
@@ -209,7 +215,9 @@ let clientDiagnostics: ClientDiagnosticsController | null = null;
 
 /** Buffer reutilizado no Y-sort do draw — evita alocar arrays a cada andar/frame. */
 const playDepthDrawBuffer: DepthDrawable[] = [];
+const playRemoteDepthBuffer: RemotePlayerDepthEntry[] = [];
 const playDepthSortCache = new DepthSortFingerprintCache();
+const positionCorrectionSlide = createPositionCorrectionSlide();
 
 
 import { getClientRuntimeConfig } from './runtime/runtimeEnv';
@@ -981,6 +989,14 @@ function isEntityAtTile(tx: number, ty: number, z: number, excludeId?: string): 
     return false;
 }
 
+function updatePlayCameraFollow(): void {
+    const zoom = camera.zoom || 1;
+    const visibleW = canvas.width / zoom;
+    const visibleH = canvas.height / zoom;
+    camera.x = Math.floor(player.worldX - visibleW / 2 + ((camera as { offsetX?: number }).offsetX || 0));
+    camera.y = Math.floor(player.worldY - visibleH / 2 + ((camera as { offsetY?: number }).offsetY || 0));
+}
+
 function update(): void {
     const nowMs = performance.now();
     const playEntities = getPlayEntities();
@@ -1005,29 +1021,39 @@ function update(): void {
         tickOfflineMonsterDeathAndRespawn(npcs, nowMs, TILE_SIZE_SCREEN);
     }
     speedBuffs.tick(nowMs);
-    const result = PlayerMovement.updateMovement({
-        keys,
-        player,
-        gridMovement,
-        activeCharacterController,
-        camera,
-        canvas,
-        TILE_SIZE_SCREEN,
-        MAP_SIZE: activeMapSize,
-        ENGINE_CONFIG,
-        editingFloor,
-        isWalkable: (x, y, z) => isWalkable(x, y, z),
-        isTerrainWalkable: (x, y, z) => isTerrainWalkable(x, y, z),
-        canCommitStepToTile: canCommitPlayerStepToTile,
-        isStairHoleAtTile,
-        getStepDurationForTile,
-        updateFloorButtons: () => {},
-        refreshPlayerMovementSpeed,
-        posXEl: document.getElementById('posX') as HTMLElement,
-        posYEl: document.getElementById('posY') as HTMLElement,
-        posZEl: document.getElementById('posZ') as HTMLElement,
-    });
-    editingFloor = result.editingFloor;
+
+    const correctionSliding = tickPositionCorrectionSlide(positionCorrectionSlide, player, nowMs);
+    let editingFloorResult = editingFloor;
+    if (!correctionSliding) {
+        const result = PlayerMovement.updateMovement({
+            keys,
+            player,
+            gridMovement,
+            activeCharacterController,
+            camera,
+            canvas,
+            TILE_SIZE_SCREEN,
+            MAP_SIZE: activeMapSize,
+            ENGINE_CONFIG,
+            editingFloor,
+            isWalkable: (x, y, z) => isWalkable(x, y, z),
+            isTerrainWalkable: (x, y, z) => isTerrainWalkable(x, y, z),
+            canCommitStepToTile: canCommitPlayerStepToTile,
+            isStairHoleAtTile,
+            getStepDurationForTile,
+            updateFloorButtons: () => {},
+            refreshPlayerMovementSpeed,
+            posXEl: document.getElementById('posX') as HTMLElement,
+            posYEl: document.getElementById('posY') as HTMLElement,
+            posZEl: document.getElementById('posZ') as HTMLElement,
+        });
+        editingFloorResult = result.editingFloor;
+    } else {
+        updatePlayCameraFollow();
+        activeCharacterController.setState('idle');
+        activeCharacterController.update(nowMs, gridMovement.stepDurationMs);
+    }
+    editingFloor = editingFloorResult;
 
     const currentTileKey = getPlayerTileKey();
     const enteredNewTile = currentTileKey !== previousPlayerTileKey;
@@ -1204,8 +1230,11 @@ function draw(): void {
             ? gameNet.getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId())
             : [];
     const remoteEntries = remotePlayers.length
-        ? remoteSprites.buildRemoteDepthEntries(remotePlayers)
-        : [];
+        ? remoteSprites.buildRemoteDepthEntries(remotePlayers, playRemoteDepthBuffer)
+        : playRemoteDepthBuffer;
+    if (remotePlayers.length === 0) {
+        playRemoteDepthBuffer.length = 0;
+    }
 
     const occupiedFloorZs = new Set<number>();
     for (const entity of getPlayEntities()) {
@@ -1426,6 +1455,7 @@ function handlePlayPageHidden(): void {
         gameNet.syncPositionIfChanged();
     }
     clearPlayMovementInput();
+    positionCorrectionSlide.active = false;
     syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
 }
 
@@ -1549,13 +1579,18 @@ function setupNetwork(
         isMovementStepping: () => gridMovement.stepping,
         onPositionCorrection: (pos) => {
             if (pos.mapId !== (currentMapId ?? char.spawnMapId)) return;
-            player.tileX = pos.tileX;
-            player.tileY = pos.tileY;
             player.worldZ = clampFloorZ(pos.z);
             gridMovement.stepping = false;
             gridMovement.activeStepFacing = null;
             resetGridMovementInputState(gridMovement);
-            syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
+            beginPositionCorrectionSlide(
+                positionCorrectionSlide,
+                player,
+                TILE_SIZE_SCREEN,
+                pos.tileX,
+                pos.tileY,
+                performance.now()
+            );
         },
         onStatusChange: (status) => {
             if (status === 'connected') {
