@@ -45,7 +45,7 @@ release/win-unpacked-stale-*/
 
 # Chaves ECDSA do empacotamento (geradas localmente ou via CI secret)
 private_key.pem
-/public_key.pem
+public_key.pem
 
 # Artefatos gerados por `npm run pack` (recriados no build)
 public/assets.pak
