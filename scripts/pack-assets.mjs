@@ -81,16 +81,16 @@ console.log(`Arquivos empacotados: ${filesToPack.length}`);
 
 // 3. Assinatura (Camada 4)
 function getOrCreateKeys() {
-    const privateKey = decodePemFromEnv(process.env.ASSET_PACK_PRIVATE_KEY);
-    if (privateKey) {
-        if (!privateKey.includes('BEGIN PRIVATE KEY')) {
+    const privateKeyFromEnv = decodePemFromEnv(process.env.ASSET_PACK_PRIVATE_KEY);
+    if (privateKeyFromEnv) {
+        if (!privateKeyFromEnv.includes('BEGIN PRIVATE KEY')) {
             throw new Error('ASSET_PACK_PRIVATE_KEY inválida (esperado PEM ou base64 de PEM).');
         }
         const publicKey = crypto
-            .createPublicKey({ key: privateKey, format: 'pem' })
+            .createPublicKey({ key: privateKeyFromEnv, format: 'pem' })
             .export({ type: 'spki', format: 'pem' });
         fs.writeFileSync(PUBLIC_KEY_FILE, publicKey);
-        return { privateKey, publicKey };
+        return { privateKey: privateKeyFromEnv, publicKey };
     }
 
     if (fs.existsSync(PRIVATE_KEY_FILE) && fs.existsSync(PUBLIC_KEY_FILE)) {
