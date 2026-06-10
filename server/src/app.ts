@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import express, { type Express, type Request, type Response, type NextFunction } from 'express';
 import { paths } from './config/paths.js';
+import { countItemCatalogEntries } from './config/catalogVolumeSync.js';
 import { env } from './config/env.js';
 import { healthHandler } from './routes/health.js';
 import { createAuthRouter } from './routes/auth.js';
@@ -44,7 +45,7 @@ function resolveExistingFile(filePath: string): string | null {
     return null;
 }
 
-function serveJsonFile(route: string, filePath: string, app: Express): void {
+function serveJsonFile(route: string, filePath: string, app: Express, fallbackPath?: string): void {
     app.get(route, (_req, res, next) => {
         const abs = resolveExistingFile(filePath);
         if (!abs) {
@@ -52,9 +53,20 @@ function serveJsonFile(route: string, filePath: string, app: Express): void {
             return;
         }
         try {
+            let content = fs.readFileSync(abs, 'utf8');
+            if (
+                fallbackPath &&
+                route === '/item_catalog.json' &&
+                countItemCatalogEntries(JSON.parse(content)) === 0
+            ) {
+                const fallbackAbs = resolveExistingFile(fallbackPath);
+                if (fallbackAbs) {
+                    content = fs.readFileSync(fallbackAbs, 'utf8');
+                }
+            }
             res.setHeader('Content-Type', 'application/json');
             res.setHeader('Cache-Control', 'no-cache');
-            res.send(fs.readFileSync(abs, 'utf8'));
+            res.send(content);
         } catch (err) {
             next(err);
         }
@@ -190,7 +202,12 @@ export function createApp(getOnline: (() => number) | undefined, collision: MapC
         serveJsonFile('/creature_presets.json', paths.creaturePresetsPath, app);
         serveJsonFile('/spell_catalog.json', paths.spellCatalogPath, app);
         serveJsonFile('/outfit_presets.json', paths.outfitPresetsPath, app);
-        serveJsonFile('/item_catalog.json', paths.itemCatalogPath, app);
+        serveJsonFile(
+            '/item_catalog.json',
+            paths.itemCatalogPath,
+            app,
+            path.join(paths.repoPublicDir, 'item_catalog.json')
+        );
         serveJsonFile('/tile_variant_groups.json', paths.tileVariantGroupsPath, app);
         serveJsonFile('/vocations.json', paths.vocationsJsonPath, app);
     }
