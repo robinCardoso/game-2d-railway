@@ -298,19 +298,51 @@ function renderBackpack(
     document.querySelectorAll<HTMLButtonElement>('.bag-slot').forEach((slot) => {
         const index = Number(slot.dataset.slotIndex);
         const row = locked ? undefined : byIndex.get(index);
-        slot.replaceChildren();
+
+        const currentItemId = slot.dataset.itemId || '';
+        const currentQty = slot.dataset.qty || '';
+        const currentLocked = slot.dataset.locked || 'false';
+        
+        const targetItemId = row ? row.itemId : '';
+        const targetQty = row ? String(row.quantity) : '';
+        const targetLocked = locked ? 'true' : 'false';
+
+        if (
+            currentItemId === targetItemId &&
+            currentQty === targetQty &&
+            currentLocked === targetLocked
+        ) {
+            return;
+        }
+
+        slot.dataset.itemId = targetItemId;
+        slot.dataset.qty = targetQty;
+        slot.dataset.locked = targetLocked;
+
         slot.classList.toggle('has-item', Boolean(row));
         slot.disabled = locked;
         if (row) {
             void paintItemInSlot(slot, row.itemId, 'bag-slot__name');
+            let qty = slot.querySelector('.bag-slot__qty') as HTMLSpanElement | null;
             if (row.quantity > 1) {
-                const qty = document.createElement('span');
-                qty.className = 'bag-slot__qty';
+                if (!qty) {
+                    qty = document.createElement('span');
+                    qty.className = 'bag-slot__qty';
+                    slot.appendChild(qty);
+                }
+                qty.hidden = false;
                 qty.textContent = `×${row.quantity}`;
-                slot.appendChild(qty);
+            } else if (qty) {
+                qty.hidden = true;
+                qty.textContent = '';
             }
         } else {
             clearSlotVisual(slot, 'bag-slot__name');
+            const qty = slot.querySelector('.bag-slot__qty') as HTMLSpanElement | null;
+            if (qty) {
+                qty.hidden = true;
+                qty.textContent = '';
+            }
         }
     });
 

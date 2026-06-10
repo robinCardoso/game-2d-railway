@@ -4,12 +4,12 @@ import type {
     CharacterInventoryDocument,
 } from '../../../../shared/inventory.js';
 import {
-    createEmptyBags,
     createEmptyEquipment,
     createEmptyInventory,
     DEFAULT_UNLOCKED_BAG_SLOTS,
     INVENTORY_BAG_COUNT,
 } from '../../../../shared/inventory.js';
+import { createEmptyBags } from '../../../../shared/inventoryBags.js';
 import { EQUIPMENT_SLOTS, type EquipmentSlot } from '../../../../src/game-data/itemCatalogTypes.js';
 import { getPool } from '../pool.js';
 import { getCharacterForAccount } from './characters.repo.js';
