@@ -70,8 +70,9 @@ sequenceDiagram
 ### 2.2 Servidor (`server/src/GameRoom.ts`)
 
 - Valida tile, passo adjacente, walkable, sala `mapId@instanceId`.
-- **Rate limit:** `lastMoveAcceptedAtMs` — intervalo mínimo `stepDurationMs × 0.85` entre passos (`MOVEMENT_TOO_FAST`).
-- **Anti-spam rejeição:** `rejectMove()` — no máximo um par `error` + `position_correction` a cada 400ms **por jogador** (não por código); demais `move` inválidos no intervalo são ignorados silenciosamente — inclusive se o código mudar (`MOVEMENT_TOO_FAST` → `NOT_WALKABLE`). Debug granular futuro: `lastMoveRejectionCode` ou contador por código.
+- **Rate limit:** `lastMoveAcceptedAtMs` — intervalo mínimo `stepDurationMs × 0.80` entre passos (`MOVEMENT_TOO_FAST`).
+- **`MOVEMENT_TOO_FAST`:** envia só `error` (sem `position_correction`) — evita rubber-band em latência alta; o cliente reenvia o tile com `forceResyncPosition()`.
+- **Anti-spam rejeição:** `rejectMove()` — no máximo um par `error` (+ correção quando aplicável) a cada 400ms **por jogador**; demais `move` inválidos no intervalo são ignorados silenciosamente.
 - Guarda `lastStepDurationMs` do cliente e repassa em `player_moved`.
 - Kick por `characterId` duplicado na mesma conexão.
 

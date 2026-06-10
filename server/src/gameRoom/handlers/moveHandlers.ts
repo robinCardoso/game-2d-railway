@@ -17,8 +17,8 @@ import { resolveServerPlayerStepDurationMs } from '../../game/playerMovement.js'
 import type { SpectatorTile } from '../../../../shared/creatureSpectatorRange.js';
 import type { ConnectedPlayer } from '../types.js';
 
-/** Tolerância de jitter de rede no intervalo mínimo entre passos (0.85 = 15% mais rápido que o step). */
-const MOVE_RATE_LIMIT_TOLERANCE = 0.85;
+/** Tolerância de jitter/latência no intervalo mínimo entre passos (0.80 = até 20% mais rápido que o step). */
+const MOVE_RATE_LIMIT_TOLERANCE = 0.8;
 /** Intervalo mínimo entre `error` + `position_correction` por rejeição de movimento (anti-spam). */
 const MOVE_REJECTION_THROTTLE_MS = 400;
 
@@ -34,7 +34,13 @@ export interface MoveHandlerContext {
     ) => void;
     roomKey: (player: Pick<ConnectedPlayer, 'mapId' | 'instanceId'>) => string;
     isWalkable: (mapId: string, tileX: number, tileY: number, z: number) => boolean;
-    rejectMove: (player: ConnectedPlayer, code: string, message: string, logDetail?: string) => void;
+    rejectMove: (
+        player: ConnectedPlayer,
+        code: string,
+        message: string,
+        logDetail?: string,
+        sendCorrection?: boolean
+    ) => void;
     persistPlayerPosition: (player: ConnectedPlayer, immediate?: boolean) => void;
     sendCreatureSync: (
         socket: WebSocket,
@@ -188,7 +194,8 @@ export function handleMove(
                     'MOVEMENT_TOO_FAST',
                     'Movimento rejeitado: aguarde o intervalo do passo.',
                     `movimento rápido demais: ${player.name} ` +
-                        `${elapsed}ms < ${minInterval}ms (step ${stepMs}ms, obs ${player.lastObservedMoveIntervalMs}ms)`
+                        `${elapsed}ms < ${minInterval}ms (step ${stepMs}ms, obs ${player.lastObservedMoveIntervalMs}ms)`,
+                    false
                 );
                 return;
             }

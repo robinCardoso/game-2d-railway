@@ -33,6 +33,20 @@ export interface SpellCatalogDocument {
     spells: SpellDefinition[];
 }
 
+/** Caminho público do ícone PNG 32×32 da hotbar (`tiles/effects/spells/icons/`). */
+export function spellIconPngPath(spellId: string): string {
+    const id = spellId.trim();
+    return `/tiles/effects/spells/icons/${id}.png`;
+}
+
+const EMPTY_SPELL_ICON = '/ui/play-hud/combat/slot_empty.svg';
+
+export function resolveSpellIconPath(spellId: string, icon?: string): string {
+    const trimmed = icon?.trim();
+    if (trimmed && trimmed !== EMPTY_SPELL_ICON) return trimmed;
+    return spellIconPngPath(spellId);
+}
+
 export function sanitizeSpellCatalogDocument(raw: unknown): SpellCatalogDocument {
     if (!raw || typeof raw !== 'object') return { spells: [] };
     const spellsRaw = (raw as { spells?: unknown }).spells;
