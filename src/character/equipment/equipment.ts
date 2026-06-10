@@ -17,6 +17,8 @@ const EQUIPMENT_SLOTS: EquipmentSlot[] = [
     'feet',
     'ring',
     'amulet',
+    'weapon',
+    'shield',
 ];
 
 export function createDefaultEquipment(): EquipmentState {
@@ -27,6 +29,8 @@ export function createDefaultEquipment(): EquipmentState {
         feet: null,
         ring: null,
         amulet: null,
+        weapon: null,
+        shield: null,
     };
 }
 

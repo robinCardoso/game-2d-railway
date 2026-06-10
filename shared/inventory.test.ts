@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { ItemCatalogDocument } from '../src/game-data/itemCatalogTypes';
 import {
     createEmptyInventory,
+    DEFAULT_UNLOCKED_BAG_SLOTS,
+    INVENTORY_BAG_COUNT,
+    normalizeInventoryDocument,
     validateCharacterInventory,
 } from './inventory';
 
@@ -31,13 +34,51 @@ const catalog: ItemCatalogDocument = {
     ],
 };
 
+describe('createEmptyInventory', () => {
+    it('cria 5 bolsas vazias e 3 desbloqueadas', () => {
+        const inv = createEmptyInventory();
+        expect(inv.bags).toHaveLength(INVENTORY_BAG_COUNT);
+        expect(inv.unlockedBagSlots).toBe(DEFAULT_UNLOCKED_BAG_SLOTS);
+        inv.bags.forEach((bag) => expect(bag).toEqual([]));
+    });
+});
+
+describe('normalizeInventoryDocument', () => {
+    it('migra backpack legado para bags[0]', () => {
+        const normalized = normalizeInventoryDocument({
+            equipment: createEmptyInventory().equipment,
+            backpack: [{ slotIndex: 2, itemId: 'gold_coin', quantity: 5 }],
+        });
+        expect(normalized.bags[0]).toEqual([
+            { slotIndex: 2, itemId: 'gold_coin', quantity: 5 },
+        ]);
+        expect(normalized.bags[1]).toEqual([]);
+    });
+});
+
 describe('validateCharacterInventory', () => {
     it('aceita inventário vazio', () => {
         const result = validateCharacterInventory(createEmptyInventory(), catalog);
         expect(result.ok).toBe(true);
         if (result.ok) {
-            expect(result.value.backpack).toEqual([]);
+            expect(result.value.bags[0]).toEqual([]);
             expect(result.value.equipment.feet).toBeNull();
+        }
+    });
+
+    it('aceita backpack legado na entrada', () => {
+        const result = validateCharacterInventory(
+            {
+                equipment: createEmptyInventory().equipment,
+                backpack: [{ slotIndex: 0, itemId: 'gold_coin', quantity: 10 }],
+            },
+            catalog
+        );
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect(result.value.bags[0]).toEqual([
+                { slotIndex: 0, itemId: 'gold_coin', quantity: 10 },
+            ]);
         }
     });
 
@@ -51,8 +92,11 @@ describe('validateCharacterInventory', () => {
                     feet: 'leather_boots',
                     ring: null,
                     amulet: null,
+                    weapon: null,
+                    shield: null,
                 },
-                backpack: [],
+                bags: createEmptyInventory().bags,
+                unlockedBagSlots: 3,
             },
             catalog
         );
@@ -69,8 +113,11 @@ describe('validateCharacterInventory', () => {
                     feet: null,
                     ring: null,
                     amulet: null,
+                    weapon: null,
+                    shield: null,
                 },
-                backpack: [],
+                bags: createEmptyInventory().bags,
+                unlockedBagSlots: 3,
             },
             catalog
         );
@@ -80,25 +127,43 @@ describe('validateCharacterInventory', () => {
         }
     });
 
-    it('valida mochila com loot', () => {
+    it('rejeita itens em bolsa bloqueada', () => {
+        const bags = createEmptyInventory().bags;
+        bags[3] = [{ slotIndex: 0, itemId: 'gold_coin', quantity: 1 }];
         const result = validateCharacterInventory(
             {
                 equipment: createEmptyInventory().equipment,
-                backpack: [{ slotIndex: 0, itemId: 'gold_coin', quantity: 10 }],
+                bags,
+                unlockedBagSlots: 3,
             },
             catalog
         );
-        expect(result.ok).toBe(true);
+        expect(result.ok).toBe(false);
     });
 
-    it('rejeita item equipado e na mochila', () => {
+    it('rejeita aumentar unlockedBagSlots acima do servidor', () => {
+        const result = validateCharacterInventory(
+            {
+                ...createEmptyInventory(),
+                unlockedBagSlots: 5,
+            },
+            catalog,
+            { serverUnlockedBagSlots: 3 }
+        );
+        expect(result.ok).toBe(false);
+    });
+
+    it('rejeita item equipado e na bolsa', () => {
+        const bags = createEmptyInventory().bags;
+        bags[0] = [{ slotIndex: 0, itemId: 'leather_boots', quantity: 1 }];
         const result = validateCharacterInventory(
             {
                 equipment: {
                     ...createEmptyInventory().equipment,
                     feet: 'leather_boots',
                 },
-                backpack: [{ slotIndex: 0, itemId: 'leather_boots', quantity: 1 }],
+                bags,
+                unlockedBagSlots: 3,
             },
             catalog
         );
@@ -106,14 +171,15 @@ describe('validateCharacterInventory', () => {
     });
 
     it('rejeita duplicar item vs inventário anterior', () => {
-        const previous = {
-            equipment: createEmptyInventory().equipment,
-            backpack: [{ slotIndex: 0, itemId: 'gold_coin', quantity: 5 }],
-        };
+        const previous = createEmptyInventory();
+        previous.bags[0] = [{ slotIndex: 0, itemId: 'gold_coin', quantity: 5 }];
+        const bags = createEmptyInventory().bags;
+        bags[0] = [{ slotIndex: 0, itemId: 'gold_coin', quantity: 99 }];
         const result = validateCharacterInventory(
             {
                 equipment: createEmptyInventory().equipment,
-                backpack: [{ slotIndex: 0, itemId: 'gold_coin', quantity: 99 }],
+                bags,
+                unlockedBagSlots: 3,
             },
             catalog,
             { previous }
@@ -128,7 +194,8 @@ describe('validateCharacterInventory', () => {
                     ...createEmptyInventory().equipment,
                     feet: 'dev_boots',
                 },
-                backpack: [],
+                bags: createEmptyInventory().bags,
+                unlockedBagSlots: 3,
             },
             catalog
         );

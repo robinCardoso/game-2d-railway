@@ -15,6 +15,7 @@ import {
     replaceCharacterSpellSlots,
 } from '../db/repositories/spellSlots.repo.js';
 import { isDatabaseConfigured } from '../db/pool.js';
+import { getDevCharacterInventory } from '../game/devInventoryStore.js';
 import { loadServerItemCatalog } from '../game/itemCatalogStore.js';
 import { loadServerSpellCatalog } from '../game/serverSpellCatalog.js';
 import type { ConnectedPlayer } from './types.js';
@@ -31,8 +32,15 @@ export function resolvePlayerEquipmentBonuses(player: ConnectedPlayer): {
 }
 
 export async function hydratePlayerEquipment(player: ConnectedPlayer): Promise<void> {
-    if (!isDatabaseConfigured()) return;
-    if (!player.characterId || !player.accountId) return;
+    if (!player.characterId) return;
+
+    if (!isDatabaseConfigured()) {
+        const inventory = getDevCharacterInventory(player.characterId);
+        player.equipment = inventory.equipment;
+        return;
+    }
+
+    if (!player.accountId) return;
     try {
         const inventory = await getCharacterInventory(player.characterId, player.accountId);
         if (inventory) {

@@ -108,6 +108,8 @@ import {
     tickPlayHudMinimap,
 } from './ui/playHudMinimap';
 import { updatePlayHudPing, updatePlayHudStatus, resetPlayHudStatusCache } from './ui/playHudStatusUi';
+import { calculateEquipmentSpeedBonus } from '../character/equipment/equipment';
+import type { CharacterInventoryDocument } from '../../shared/inventory';
 import { applyPlayInventorySnapshot, initPlayHudInventory } from './ui/playHudInventory';
 import { bindPlayChatNetwork, createPlayChatNetHandlers } from './chat/playChatController';
 import { getPlayDefaultZoom, getPlayHudQuality, getNetworkRenderDelayMs, getPlayRenderOptions } from './ui/playHudSettings';
@@ -219,6 +221,10 @@ const gridMovement = createGridMovementController();
 const npcs: GameEntity[] = [];
 const speedBuffs = new SpeedBuffManager();
 const characterSpeed: CharacterSpeedState = createDefaultCharacterSpeed();
+
+function syncPlayEquipmentSpeedBonus(inventory: CharacterInventoryDocument): void {
+    characterSpeed.equipmentBonus = calculateEquipmentSpeedBonus(inventory.equipment);
+}
 
 let activeCharacterController: SpriteAnimationController;
 let gameNet: GameNetClient | null = null;
@@ -1800,6 +1806,7 @@ function setupNetwork(
         onChatMessage: chatHandlers.onChatMessage,
         onInventoryUpdated: ({ inventory }) => {
             applyPlayInventorySnapshot(inventory);
+            syncPlayEquipmentSpeedBonus(inventory);
         },
         onCreatureSync: ({ mapId, instanceId, creatures }) => {
             if (!currentMapId || mapId !== currentMapId) return;
@@ -2006,7 +2013,9 @@ export async function startPlay(
     if (panelName) panelName.textContent = character.name;
     updateCharacterStatsUi(character);
     void updatePlayHudCharacterPortrait(character);
-    initPlayHudInventory(character.id);
+    initPlayHudInventory(character.id, {
+        onInventoryChange: syncPlayEquipmentSpeedBonus,
+    });
     syncPlayHudVitals();
 
     const vocationId = (character.vocation as VocationId) || 'knight';

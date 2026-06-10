@@ -1,29 +1,126 @@
-.inventory-section-title {
-    margin: 0 0 10px;
-    font-size: 11px;
-    font-weight: 700;
-    color: #6366f1;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+/* —— Abas (referência: 5 slots, 3 ativas + 2 bloqueadas) —— */
+.inventory-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+    padding: 4px;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.equipment-grid {
+.inventory-tab {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 8px 4px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: #94a3b8;
+    font-family: inherit;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.inventory-tab:hover:not(:disabled):not(.is-active) {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(99, 102, 241, 0.25);
+    color: #cbd5e1;
+}
+
+.inventory-tab.is-active {
+    background: linear-gradient(180deg, rgba(99, 102, 241, 0.22), rgba(99, 102, 241, 0.08));
+    border-color: rgba(129, 140, 248, 0.55);
+    color: #e2e8f0;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
+}
+
+.inventory-tab--locked,
+.inventory-tab:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.inventory-tab__icon {
+    display: block;
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+    opacity: 0.85;
+}
+
+.inventory-tab__icon--emoji {
+    font-size: 16px;
+    line-height: 1;
+    width: auto;
+    height: auto;
+}
+
+.inventory-tab.is-active .inventory-tab__icon {
+    opacity: 1;
+    filter: drop-shadow(0 0 4px rgba(129, 140, 248, 0.5));
+}
+
+.inventory-tab__label {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: none;
+    line-height: 1;
+}
+
+.inventory-tab--locked .inventory-tab__label {
+    opacity: 0.7;
+}
+
+.inventory-bag-panel--locked .bag-grid {
+    opacity: 0.35;
+    pointer-events: none;
+}
+
+.inventory-layout {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 14px;
+    align-items: start;
+    margin-bottom: 12px;
+}
+
+.inventory-equip-column {
+    min-width: 0;
+}
+
+.equipment-doll {
+    position: relative;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    margin-bottom: 20px;
-    max-width: 240px;
+    gap: 6px;
+    padding: 12px 8px;
+    border-radius: 12px;
+    background:
+        radial-gradient(ellipse 70% 55% at 50% 45%, rgba(99, 102, 241, 0.12), transparent 70%),
+        rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .equipment-slot {
     aspect-ratio: 1;
-    min-height: 52px;
+    min-height: 48px;
     border: 1px dashed #3d4450;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(0, 0, 0, 0.2);
     color: #64748b;
     font-size: 9px;
-    cursor: default;
+    cursor: pointer;
     padding: 4px;
     display: flex;
     flex-direction: column;
@@ -31,13 +128,26 @@
     justify-content: center;
     text-align: center;
     font-family: inherit;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 
-.equipment-slot[data-slot='head'] { grid-column: 2; }
-.equipment-slot[data-slot='amulet'] { grid-column: 1; grid-row: 2; }
+.equipment-slot:hover {
+    border-color: #6366f1;
+    background: rgba(99, 102, 241, 0.06);
+}
+
+.equipment-slot.is-selected {
+    border-color: #818cf8;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35);
+}
+
+.equipment-slot[data-slot='head'] { grid-column: 2; grid-row: 1; }
+.equipment-slot[data-slot='weapon'] { grid-column: 1; grid-row: 2; }
 .equipment-slot[data-slot='body'] { grid-column: 2; grid-row: 2; }
-.equipment-slot[data-slot='ring'] { grid-column: 3; grid-row: 2; }
+.equipment-slot[data-slot='shield'] { grid-column: 3; grid-row: 2; }
+.equipment-slot[data-slot='amulet'] { grid-column: 1; grid-row: 3; }
 .equipment-slot[data-slot='legs'] { grid-column: 2; grid-row: 3; }
+.equipment-slot[data-slot='ring'] { grid-column: 3; grid-row: 3; }
 .equipment-slot[data-slot='feet'] { grid-column: 2; grid-row: 4; }
 
 .equipment-slot.has-item {
@@ -51,6 +161,11 @@
     font-size: 8px;
     color: #64748b;
     margin-bottom: 2px;
+    pointer-events: none;
+}
+
+.equipment-slot.has-item .equipment-slot__label {
+    display: none;
 }
 
 .equipment-slot__item {
@@ -63,6 +178,7 @@
     image-rendering: pixelated;
     display: block;
     flex-shrink: 0;
+    pointer-events: none;
 }
 
 .bag-slot__name {
@@ -73,36 +189,55 @@
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
+    pointer-events: none;
+}
+
+.inventory-main-column {
+    min-width: 0;
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 10px;
+    padding-right: 6px;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .bag-grid {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 6px;
-    margin-bottom: 16px;
+    gap: 5px;
 }
 
-@media (max-width: 768px) {
-    .bag-grid {
-        grid-template-columns: repeat(4, 1fr);
-    }
+.bag-grid--50 {
+    grid-template-columns: repeat(10, 1fr);
 }
 
 .bag-slot {
     aspect-ratio: 1;
-    min-height: 44px;
+    min-height: 36px;
     border: 1px dashed #3d4450;
-    border-radius: 8px;
+    border-radius: 6px;
     background: rgba(255, 255, 255, 0.02);
     color: #94a3b8;
     font-size: 9px;
-    cursor: default;
+    cursor: pointer;
     padding: 2px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     font-family: inherit;
+    position: relative;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.bag-slot:hover {
+    border-color: #6366f1;
+}
+
+.bag-slot.is-selected {
+    border-color: #818cf8;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35);
 }
 
 .bag-slot.has-item {
@@ -112,8 +247,100 @@
 }
 
 .bag-slot__qty {
+    position: absolute;
+    right: 2px;
+    bottom: 1px;
     font-size: 8px;
+    color: #cbd5e1;
+    pointer-events: none;
+}
+
+.inventory-item-detail {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    margin-bottom: 12px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.inventory-item-detail[hidden] {
+    display: none !important;
+}
+
+.inventory-item-detail__icon-wrap {
+    flex-shrink: 0;
+    width: 52px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid #3d4450;
+}
+
+.inventory-item-detail__icon {
+    image-rendering: pixelated;
+}
+
+.inventory-item-detail__body {
+    flex: 1;
+    min-width: 0;
+}
+
+.inventory-item-detail__name {
+    margin: 0 0 4px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #e2e8f0;
+}
+
+.inventory-item-detail__meta {
+    margin: 0 0 6px;
+    font-size: 11px;
+    color: #818cf8;
+}
+
+.inventory-item-detail__desc {
+    margin: 0 0 10px;
+    font-size: 12px;
     color: #94a3b8;
+    line-height: 1.4;
+}
+
+.inventory-item-detail__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.inventory-item-detail__btn {
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid #3d4450;
+    background: #1e2229;
+    color: #94a3b8;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: not-allowed;
+}
+
+.inventory-item-detail__btn--primary {
+    border-color: #6366f1;
+    background: rgba(99, 102, 241, 0.15);
+    color: #e2e8f0;
+    cursor: pointer;
+}
+
+.inventory-item-detail__btn--primary:hover:not(:disabled) {
+    background: rgba(99, 102, 241, 0.28);
+}
+
+.inventory-item-detail__btn--primary:disabled {
+    opacity: 0.5;
+    cursor: wait;
 }
 
 .inventory-footer {
@@ -134,4 +361,36 @@
 
 .inventory-error {
     color: #f87171;
+}
+
+.inventory-panel--saving .inventory-layout {
+    opacity: 0.65;
+    pointer-events: none;
+}
+
+@media (max-width: 768px) {
+    .inventory-tabs {
+        flex-wrap: wrap;
+    }
+
+    .inventory-tab {
+        flex: 1 1 calc(33% - 4px);
+    }
+
+    .inventory-tab--locked {
+        flex: 1 1 calc(50% - 4px);
+    }
+
+    .inventory-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .bag-grid--50 {
+        grid-template-columns: repeat(5, 1fr);
+    }
+
+    .inventory-main-column {
+        max-height: 220px;
+    }
+
 }

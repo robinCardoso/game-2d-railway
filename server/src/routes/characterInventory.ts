@@ -3,6 +3,7 @@ import { requireAuth, type AuthenticatedRequest } from '../auth/requireAuth.js';
 import { isDatabaseConfigured } from '../db/pool.js';
 import {
     getCharacterInventoryOrEmpty,
+    getCharacterUnlockedBagSlots,
     replaceCharacterInventory,
     emptyInventoryDocument,
 } from '../db/repositories/inventory.repo.js';
@@ -11,15 +12,28 @@ import { loadServerItemCatalog } from '../game/itemCatalogStore.js';
 import { validateCharacterInventory } from '../../../shared/inventory.js';
 import {
     getDevCharacterInventory,
+    getDevCharacterUnlockedBagSlots,
     setDevCharacterInventory,
 } from '../game/devInventoryStore.js';
 import { env } from '../config/env.js';
+import type { GameRoom } from '../GameRoom.js';
+import type { CharacterInventoryDocument } from '../../../shared/inventory.js';
 
 type CharacterInventoryParams = {
     characterId: string;
 };
 
-export function createCharacterInventoryRouter(): Router {
+function notifyOnlineInventorySync(
+    getRoom: (() => GameRoom | undefined) | undefined,
+    characterId: string,
+    inventory: CharacterInventoryDocument
+): void {
+    getRoom?.()?.syncCharacterInventory(characterId, inventory);
+}
+
+export function createCharacterInventoryRouter(
+    getRoom?: () => GameRoom | undefined
+): Router {
     const router = Router({ mergeParams: true });
 
     router.use((req, res, next) => {
@@ -68,12 +82,20 @@ export function createCharacterInventoryRouter(): Router {
 
             if (!isDatabaseConfigured()) {
                 const previous = getDevCharacterInventory(characterId);
-                const parsed = validateCharacterInventory(req.body, catalog, { previous });
+                const serverUnlockedBagSlots = getDevCharacterUnlockedBagSlots(characterId);
+                const parsed = validateCharacterInventory(req.body, catalog, {
+                    previous,
+                    serverUnlockedBagSlots,
+                });
                 if (!parsed.ok) {
                     res.status(400).json({ error: 'Inventário inválido.', details: parsed.errors });
                     return;
                 }
-                const saved = setDevCharacterInventory(characterId, parsed.value);
+                const saved = setDevCharacterInventory(characterId, {
+                    ...parsed.value,
+                    unlockedBagSlots: serverUnlockedBagSlots,
+                });
+                notifyOnlineInventorySync(getRoom, characterId, saved);
                 res.json({ inventory: saved });
                 return;
             }
@@ -82,7 +104,13 @@ export function createCharacterInventoryRouter(): Router {
             const previous =
                 (await getCharacterInventoryOrEmpty(characterId, authReq.auth!.sub)) ??
                 emptyInventoryDocument();
-            const parsed = validateCharacterInventory(req.body, catalog, { previous });
+            const serverUnlockedBagSlots =
+                (await getCharacterUnlockedBagSlots(characterId, authReq.auth!.sub)) ??
+                previous.unlockedBagSlots;
+            const parsed = validateCharacterInventory(req.body, catalog, {
+                previous,
+                serverUnlockedBagSlots,
+            });
             if (!parsed.ok) {
                 res.status(400).json({ error: 'Inventário inválido.', details: parsed.errors });
                 return;
@@ -98,6 +126,7 @@ export function createCharacterInventoryRouter(): Router {
                 return;
             }
 
+            notifyOnlineInventorySync(getRoom, characterId, saved);
             res.json({ inventory: saved });
         } catch (err) {
             next(err);

@@ -17,6 +17,7 @@ import { gameRatesHandler } from './routes/gameRates.js';
 import { studioService } from './studio/studioService.js';
 import { isDatabaseConfigured } from './db/pool.js';
 import type { MapCollisionStore } from './MapCollisionStore.js';
+import type { GameRoom } from './GameRoom.js';
 
 const MIME_TYPES: Record<string, string> = {
     '.png': 'image/png',
@@ -81,7 +82,11 @@ function buildAllowedCorsOrigins(): Set<string> {
     return origins;
 }
 
-export function createApp(getOnline: (() => number) | undefined, collision: MapCollisionStore): Express {
+export function createApp(
+    getOnline: (() => number) | undefined,
+    collision: MapCollisionStore,
+    getRoom?: () => GameRoom | undefined
+): Express {
     const app = express();
 
     const allowedCorsOrigins = buildAllowedCorsOrigins();
@@ -124,7 +129,7 @@ export function createApp(getOnline: (() => number) | undefined, collision: MapC
     app.use('/api/auth', createAuthRouter());
     app.use(
         '/api/characters/:characterId/inventory',
-        createCharacterInventoryRouter()
+        createCharacterInventoryRouter(getRoom)
     );
     app.use(
         '/api/characters/:characterId/spell-slots',

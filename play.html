@@ -522,32 +522,122 @@
           <div class="play-panel-body" id="inventoryPanelBody">
             <p class="inventory-loading" id="inventoryLoading" hidden>Carregando…</p>
             <p class="inventory-error" id="inventoryError" hidden></p>
-            <h3 class="inventory-section-title">Equipamento</h3>
-            <div class="equipment-grid" id="equipmentGrid">
-              <button type="button" class="equipment-slot" data-slot="head" disabled>
-                <span class="equipment-slot__label">Cabeça</span>
+            <nav class="inventory-tabs" id="inventoryTabs" role="tablist" aria-label="Bolsas do inventário">
+              <button
+                type="button"
+                class="inventory-tab is-active"
+                role="tab"
+                id="inventoryTabBag1"
+                data-bag-index="0"
+                aria-selected="true"
+                aria-controls="inventoryBagPanel"
+                title="Bolsa 1"
+              >
+                <span class="inventory-tab__label">1</span>
               </button>
-              <button type="button" class="equipment-slot" data-slot="amulet" disabled>
-                <span class="equipment-slot__label">Amuleto</span>
+              <button
+                type="button"
+                class="inventory-tab"
+                role="tab"
+                id="inventoryTabBag2"
+                data-bag-index="1"
+                aria-selected="false"
+                aria-controls="inventoryBagPanel"
+                title="Bolsa 2"
+              >
+                <span class="inventory-tab__label">2</span>
               </button>
-              <button type="button" class="equipment-slot" data-slot="body" disabled>
-                <span class="equipment-slot__label">Corpo</span>
+              <button
+                type="button"
+                class="inventory-tab"
+                role="tab"
+                id="inventoryTabBag3"
+                data-bag-index="2"
+                aria-selected="false"
+                aria-controls="inventoryBagPanel"
+                title="Bolsa 3"
+              >
+                <span class="inventory-tab__label">3</span>
               </button>
-              <button type="button" class="equipment-slot" data-slot="ring" disabled>
-                <span class="equipment-slot__label">Anel</span>
+              <button
+                type="button"
+                class="inventory-tab inventory-tab--locked"
+                role="tab"
+                id="inventoryTabBag4"
+                data-bag-index="3"
+                aria-selected="false"
+                aria-controls="inventoryBagPanel"
+                title="Bolsa extra — desbloqueie na loja (em breve)"
+              >
+                <span class="inventory-tab__icon inventory-tab__icon--emoji" aria-hidden="true">🔒</span>
+                <span class="inventory-tab__label">4</span>
               </button>
-              <button type="button" class="equipment-slot" data-slot="legs" disabled>
-                <span class="equipment-slot__label">Pernas</span>
+              <button
+                type="button"
+                class="inventory-tab inventory-tab--locked"
+                role="tab"
+                id="inventoryTabBag5"
+                data-bag-index="4"
+                aria-selected="false"
+                aria-controls="inventoryBagPanel"
+                title="Bolsa extra — desbloqueie na loja (em breve)"
+              >
+                <span class="inventory-tab__icon inventory-tab__icon--emoji" aria-hidden="true">🔒</span>
+                <span class="inventory-tab__label">5</span>
               </button>
-              <button type="button" class="equipment-slot" data-slot="feet" disabled>
-                <span class="equipment-slot__label">Pés</span>
-              </button>
+            </nav>
+            <div class="inventory-layout">
+              <aside class="inventory-equip-column" aria-label="Equipamento">
+                <div class="equipment-doll" id="equipmentGrid">
+                  <button type="button" class="equipment-slot" data-slot="head">
+                    <span class="equipment-slot__label">Cabeça</span>
+                  </button>
+                  <button type="button" class="equipment-slot" data-slot="weapon">
+                    <span class="equipment-slot__label">Arma</span>
+                  </button>
+                  <button type="button" class="equipment-slot" data-slot="body">
+                    <span class="equipment-slot__label">Corpo</span>
+                  </button>
+                  <button type="button" class="equipment-slot" data-slot="shield">
+                    <span class="equipment-slot__label">Escudo</span>
+                  </button>
+                  <button type="button" class="equipment-slot" data-slot="amulet">
+                    <span class="equipment-slot__label">Amuleto</span>
+                  </button>
+                  <button type="button" class="equipment-slot" data-slot="legs">
+                    <span class="equipment-slot__label">Pernas</span>
+                  </button>
+                  <button type="button" class="equipment-slot" data-slot="ring">
+                    <span class="equipment-slot__label">Anel</span>
+                  </button>
+                  <button type="button" class="equipment-slot" data-slot="feet">
+                    <span class="equipment-slot__label">Pés</span>
+                  </button>
+                </div>
+              </aside>
+              <div class="inventory-main-column" id="inventoryBagPanel" role="tabpanel" aria-labelledby="inventoryTabBag1">
+                <div class="bag-grid bag-grid--50" id="bagGrid" aria-label="Bolsa"></div>
+              </div>
             </div>
-            <h3 class="inventory-section-title">Bolsa</h3>
-            <div class="bag-grid" id="bagGrid"></div>
+            <div class="inventory-item-detail" id="inventoryItemDetail" hidden>
+              <div class="inventory-item-detail__icon-wrap">
+                <canvas id="inventoryItemDetailIcon" class="inventory-item-detail__icon" width="48" height="48"></canvas>
+              </div>
+              <div class="inventory-item-detail__body">
+                <h3 class="inventory-item-detail__name" id="inventoryItemDetailName">—</h3>
+                <p class="inventory-item-detail__meta" id="inventoryItemDetailMeta"></p>
+                <p class="inventory-item-detail__desc" id="inventoryItemDetailDesc"></p>
+                <div class="inventory-item-detail__actions">
+                  <button type="button" class="inventory-item-detail__btn inventory-item-detail__btn--primary" id="inventoryItemEquipBtn" hidden>Equipar</button>
+                  <button type="button" class="inventory-item-detail__btn inventory-item-detail__btn--primary" id="inventoryItemUnequipBtn" hidden>Desequipar</button>
+                  <button type="button" class="inventory-item-detail__btn" id="inventoryItemUpgradeBtn" disabled title="Em breve">Upgrade (em breve)</button>
+                </div>
+              </div>
+            </div>
             <footer class="inventory-footer">
               <span id="inventoryGold">—</span>
-              <span id="inventoryCapacity">0 / 20</span>
+              <span id="inventoryCapacity">0 / 50</span>
+              <span id="inventoryTotalCapacity">Total: 0 / 150</span>
             </footer>
           </div>
         </section>

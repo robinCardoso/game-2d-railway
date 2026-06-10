@@ -686,6 +686,23 @@ export class GameRoom {
         return { online: this.players.size };
     }
 
+    /** Sincroniza inventário persistido com jogador online (equip + WS). */
+    syncCharacterInventory(
+        characterId: string,
+        inventory: import('../../shared/inventory.js').CharacterInventoryDocument
+    ): void {
+        for (const player of this.players.values()) {
+            if (player.characterId !== characterId) continue;
+            player.equipment = inventory.equipment;
+            this.send(player.socket, {
+                type: 'inventory_updated',
+                v: PROTOCOL_VERSION,
+                playerId: player.id,
+                inventory,
+            });
+        }
+    }
+
     dispose(): void {
         stopPeriodicSnapshots(this.snapshotTimer);
         this.snapshotTimer = null;
