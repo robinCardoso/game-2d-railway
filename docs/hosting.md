@@ -146,9 +146,10 @@ Configurar secrets no GitHub (repo → Settings → Secrets → Actions):
 
 ```powershell
 gh auth login
-gh secret set ASSET_PACK_PRIVATE_KEY < private_key.pem
-gh secret set ASSET_PACK_PUBLIC_KEY < public_key.pem
+.\scripts\set-pack-github-secrets.ps1   # grava PEM em base64 (recomendado no GitHub)
 ```
+
+Com só `ASSET_PACK_PRIVATE_KEY`, o `pack-assets.mjs` deriva a chave pública automaticamente.
 
 **Build do frontend** (variáveis `VITE_*` no Railway ou CI):
 

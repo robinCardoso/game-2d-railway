@@ -23,7 +23,8 @@ foreach ($pair in @(
     if (-not (Test-Path $pair.File)) {
         Write-Error "Arquivo não encontrado: $($pair.File). Rode npm run pack antes."
     }
-    Get-Content $pair.File -Raw | gh secret set $pair.Name
+    $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content $pair.File -Raw)))
+    $b64 | gh secret set $pair.Name
     Write-Host "Secret $($pair.Name) atualizado."
 }
 

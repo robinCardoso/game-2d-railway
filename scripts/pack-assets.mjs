@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { decodePemFromEnv } from './pemEnv.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -80,11 +81,11 @@ console.log(`Arquivos empacotados: ${filesToPack.length}`);
 
 // 3. Assinatura (Camada 4)
 function getOrCreateKeys() {
-    const envPrivateKey = process.env.ASSET_PACK_PRIVATE_KEY?.trim();
-    if (envPrivateKey) {
-        const privateKey = envPrivateKey.includes('BEGIN PRIVATE KEY')
-            ? envPrivateKey
-            : Buffer.from(envPrivateKey, 'base64').toString('utf8');
+    const privateKey = decodePemFromEnv(process.env.ASSET_PACK_PRIVATE_KEY);
+    if (privateKey) {
+        if (!privateKey.includes('BEGIN PRIVATE KEY')) {
+            throw new Error('ASSET_PACK_PRIVATE_KEY inválida (esperado PEM ou base64 de PEM).');
+        }
         const publicKey = crypto
             .createPublicKey({ key: privateKey, format: 'pem' })
             .export({ type: 'spki', format: 'pem' });
