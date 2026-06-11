@@ -282,6 +282,7 @@ const playCameraJuice = createPlayCameraJuiceState();
 let lastLoopMs = 0;
 /** Após `MOVEMENT_TOO_FAST` — evita spam de `move` sem teleporte visual. */
 let movementTooFastThrottleUntilMs = 0;
+const MAX_PENDING_PREDICTED_STEPS = 1;
 const movementInputBuffer = createMovementInputBuffer();
 const autoWalkState = createAutoWalkState();
 let pendingOutboundMoveSeq: number | undefined;
@@ -1212,7 +1213,6 @@ function handleMovementRejected(code: string, rejectedSeq?: number): void {
     resetGridMovementInputState(gridMovement);
     clearMovementInputBuffer(movementInputBuffer);
     clearAutoWalk(autoWalkState);
-    clearPlayMovementInput();
 
     if (code === 'MOVEMENT_TOO_FAST') {
         movementTooFastThrottleUntilMs = performance.now() + 120;
@@ -1275,10 +1275,9 @@ function update(dtMs: number): void {
     speedBuffs.tick(nowMs);
 
     const correctionSliding = tickPositionCorrectionSlide(positionCorrectionSlide, player, nowMs);
+    const movementThrottled =
+        !correctionSliding && performance.now() < movementTooFastThrottleUntilMs;
     let editingFloorResult = editingFloor;
-    if (!correctionSliding && performance.now() < movementTooFastThrottleUntilMs) {
-        clearPlayMovementInput();
-    }
     if (!correctionSliding) {
         if (
             autoWalkState.active &&
@@ -1357,8 +1356,9 @@ function update(dtMs: number): void {
             movementInputBuffer,
             blockNewSteps:
                 isServerAuthoritativePosition() &&
-                (getPendingPredictionCount(movementPrediction) > 0 ||
-                    gridMovement.stepping),
+                (movementThrottled ||
+                    getPendingPredictionCount(movementPrediction) >=
+                        MAX_PENDING_PREDICTED_STEPS),
         });
         editingFloorResult = result.editingFloor;
     } else {
@@ -2003,8 +2003,10 @@ function setupNetwork(
         }),
         isMovementStepping: () => gridMovement.stepping,
         onPositionSynced: (pos) => {
-            confirmServerTile(movementPrediction, pos.tileX, pos.tileY, pos.z);
-            updateLastServerAck(pos.tileX, pos.tileY, pos.z);
+            if (!isServerAuthoritativePosition()) {
+                confirmServerTile(movementPrediction, pos.tileX, pos.tileY, pos.z);
+                updateLastServerAck(pos.tileX, pos.tileY, pos.z);
+            }
             pendingOutboundMoveSeq = undefined;
         },
         onMoveAck: (pos) => {
