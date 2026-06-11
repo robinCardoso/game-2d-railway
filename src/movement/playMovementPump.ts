@@ -22,6 +22,7 @@ import {
     type GridPlayerMotion,
     type TileGridDeps,
 } from './gridMovement';
+import { isBlockedTileCoolingDown } from './blockedMoveTiles';
 import { resolveInputDirection8 } from './inputDirection8';
 import type { MovementInputBuffer } from './movementInputBuffer';
 import { consumeMovementInput, peekMovementInput, pushMovementInput } from './movementInputBuffer';
@@ -120,6 +121,9 @@ export function tickPlayMovementPump(ctx: PlayMovementPumpContext): boolean {
     if (dest.tileX === from.tileX && dest.tileY === from.tileY) return false;
 
     const to: TilePos = { tileX: dest.tileX, tileY: dest.tileY, z: from.z };
+    if (isBlockedTileCoolingDown(to.tileX, to.tileY, to.z, ctx.nowMs)) {
+        return false;
+    }
     if (ctx.validateOutgoingMove && !ctx.validateOutgoingMove(from, to)) {
         return false;
     }

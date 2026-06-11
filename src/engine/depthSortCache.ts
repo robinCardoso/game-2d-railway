@@ -1,11 +1,15 @@
+import { ENGINE_CONFIG } from './config';
 import type { DepthDrawable } from './depthSortDraw';
 
-/** Fingerprint estável dos pés (sortY/sortX) — ignora closures de draw/câmera. */
+/** Fingerprint estável dos pés — quantizado por tile para cache durante deslize. */
 export function computeDepthSortFingerprint(drawables: readonly DepthDrawable[]): number {
+    const tile = ENGINE_CONFIG.TILE_SIZE;
     let h = drawables.length | 0;
     for (let i = 0; i < drawables.length; i++) {
         const d = drawables[i]!;
-        const key = (Math.imul(d.sortY | 0, 65537) + (d.sortX | 0)) | 0;
+        const sortYTile = (d.sortY / tile) | 0;
+        const sortXTile = (d.sortX / tile) | 0;
+        const key = (Math.imul(sortYTile, 65537) + sortXTile) | 0;
         h = (h ^ key) | 0;
     }
     return h;

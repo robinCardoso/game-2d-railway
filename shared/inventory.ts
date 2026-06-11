@@ -1,5 +1,6 @@
 import {
     EQUIPMENT_SLOTS,
+    getItemStackRules,
     type EquipmentSlot,
     type ItemCatalogDocument,
     type ItemCatalogEntry,
@@ -108,6 +109,19 @@ function parseBackpackRows(
         if (entry?.implemented === false) {
             errors.push(`Item ${itemId} não está disponível no jogo.`);
             continue;
+        }
+        if (entry) {
+            const rules = getItemStackRules(entry);
+            if (!rules.stackable && quantity > 1) {
+                errors.push(
+                    `${bagLabel}[${i}].quantity: ${itemId} não empilha (máx 1 por slot).`
+                );
+            }
+            if (quantity > rules.maxStack) {
+                errors.push(
+                    `${bagLabel}[${i}].quantity: ${itemId} excede pilha máxima (${rules.maxStack}).`
+                );
+            }
         }
 
         seenSlots.add(slotIndex);
@@ -303,19 +317,14 @@ export function validateCharacterInventory(
             equippedIds.add(itemId);
         }
 
-        const backpackIds = new Set<string>();
+        const backpackItemIds = new Set<string>();
         for (let bagIndex = 0; bagIndex < unlockedBagSlots; bagIndex++) {
             for (const row of bags[bagIndex]) {
-                if (backpackIds.has(row.itemId)) {
-                    errors.push(
-                        `Item ${row.itemId} não pode estar em mais de uma bolsa/equipamento ao mesmo tempo.`
-                    );
-                }
-                backpackIds.add(row.itemId);
+                backpackItemIds.add(row.itemId);
             }
         }
         for (const itemId of equippedIds) {
-            if (backpackIds.has(itemId)) {
+            if (backpackItemIds.has(itemId)) {
                 errors.push(
                     `Item ${itemId} não pode estar equipado e na bolsa ao mesmo tempo.`
                 );

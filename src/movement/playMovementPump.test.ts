@@ -1,4 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
+import {
+    clearBlockedMoveTiles,
+    markBlockedTile,
+} from './blockedMoveTiles';
 import { createClientMovementPrediction } from './clientMovementPrediction';
 import { createGridMovementController } from './gridMovement';
 import {
@@ -126,5 +130,38 @@ describe('playMovementPump', () => {
         expect(tickPlayMovementPump({ ...baseCtx, nowMs: 400 })).toBe(false);
         expect(sendMoveIntent).toHaveBeenCalledTimes(1);
         expect(consumeMovementInput(movementInputBuffer)).toBeNull();
+    });
+
+    it('não envia para tile em cooldown TILE_OCCUPIED', () => {
+        clearBlockedMoveTiles();
+        const gridMovement = createGridMovementController();
+        const sendMoveIntent = vi.fn();
+        markBlockedTile(10, 9, 0, 100);
+
+        const started = tickPlayMovementPump({
+            nowMs: 150,
+            keys: { w: true },
+            player: { ...player },
+            gridMovement,
+            prediction: createClientMovementPrediction({ tileX: 10, tileY: 10, z: 0 }),
+            movementInputBuffer: createMovementInputBuffer(),
+            tileGridDeps: {
+                tileSize: 32,
+                mapSize: 256,
+                minFloorZ: 0,
+                maxFloorZ: 7,
+                isWalkablePixels: () => ({ walkable: true }),
+                isStairHoleAtTile: () => false,
+                getStepDurationMs: () => 200,
+            },
+            net: { isConnected: () => true, sendMoveIntent },
+            positionCorrectionSlideActive: false,
+            movementTooFastThrottleUntilMs: 0,
+            pumpSendCooldownUntilMs: 0,
+            resolveOutgoingStepDurationMs: () => 200,
+        });
+
+        expect(started).toBe(false);
+        expect(sendMoveIntent).not.toHaveBeenCalled();
     });
 });

@@ -822,7 +822,8 @@ Calibração de animação (fatiamento, âncoras, `animations`) misturada no JSO
 - **Arquivo:** `public/item_catalog.json`
 - **Menu:** Criar → **📦 Itens (Catálogo)**
 - **APIs:** `GET/POST /api/get-item-catalog`, `/api/save-item-catalog`
-- **Campos:** id, name, category (`loot` | `equipment`), slot, speedBonus, description, `implemented`
+- **Campos:** id, name, category (`loot` | `equipment`), slot, speedBonus, description, `implemented`, `stackable`, `maxStack`
+- **Pilhas (2026-06-11):** equipamento `stackable: false`, `maxStack: 1`; loot padrão `maxStack: 100`; autoloot divide pilhas; validação rejeita `quantity > 1` em equipamento
 - **Mob Stats:** loot só lista itens do catálogo; referências inválidas bloqueiam save com mensagem clara
 - **`itemDefinitions.ts`:** passa a ler do catálogo (não mais hardcoded)
 
@@ -1381,7 +1382,7 @@ Ver **[game-rates.md](./game-rates.md)**.
 ### 60.3 Cliente
 - `movementInputBuffer.ts` (fila máx. 2), `inputDirection8.ts`, `getNetworkStepDurationMs` (sem √2 na rede)
 - `gameNetClient` — envia `direction8`/`seq`; `onMoveAck` → `confirmServerSeq`
-- `autoWalk.ts` — Shift+clique; `mobileDirection8.ts` — joystick Capacitor
+- `mobileDirection8.ts` — joystick Capacitor
 
 ### 60.4 Mobs
 - `getChaseDirection8` — cardinais primeiro, diagonal com mesma regra OR
@@ -1393,6 +1394,5 @@ Ver **[game-rates.md](./game-rates.md)**.
 ### 60.6 Checklist manual
 - [ ] 20 tiles retos/diagonais sem `INVALID_STEP`
 - [ ] Minimize/restaurar sem teleporte
-- [ ] Shift+clique auto-walk em campo aberto
 - [ ] Capacitor: joystick inferior do canvas
 

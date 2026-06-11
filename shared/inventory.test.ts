@@ -23,6 +23,17 @@ const catalog: ItemCatalogDocument = {
             name: 'Gold Coin',
             category: 'loot',
             implemented: true,
+            stackable: true,
+            maxStack: 100,
+        },
+        {
+            id: 'iron_helmet',
+            name: 'Iron Helmet',
+            category: 'equipment',
+            slot: 'head',
+            implemented: true,
+            stackable: false,
+            maxStack: 1,
         },
         {
             id: 'dev_boots',
@@ -185,6 +196,40 @@ describe('validateCharacterInventory', () => {
             { previous }
         );
         expect(result.ok).toBe(false);
+    });
+
+    it('rejeita equipamento com quantity > 1 no mesmo slot', () => {
+        const bags = createEmptyInventory().bags;
+        bags[0] = [{ slotIndex: 0, itemId: 'iron_helmet', quantity: 2 }];
+        const result = validateCharacterInventory(
+            {
+                equipment: createEmptyInventory().equipment,
+                bags,
+                unlockedBagSlots: 3,
+            },
+            catalog
+        );
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+            expect(result.errors.some((e) => e.includes('iron_helmet'))).toBe(true);
+        }
+    });
+
+    it('aceita loot empilhado em múltiplos slots do mesmo item', () => {
+        const bags = createEmptyInventory().bags;
+        bags[0] = [
+            { slotIndex: 0, itemId: 'gold_coin', quantity: 100 },
+            { slotIndex: 1, itemId: 'gold_coin', quantity: 50 },
+        ];
+        const result = validateCharacterInventory(
+            {
+                equipment: createEmptyInventory().equipment,
+                bags,
+                unlockedBagSlots: 3,
+            },
+            catalog
+        );
+        expect(result.ok).toBe(true);
     });
 
     it('rejeita equipar item não implementado', () => {

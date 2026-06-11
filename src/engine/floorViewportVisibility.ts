@@ -1,4 +1,5 @@
 import { ENGINE_CONFIG } from './config';
+import { shouldRenderPlayFloorZ } from './floorRenderVisibility';
 import { getLayerCell, type LayerMap } from './mapPaintLayers';
 import type { WorldMap } from './types';
 
@@ -38,6 +39,7 @@ export function floorHasVisibleContentInView(options: FloorViewportVisibilityOpt
 
     if (z === playerWorldZ) return true;
     if (extraVisibleFloorZ !== undefined && z === extraVisibleFloorZ) return true;
+    if (!shouldRenderPlayFloorZ(z, playerWorldZ, occupiedFloorZs)) return false;
     if (occupiedFloorZs?.has(z)) return true;
 
     const emptyId = ENGINE_CONFIG.EMPTY_TILE_ID;

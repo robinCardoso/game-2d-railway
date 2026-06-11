@@ -630,6 +630,7 @@ export function pickMonsterChaseStep(
         const nx = mobTileX + step.dx;
         const ny = mobTileY + step.dy;
         if (!canWalkTo(nx, ny)) continue;
+        if (hasPlayerTieBreak && nx === playerTileX! && ny === playerTileY!) continue;
 
         const d = manhattanDist(nx, ny, goalX, goalY);
         const pingPong = isPingPongRetreat(step, mobTileX, mobTileY, goalX, goalY);
@@ -721,8 +722,8 @@ export function pickRangedGoalTile(
         return best;
     }
 
-    // Sem tile livre no anel — aproximar sem entrar no alcance melee.
-    return { tx: playerTileX, ty: playerTileY };
+    // Sem tile livre no anel — não mirar no tile do jogador.
+    return { tx: mobTileX, ty: mobTileY };
 }
 
 /** Afasta-se do jogador quando ele entra dentro do alcance desejado. */

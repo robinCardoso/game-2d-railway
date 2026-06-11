@@ -89,14 +89,19 @@ describe('equipFromBackpack', () => {
         if (!result.ok) expect(result.code).toBe('NOT_EQUIPABLE');
     });
 
-    it('desconta 1 de stack ao equipar', () => {
+    it('equipa de slot separado quando há duas espadas (não empilhável)', () => {
         const inv = createEmptyInventory();
-        inv.bags[0] = [{ slotIndex: 0, itemId: 'iron_sword', quantity: 3 }];
+        inv.bags[0] = [
+            { slotIndex: 0, itemId: 'iron_sword', quantity: 1 },
+            { slotIndex: 1, itemId: 'iron_sword', quantity: 1 },
+        ];
         const result = equipFromBackpack(inv, 0, 0, catalog);
         expect(result.ok).toBe(true);
         if (result.ok) {
             expect(result.inventory.equipment.weapon).toBe('iron_sword');
-            expect(result.inventory.bags[0][0].quantity).toBe(2);
+            expect(result.inventory.bags[0]).toEqual([
+                { slotIndex: 1, itemId: 'iron_sword', quantity: 1 },
+            ]);
         }
     });
 

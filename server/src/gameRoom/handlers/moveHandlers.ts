@@ -55,7 +55,8 @@ export interface MoveHandlerContext {
         message: string,
         logDetail?: string,
         sendCorrection?: boolean,
-        seq?: number
+        seq?: number,
+        rejectedTile?: { tileX: number; tileY: number; z: number }
     ) => void;
     persistPlayerPosition: (player: ConnectedPlayer, immediate?: boolean) => void;
     sendCreatureSync: (
@@ -245,7 +246,8 @@ export function handleMove(
                     'Movimento rejeitado: passo inválido.',
                     undefined,
                     false,
-                    msg.seq
+                    msg.seq,
+                    derived.to
                 );
                 return;
             }
@@ -262,7 +264,8 @@ export function handleMove(
             'Movimento rejeitado: coordenadas fora dos limites.',
             undefined,
             false,
-            !isMapChange && msg.type === 'move' ? msg.seq : undefined
+            !isMapChange && msg.type === 'move' ? msg.seq : undefined,
+            { tileX: destTileX, tileY: destTileY, z: destZ }
         );
         return;
     }
@@ -348,7 +351,8 @@ export function handleMove(
             'Movimento rejeitado: tile bloqueado.',
             undefined,
             false,
-            !isMapChange && msg.type === 'move' ? msg.seq : undefined
+            !isMapChange && msg.type === 'move' ? msg.seq : undefined,
+            { tileX: destTileX, tileY: destTileY, z: destZ }
         );
         return;
     }
@@ -387,7 +391,8 @@ export function handleMove(
                     'Movimento rejeitado: passo inválido (adjacente, diagonal ou canto bloqueado).',
                     undefined,
                     false,
-                    msg.type === 'move' ? msg.seq : undefined
+                    msg.type === 'move' ? msg.seq : undefined,
+                    to
                 );
                 return;
             }
@@ -418,7 +423,8 @@ export function handleMove(
                     `movimento rápido demais: ${player.name} ` +
                         `${rate.elapsedMs}ms < ${rate.minIntervalMs}ms (step ${stepMs}ms, obs ${player.lastObservedMoveIntervalMs}ms)`,
                     false,
-                    msg.type === 'move' ? msg.seq : undefined
+                    msg.type === 'move' ? msg.seq : undefined,
+                    to
                 );
                 return;
             }

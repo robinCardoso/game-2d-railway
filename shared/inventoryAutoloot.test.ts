@@ -10,12 +10,16 @@ const catalog: ItemCatalogDocument = {
             name: 'Gold Coin',
             category: 'loot',
             implemented: true,
+            stackable: true,
+            maxStack: 100,
         },
         {
             id: 'health_potion',
             name: 'Health Potion',
             category: 'loot',
             implemented: true,
+            stackable: true,
+            maxStack: 100,
         },
         {
             id: 'draft_item',
@@ -81,6 +85,20 @@ describe('applyAutolootGrants', () => {
         expect(result.granted).toEqual([{ itemId: 'gold_coin', quantity: 4 }]);
         expect(result.inventory.bags[1]).toEqual([
             { slotIndex: 0, itemId: 'gold_coin', quantity: 4 },
+        ]);
+    });
+
+    it('divide pilha quando excede maxStack (150 → 100+50)', () => {
+        const result = applyAutolootGrants(
+            createEmptyInventory(),
+            [{ itemId: 'gold_coin', quantity: 150 }],
+            catalog
+        );
+
+        expect(result.granted).toEqual([{ itemId: 'gold_coin', quantity: 150 }]);
+        expect(result.inventory.bags[0]).toEqual([
+            { slotIndex: 0, itemId: 'gold_coin', quantity: 100 },
+            { slotIndex: 1, itemId: 'gold_coin', quantity: 50 },
         ]);
     });
 

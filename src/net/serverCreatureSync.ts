@@ -1,3 +1,7 @@
+import {
+    isTileInSpectatorRange,
+    type SpectatorViewer,
+} from '../../shared/creatureSpectatorRange';
 import { ENGINE_CONFIG } from '../engine/config';
 import type { CreatureSnapshot } from '../../shared/protocol';
 import { MONSTER_STEP_MS } from '../../shared/creatureChase';
@@ -526,11 +530,36 @@ export class ServerCreatureSync {
         return max;
     }
 
-    tick(nowMs: number, renderDelayMs = 0): void {
+    tick(nowMs: number, renderDelayMs = 0, viewer?: SpectatorViewer): void {
 
         for (const [id, entity] of this.entities.entries()) {
             if (entity.isDead) {
                 tickCreatureCorpse(entity, nowMs);
+                continue;
+            }
+
+            const serverTile = this.serverTiles.get(id);
+            if (
+                viewer &&
+                !isTileInSpectatorRange(viewer, {
+                    tileX: serverTile?.tileX ?? entity.tileX,
+                    tileY: serverTile?.tileY ?? entity.tileY,
+                    z: serverTile?.z ?? entity.worldZ,
+                })
+            ) {
+                if (serverTile) {
+                    entity.worldX = serverTile.tileX * TILE_SIZE;
+                    entity.worldY = serverTile.tileY * TILE_SIZE;
+                    entity.tileX = serverTile.tileX;
+                    entity.tileY = serverTile.tileY;
+                    entity.worldZ = serverTile.z;
+                }
+                const slide = this.slides.get(id);
+                if (slide) slide.active = false;
+                entity.isChasing = false;
+                entity.stepDestTileX = undefined;
+                entity.stepDestTileY = undefined;
+                entity.setState('idle');
                 continue;
             }
 

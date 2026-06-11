@@ -41,6 +41,7 @@ import {
 } from '../engine/depthSortDraw';
 import { DepthSortFingerprintCache } from '../engine/depthSortCache';
 import { floorHasVisibleContentInView } from '../engine/floorViewportVisibility';
+import { getPlayUpperFloorRenderMode } from '../engine/floorRenderVisibility';
 import { drawRegistryTile, isMapBorderTile } from '../engine/tileDraw';
 import { SpriteAnimationController } from '../character/spriteAnimation';
 import type { CharacterSpriteConfig } from '../character/spriteAnimation';
@@ -54,6 +55,7 @@ import {
     syncGridPlayerVisual,
     type TileGridDeps,
 } from '../movement/gridMovement';
+import { markBlockedTile } from '../movement/blockedMoveTiles';
 import {
     PUMP_SEND_INTERVAL_FACTOR,
     tickPlayMovementPump,
@@ -62,12 +64,6 @@ import {
     clearMovementInputBuffer,
     createMovementInputBuffer,
 } from '../movement/movementInputBuffer';
-import {
-    clearAutoWalk,
-    createAutoWalkState,
-    setAutoWalkGoal,
-    tickAutoWalkDirection,
-} from '../movement/autoWalk';
 import {
     beginPositionCorrectionSlide,
     createPositionCorrectionSlide,
@@ -131,7 +127,13 @@ import { calculateEquipmentSpeedBonus } from '../character/equipment/equipment';
 import type { CharacterInventoryDocument } from '../../shared/inventory';
 import { applyPlayInventorySnapshot, initPlayHudInventory } from './ui/playHudInventory';
 import { bindPlayChatNetwork, createPlayChatNetHandlers } from './chat/playChatController';
-import { getPlayDefaultZoom, getPlayHudQuality, getNetworkRenderDelayMs, getPlayRenderOptions } from './ui/playHudSettings';
+import {
+    getPlayDefaultZoom,
+    getPlayHudQuality,
+    getNetworkRenderDelayMs,
+    getPlayRenderOptions,
+    type PlayRenderOptions,
+} from './ui/playHudSettings';
 import {
     PLAY_DEFAULT_ZOOM_CHANGED_EVENT,
     PLAY_ZOOM_SESSION_KEY,
@@ -292,10 +294,40 @@ let movementTooFastThrottleUntilMs = 0;
 /** Cooldown do pump alinhado ao intervalo mínimo do servidor (step × 0.8). */
 let pumpSendCooldownUntilMs = 0;
 const movementInputBuffer = createMovementInputBuffer();
-const autoWalkState = createAutoWalkState();
 let frameDepthDrawables = 0;
 let frameSortHits = 0;
 let frameSortMisses = 0;
+/** Cache por frame — evita realocar lista de entidades e reler localStorage no loop. */
+let framePlayEntities: GameEntity[] | null = null;
+let frameRenderOpts: PlayRenderOptions | null = null;
+let frameRenderDelayMs: number | null = null;
+
+function beginPlayFrame(): void {
+    framePlayEntities = null;
+    frameRenderOpts = null;
+    frameRenderDelayMs = null;
+}
+
+function getPlayEntitiesForFrame(): GameEntity[] {
+    if (!framePlayEntities) {
+        framePlayEntities = getPlayEntities();
+    }
+    return framePlayEntities;
+}
+
+function getFrameRenderOpts(): PlayRenderOptions {
+    if (!frameRenderOpts) {
+        frameRenderOpts = getPlayRenderOptions();
+    }
+    return frameRenderOpts;
+}
+
+function getFrameRenderDelayMs(): number {
+    if (frameRenderDelayMs === null) {
+        frameRenderDelayMs = getNetworkRenderDelayMs();
+    }
+    return frameRenderDelayMs;
+}
 
 
 import { getClientRuntimeConfig } from './runtime/runtimeEnv';
@@ -806,26 +838,6 @@ function setupMobilePlayJoystick(): void {
 function setupPlayCombatControls(): void {
     const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
 
-    canvas.addEventListener('click', (e) => {
-        if (!e.shiftKey || !activeCharacter) return;
-        const rect = canvas.getBoundingClientRect();
-        const zoom = camera.zoom || 1;
-        const worldX = (e.clientX - rect.left) / zoom + camera.x;
-        const worldY = (e.clientY - rect.top) / zoom + camera.y;
-        const goalX = Math.floor(worldX / TILE_SIZE_SCREEN);
-        const goalY = Math.floor(worldY / TILE_SIZE_SCREEN);
-        if (goalX === player.tileX && goalY === player.tileY) {
-            clearAutoWalk(autoWalkState);
-            return;
-        }
-        setAutoWalkGoal(
-            autoWalkState,
-            { tileX: player.tileX, tileY: player.tileY, z: player.worldZ },
-            { tileX: goalX, tileY: goalY, z: player.worldZ },
-            (x, y, z) => isTerrainWalkableAtTile(x, y, z)
-        );
-    });
-
     canvas.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         if (!activeCharacter) return;
@@ -1248,7 +1260,11 @@ function revertLastOptimisticStep(rejectedSeq?: number): void {
     gameNet?.alignLastSyncedFromLocalState();
 }
 
-function handleMovementRejected(code: string, rejectedSeq?: number): void {
+function handleMovementRejected(
+    code: string,
+    rejectedSeq?: number,
+    rejectedTile?: { tileX: number; tileY: number; z: number }
+): void {
     const preserveHeldInput =
         code === 'TILE_OCCUPIED' || code === 'MOVEMENT_TOO_FAST';
 
@@ -1280,13 +1296,20 @@ function handleMovementRejected(code: string, rejectedSeq?: number): void {
     if (!preserveHeldInput) {
         resetGridMovementInputState(gridMovement);
         clearMovementInputBuffer(movementInputBuffer);
-        clearAutoWalk(autoWalkState);
     }
 
     if (code === 'INVALID_STEP') {
         movementTooFastThrottleUntilMs = performance.now() + 80;
     } else if (code === 'TILE_OCCUPIED') {
         movementTooFastThrottleUntilMs = performance.now() + 80;
+        if (rejectedTile) {
+            markBlockedTile(
+                rejectedTile.tileX,
+                rejectedTile.tileY,
+                rejectedTile.z,
+                performance.now()
+            );
+        }
     }
 
     rollbackLocalPlayerToLastServerAck();
@@ -1332,7 +1355,7 @@ function isEntityAtTile(tx: number, ty: number, z: number, excludeId?: string): 
     if (excludeId !== 'player' && isPlayerOccupyingTile(tx, ty, z)) {
         return true;
     }
-    for (const npc of getPlayEntities()) {
+    for (const npc of getPlayEntitiesForFrame()) {
         if (npc.id === excludeId || npc.isDead) continue;
         if (npc.occupiesTile(tx, ty, z, TILE_SIZE_SCREEN)) {
             return true;
@@ -1360,7 +1383,7 @@ function update(dtMs: number): void {
     const nowMs = performance.now();
     clearStalePendingMovement(nowMs);
     reconcileIdleServerDrift();
-    const playEntities = getPlayEntities();
+    const playEntities = getPlayEntitiesForFrame();
     const aiEntities = usesServerCreatures() ? npcs.filter((n) => n.type === 'npc') : npcs;
 
     if (aiEntities.length > 0) {
@@ -1377,7 +1400,11 @@ function update(dtMs: number): void {
     }
 
     if (usesServerCreatures()) {
-        serverCreatures.tick(nowMs, getNetworkRenderDelayMs());
+        serverCreatures.tick(nowMs, getFrameRenderDelayMs(), {
+            tileX: player.tileX,
+            tileY: player.tileY,
+            z: player.worldZ,
+        });
     } else {
         tickOfflineMonsterDeathAndRespawn(npcs, nowMs, TILE_SIZE_SCREEN);
     }
@@ -1386,58 +1413,6 @@ function update(dtMs: number): void {
     const correctionSliding = tickPositionCorrectionSlide(positionCorrectionSlide, player, nowMs);
     let editingFloorResult = editingFloor;
     if (!correctionSliding) {
-        if (
-            autoWalkState.active &&
-            !gridMovement.stepping &&
-            !hasMovementKeyInput(buildMovementKeyState(keys)) &&
-            !positionCorrectionSlide.active
-        ) {
-            const autoDir = tickAutoWalkDirection(
-                autoWalkState,
-                { tileX: player.tileX, tileY: player.tileY, z: player.worldZ },
-                (x, y, z) => isTerrainWalkableAtTile(x, y, z)
-            );
-            if (autoDir) {
-                const autoKeys = buildMovementKeyState({});
-                switch (autoDir) {
-                    case 'north':
-                        autoKeys.north = true;
-                        break;
-                    case 'south':
-                        autoKeys.south = true;
-                        break;
-                    case 'east':
-                        autoKeys.east = true;
-                        break;
-                    case 'west':
-                        autoKeys.west = true;
-                        break;
-                    case 'northwest':
-                        autoKeys.northwest = true;
-                        break;
-                    case 'northeast':
-                        autoKeys.northeast = true;
-                        break;
-                    case 'southwest':
-                        autoKeys.southwest = true;
-                        break;
-                    case 'southeast':
-                        autoKeys.southeast = true;
-                        break;
-                }
-                Object.assign(keys, {
-                    w: autoKeys.north,
-                    s: autoKeys.south,
-                    a: autoKeys.west,
-                    d: autoKeys.east,
-                    q: autoKeys.northwest,
-                    e: autoKeys.northeast,
-                    z: autoKeys.southwest,
-                    c: autoKeys.southeast,
-                });
-            }
-        }
-
         if (isPlayWsAuthoritative() && gameNet) {
             tickPlayMovementPump({
                 nowMs,
@@ -1538,7 +1513,7 @@ function update(dtMs: number): void {
         remoteSprites.sync(
             gameNet.getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId())
         );
-        remoteSprites.tick(nowMs, getNetworkRenderDelayMs());
+        remoteSprites.tick(nowMs, getFrameRenderDelayMs());
     }
     gameNet?.syncPositionIfChanged();
 
@@ -1691,15 +1666,15 @@ function draw(dtMs: number): void {
     }
 
     const occupiedFloorZs = new Set<number>();
-    for (const entity of getPlayEntities()) {
+    for (const entity of getPlayEntitiesForFrame()) {
         occupiedFloorZs.add(entity.worldZ);
     }
     for (const remote of remotePlayers) {
         occupiedFloorZs.add(remote.z);
     }
 
-    const renderOpts = getPlayRenderOptions();
-    const playEntities = getPlayEntities();
+    const renderOpts = getFrameRenderOpts();
+    const playEntities = getPlayEntitiesForFrame();
     const viewport = { startX, endX, startY, endY };
 
     getAllFloorZs().forEach((z) => {
@@ -1719,12 +1694,25 @@ function draw(dtMs: number): void {
         ) {
             return;
         }
-        const isAbove = z > player.worldZ;
-        let playerUnder = false;
-        if (isAbove && worldMap[z]?.[player.tileY]?.[player.tileX] !== -1) {
-            playerUnder = true;
+        const layerRefs = {
+            grassOverlay: grassOverlayMap,
+            itemsOverlay: itemsOverlayMap,
+            borderOverlay: borderOverlayMap,
+        };
+        if (z > player.worldZ) {
+            const upperMode = getPlayUpperFloorRenderMode(
+                z,
+                player.worldZ,
+                player.tileX,
+                player.tileY,
+                worldMap,
+                layerRefs
+            );
+            if (upperMode === 'hidden') return;
+            ctx.globalAlpha = upperMode === 'translucent' ? 0.3 : 1;
+        } else {
+            ctx.globalAlpha = 1;
         }
-        ctx.globalAlpha = isAbove && playerUnder ? 0.3 : 1;
 
         const drawLayerTile = (
             tid: number | undefined,
@@ -1932,7 +1920,6 @@ function clearPlayMovementInput(): void {
     gridMovement.activeStepDirection = null;
     resetGridMovementInputState(gridMovement);
     clearMovementInputBuffer(movementInputBuffer);
-    clearAutoWalk(autoWalkState);
 }
 
 function snapPlayCameraToLocalPlayer(): void {
@@ -1992,6 +1979,7 @@ function loop(): void {
     const rawDtMs = lastLoopMs > 0 ? frameStart - lastLoopMs : 16;
     const dtMs = Math.min(rawDtMs, MAX_PLAY_FRAME_DT_MS);
     lastLoopMs = frameStart;
+    beginPlayFrame();
     frameDepthDrawables = 0;
     frameSortHits = 0;
     frameSortMisses = 0;
@@ -2007,14 +1995,15 @@ function loop(): void {
     setPlayPerfMonitorContext({
         pingMs: serverStateStore.lastPingMs,
         visiblePlayers: remoteCount + (activeCharacter ? 1 : 0),
-        visibleCreatures: getPlayEntities().filter((entity) => entity.type === 'monster').length,
+        visibleCreatures: getPlayEntitiesForFrame().filter((entity) => entity.type === 'monster')
+            .length,
         floatingDamages: localPlayerFloats.getActiveCount(),
         depthDrawables: frameDepthDrawables,
         sortCacheHits: frameSortHits,
         sortCacheMisses: frameSortMisses,
         stressLevel: getPlayStressLevel(),
         pendingPredictions: getPendingPredictionCount(movementPrediction),
-        renderDelayMs: getNetworkRenderDelayMs(),
+        renderDelayMs: getFrameRenderDelayMs(),
     });
 
     requestAnimationFrame(loop);
