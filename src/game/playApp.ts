@@ -282,7 +282,6 @@ const playCameraJuice = createPlayCameraJuiceState();
 let lastLoopMs = 0;
 /** Após `MOVEMENT_TOO_FAST` — evita spam de `move` sem teleporte visual. */
 let movementTooFastThrottleUntilMs = 0;
-const MAX_PENDING_PREDICTED_STEPS = 1;
 const movementInputBuffer = createMovementInputBuffer();
 const autoWalkState = createAutoWalkState();
 let pendingOutboundMoveSeq: number | undefined;
@@ -1221,6 +1220,23 @@ function handleMovementRejected(code: string, rejectedSeq?: number): void {
     rollbackLocalPlayerToLastServerAck();
 }
 
+function shouldBlockLocalNewSteps(): boolean {
+    if (!isServerAuthoritativePosition()) return false;
+    if (!gameNet?.isConnected()) return false;
+    if (positionCorrectionSlide.active) return true;
+    if (performance.now() < movementTooFastThrottleUntilMs) return true;
+    return getPendingPredictionCount(movementPrediction) >= 1;
+}
+
+function clearStalePendingMovement(nowMs: number): void {
+    if (!isServerAuthoritativePosition()) return;
+    const head = movementPrediction.pending[0];
+    if (!head) return;
+    if (nowMs - head.committedAtMs < 1000) return;
+    movementPrediction.pending.length = 0;
+    pendingOutboundMoveSeq = undefined;
+}
+
 function isEntityAtTile(tx: number, ty: number, z: number, excludeId?: string): boolean {
     if (excludeId !== 'player' && isPlayerOccupyingTile(tx, ty, z)) {
         return true;
@@ -1251,6 +1267,7 @@ function updatePlayCameraFollow(dtMs: number): void {
 
 function update(dtMs: number): void {
     const nowMs = performance.now();
+    clearStalePendingMovement(nowMs);
     const playEntities = getPlayEntities();
     const aiEntities = usesServerCreatures() ? npcs.filter((n) => n.type === 'npc') : npcs;
 
@@ -1275,8 +1292,6 @@ function update(dtMs: number): void {
     speedBuffs.tick(nowMs);
 
     const correctionSliding = tickPositionCorrectionSlide(positionCorrectionSlide, player, nowMs);
-    const movementThrottled =
-        !correctionSliding && performance.now() < movementTooFastThrottleUntilMs;
     let editingFloorResult = editingFloor;
     if (!correctionSliding) {
         if (
@@ -1354,11 +1369,7 @@ function update(dtMs: number): void {
             posZEl: document.getElementById('posZ') as HTMLElement,
             skipCameraUpdate: true,
             movementInputBuffer,
-            blockNewSteps:
-                isServerAuthoritativePosition() &&
-                (movementThrottled ||
-                    getPendingPredictionCount(movementPrediction) >=
-                        MAX_PENDING_PREDICTED_STEPS),
+            blockNewSteps: shouldBlockLocalNewSteps(),
         });
         editingFloorResult = result.editingFloor;
     } else {
