@@ -15,6 +15,7 @@ Guia das implementações **jun/2026** para o instalador Windows (`Elarion Onlin
 5. [Ambiente de desenvolvimento](#5-ambiente-de-desenvolvimento)
 6. [Checklist de regressão](#6-checklist-de-regressão)
 7. [Arquivos principais](#7-arquivos-principais)
+8. [Solução de problemas (Windows)](#8-solução-de-problemas-windows)
 
 ---
 
@@ -235,3 +236,46 @@ Reinicie `electron:dev` após alterar `.env` (Vite não recarrega `VITE_*` em qu
 | `src/ui/desktopUpdateToast.ts` | UI de update |
 
 Documentação relacionada: [hosting.md](./hosting.md), [multiplatform-log.md](./multiplatform-log.md), [README.md](../README.md) § Clientes instalados.
+
+---
+
+## 8. Solução de problemas (Windows)
+
+### App fecha na abertura — crash de GPU
+
+**Sintoma** (console ou log):
+
+```text
+GPU process exited unexpectedly: exit_code=-2147483645
+FATAL: GPU process isn't usable. Goodbye.
+```
+
+O app pode abrir tela branca e fechar em seguida. Em alguns drivers Windows, passar `--disable-gpu` na linha de comando **não** evita o crash — o Electron 36 exige `app.disableHardwareAcceleration()` no **processo principal**, antes de `app.whenReady()`.
+
+**Correção embutida (builds recentes):** `desktop/electron/main.ts` chama `applyGpuStabilitySwitches()` no boot — no Windows, por padrão:
+
+- `app.disableHardwareAcceleration()`
+- switches `disable-gpu`, `disable-gpu-compositing`, `disable-gpu-sandbox`, rasterização/vídeo acelerados off
+
+**O que fazer:**
+
+1. Instale uma versão **posterior a 0.1.5** (ou rebuild local com `npm run electron:build`).
+2. Abrir pelo PowerShell (instalação padrão):
+
+```powershell
+Set-Location "$env:LOCALAPPDATA\Programs\Elarion Online"
+& ".\Elarion Online.exe"
+```
+
+3. Se ainda falhar, force desativação de GPU antes de abrir:
+
+```powershell
+$env:ELARION_DISABLE_GPU = "true"
+& ".\Elarion Online.exe"
+```
+
+4. Log do main process: `%APPDATA%\tibia-web-engine\electron-main.log` — inclui `gpuDisabled: true/false` no evento `app ready`.
+
+**Override:** `ELARION_DISABLE_GPU=false` reativa GPU (só se o driver estiver estável).
+
+**Dev:** `npm run electron:dev` usa o mesmo `main.ts` — se abrir em dev mas o `.exe` 0.1.5 antigo crashar, reinstale após `electron:build`.
