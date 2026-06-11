@@ -2,6 +2,7 @@ import { applyItemCatalogDocument, loadItemCatalog } from '../game-data/itemCata
 import { dispatchItemCatalogUpdated } from '../game-data/itemCatalogUi';
 import {
     EQUIPMENT_SLOTS,
+    getItemStackRules,
     sanitizeItemCatalogEntry,
     type ItemCatalogDocument,
     type ItemCatalogEntry,
@@ -28,7 +29,11 @@ export function initItemEditor(): void {
 
     if (!modal || !confirmBtn) return;
 
-    categorySelect?.addEventListener('change', syncSlotFieldVisibility);
+    categorySelect?.addEventListener('change', () => {
+        syncSlotFieldVisibility();
+        applyDefaultStackFieldsForCategory();
+    });
+    document.getElementById('itemStackableCheck')?.addEventListener('change', syncStackFieldState);
 
     addBtn?.addEventListener('click', () => selectItem(null));
     closeBtn?.addEventListener('click', closeItemEditorModal);
@@ -147,6 +152,8 @@ function readDraftFromForm(): ItemCatalogEntry | null {
     const defenseRaw = (document.getElementById('itemDefenseBonusInput') as HTMLInputElement | null)?.value ?? '';
     const description = (document.getElementById('itemDescriptionInput') as HTMLInputElement).value.trim();
     const implemented = (document.getElementById('itemImplementedCheck') as HTMLInputElement).checked;
+    const stackable = (document.getElementById('itemStackableCheck') as HTMLInputElement).checked;
+    const maxStackRaw = (document.getElementById('itemMaxStackInput') as HTMLInputElement).value;
 
     const entry = sanitizeItemCatalogEntry({
         id: idRaw,
@@ -158,6 +165,8 @@ function readDraftFromForm(): ItemCatalogEntry | null {
         defenseBonus: defenseRaw === '' ? undefined : Number(defenseRaw),
         description,
         implemented,
+        stackable: category === 'equipment' ? false : stackable,
+        maxStack: maxStackRaw === '' ? undefined : Number(maxStackRaw),
     });
 
     if (!entry) {
@@ -340,7 +349,11 @@ function selectItem(id: string | null): void {
     (document.getElementById('itemDescriptionInput') as HTMLInputElement).value =
         item.description ?? '';
     (document.getElementById('itemImplementedCheck') as HTMLInputElement).checked = item.implemented;
+    const rules = getItemStackRules(item);
+    (document.getElementById('itemStackableCheck') as HTMLInputElement).checked = rules.stackable;
+    (document.getElementById('itemMaxStackInput') as HTMLInputElement).value = String(rules.maxStack);
     syncSlotFieldVisibility();
+    syncStackFieldState();
     syncSpriteCalibratorButton();
 }
 
@@ -360,7 +373,38 @@ function resetForm(): void {
     if (defenseInput) defenseInput.value = '';
     (document.getElementById('itemDescriptionInput') as HTMLInputElement).value = '';
     (document.getElementById('itemImplementedCheck') as HTMLInputElement).checked = false;
+    applyDefaultStackFieldsForCategory();
     syncSlotFieldVisibility();
+    syncStackFieldState();
+}
+
+function applyDefaultStackFieldsForCategory(): void {
+    const category = (document.getElementById('itemCategorySelect') as HTMLSelectElement)?.value;
+    const stackableCheck = document.getElementById('itemStackableCheck') as HTMLInputElement | null;
+    const maxStackInput = document.getElementById('itemMaxStackInput') as HTMLInputElement | null;
+    if (!stackableCheck || !maxStackInput) return;
+    if (category === 'equipment') {
+        stackableCheck.checked = false;
+        maxStackInput.value = '1';
+    } else {
+        stackableCheck.checked = true;
+        if (maxStackInput.value === '1') maxStackInput.value = '100';
+    }
+}
+
+function syncStackFieldState(): void {
+    const category = (document.getElementById('itemCategorySelect') as HTMLSelectElement)?.value;
+    const stackableCheck = document.getElementById('itemStackableCheck') as HTMLInputElement | null;
+    const maxStackInput = document.getElementById('itemMaxStackInput') as HTMLInputElement | null;
+    const isEquipment = category === 'equipment';
+    if (stackableCheck) {
+        stackableCheck.disabled = isEquipment;
+        if (isEquipment) stackableCheck.checked = false;
+    }
+    if (maxStackInput) {
+        maxStackInput.disabled = isEquipment || !(stackableCheck?.checked ?? true);
+        if (isEquipment) maxStackInput.value = '1';
+    }
 }
 
 function syncSlotFieldVisibility(): void {

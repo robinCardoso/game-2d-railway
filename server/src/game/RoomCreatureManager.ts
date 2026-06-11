@@ -511,6 +511,7 @@ export class RoomCreatureManager {
 
             const mapSize = this.collision.getMapSize(state.mapId);
             const reservedGoals = new Set<string>();
+            const reservedStepTiles = new Set<string>();
             const moves: CreatureMovedMessage[] = [];
 
             const chaseMonsters = state.creatures
@@ -557,7 +558,8 @@ export class RoomCreatureManager {
                 const canStepTo = (tx: number, ty: number) =>
                     canWalkTerrain(tx, ty) &&
                     !this.isPlayerAt(players, tx, ty, creature.z) &&
-                    !this.isCreatureAt(state.creatures, tx, ty, creature.z, creature.id);
+                    !this.isCreatureAt(state.creatures, tx, ty, creature.z, creature.id) &&
+                    !reservedStepTiles.has(`${tx},${ty}`);
 
                 // Meta adjacente: terreno livre, nunca o tile do jogador (outros mobs não bloqueiam meta).
                 const canGoalTile = (tx: number, ty: number) =>
@@ -593,8 +595,20 @@ export class RoomCreatureManager {
                     if (this.isPlayerAt(players, mobState.tileX, mobState.tileY, creature.z)) {
                         continue;
                     }
+                    if (
+                        this.isCreatureAt(
+                            state.creatures,
+                            mobState.tileX,
+                            mobState.tileY,
+                            creature.z,
+                            creature.id
+                        )
+                    ) {
+                        continue;
+                    }
                     creature.tileX = mobState.tileX;
                     creature.tileY = mobState.tileY;
+                    reservedStepTiles.add(`${creature.tileX},${creature.tileY}`);
                     creature.lastAggroMoveTime = mobState.lastAggroMoveTime;
                     creature.direction = step.dir;
 

@@ -339,8 +339,16 @@ export class GameRoom {
             isWalkable: (mapId, tileX, tileY, z) => this.isWalkable(mapId, tileX, tileY, z),
             isTileOccupied: (mapId, tileX, tileY, z, exceptPlayerId) =>
                 this.isTileOccupied(mapId, tileX, tileY, z, exceptPlayerId),
-            rejectMove: (player, code, message, logDetail, sendCorrection, seq) =>
-                this.rejectMove(player, code, message, logDetail, sendCorrection, seq),
+            rejectMove: (player, code, message, logDetail, sendCorrection, seq, rejectedTile) =>
+                this.rejectMove(
+                    player,
+                    code,
+                    message,
+                    logDetail,
+                    sendCorrection,
+                    seq,
+                    rejectedTile
+                ),
             persistPlayerPosition: (player, immediate) =>
                 this.persistPlayerPosition(player, immediate),
             sendCreatureSync: (socket, room, mapId, instanceId) =>
@@ -530,7 +538,8 @@ export class GameRoom {
         message: string,
         logDetail?: string,
         sendCorrection = true,
-        seq?: number
+        seq?: number,
+        rejectedTile?: { tileX: number; tileY: number; z: number }
     ): void {
         const now = Date.now();
         if (
@@ -549,6 +558,13 @@ export class GameRoom {
             code,
             message,
             ...(seq !== undefined ? { seq } : {}),
+            ...(rejectedTile
+                ? {
+                      tileX: rejectedTile.tileX,
+                      tileY: rejectedTile.tileY,
+                      z: rejectedTile.z,
+                  }
+                : {}),
         });
         if (sendCorrection) {
             this.sendPositionCorrection(player);

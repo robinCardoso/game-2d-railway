@@ -14,6 +14,7 @@ import {
     resolveAggroFaceDirection,
     resolveChaseIdleDirection,
     shouldMonsterApproachChase,
+    pickMonsterChaseStep,
     tickMonsterChaseStep,
 } from './creatureChase.js';
 
@@ -223,6 +224,15 @@ describe('melee ring fallback (anti ping-pong)', () => {
         expect(step).not.toBeNull();
         expect(step!.dx).toBe(-1);
         expect(step!.dy).toBe(0);
+    });
+});
+
+describe('pickMonsterChaseStep', () => {
+    it('nunca escolhe passo que pisa no tile do jogador', () => {
+        const alwaysWalk = () => true;
+        const step = pickMonsterChaseStep(9, 10, 10, 10, alwaysWalk, 10, 10);
+        expect(step).not.toBeNull();
+        expect(step!.dx !== 1 || step!.dy !== 0).toBe(true);
     });
 });
 

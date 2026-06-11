@@ -1,8 +1,11 @@
+import type { ItemStackRules } from '../src/game-data/itemCatalogTypes.js';
 import {
     BACKPACK_SLOT_COUNT,
     INVENTORY_BAG_COUNT,
     type BackpackSlotRow,
 } from './inventory.js';
+
+export type { ItemStackRules };
 
 export function isBagUnlocked(bagIndex: number, unlockedBagSlots: number): boolean {
     return bagIndex >= 0 && bagIndex < unlockedBagSlots && bagIndex < INVENTORY_BAG_COUNT;
@@ -60,15 +63,23 @@ export type SequentialSlotTarget =
     | { bagIndex: number; rowIndex: number; kind: 'stack' }
     | { bagIndex: number; slotIndex: number; kind: 'new' };
 
-/** Stack existente ou primeiro slot livre nas bolsas liberadas (ordem 1→N). */
+/** Pilha parcial ou primeiro slot livre nas bolsas liberadas (ordem 1→N). */
 export function findSequentialSlot(
     bags: BackpackSlotRow[][],
     itemId: string,
-    unlockedBagSlots: number
+    unlockedBagSlots: number,
+    rules: ItemStackRules
 ): SequentialSlotTarget | null {
-    for (const bagIndex of iterateUnlockedBagIndices(unlockedBagSlots)) {
-        const rowIndex = findItemRowInBag(bags[bagIndex] ?? [], itemId);
-        if (rowIndex >= 0) return { bagIndex, rowIndex, kind: 'stack' };
+    if (rules.stackable) {
+        for (const bagIndex of iterateUnlockedBagIndices(unlockedBagSlots)) {
+            const bag = bags[bagIndex] ?? [];
+            for (let rowIndex = 0; rowIndex < bag.length; rowIndex++) {
+                const row = bag[rowIndex];
+                if (row.itemId === itemId && row.quantity < rules.maxStack) {
+                    return { bagIndex, rowIndex, kind: 'stack' };
+                }
+            }
+        }
     }
     for (const bagIndex of iterateUnlockedBagIndices(unlockedBagSlots)) {
         const slotIndex = firstFreeSlotInBag(bags[bagIndex] ?? []);
@@ -88,19 +99,55 @@ export function firstSequentialFreeSlot(
     return null;
 }
 
+/** Adiciona quantidade respeitando pilha máxima; retorna unidades que não couberam. */
+export function addQuantityToBags(
+    bags: BackpackSlotRow[][],
+    itemId: string,
+    quantity: number,
+    unlockedBagSlots: number,
+    rules: ItemStackRules
+): { added: number; overflow: number } {
+    let remaining = Math.max(0, Math.floor(quantity));
+    let added = 0;
+
+    while (remaining > 0) {
+        const target = findSequentialSlot(bags, itemId, unlockedBagSlots, rules);
+        if (!target) break;
+
+        if (target.kind === 'stack') {
+            const bag = bags[target.bagIndex];
+            const row = bag[target.rowIndex];
+            const space = rules.maxStack - row.quantity;
+            const chunk = Math.min(remaining, space);
+            if (chunk <= 0) break;
+            row.quantity += chunk;
+            added += chunk;
+            remaining -= chunk;
+        } else {
+            const chunk = rules.stackable
+                ? Math.min(remaining, rules.maxStack)
+                : Math.min(remaining, 1);
+            const bag = bags[target.bagIndex] ?? [];
+            bag.push({ slotIndex: target.slotIndex, itemId, quantity: chunk });
+            bag.sort((a, b) => a.slotIndex - b.slotIndex);
+            bags[target.bagIndex] = bag;
+            added += chunk;
+            remaining -= chunk;
+        }
+    }
+
+    return { added, overflow: remaining };
+}
+
 export function addToSequentialBags(
     bags: BackpackSlotRow[][],
     itemId: string,
     quantity: number,
-    unlockedBagSlots: number
+    unlockedBagSlots: number,
+    rules: ItemStackRules
 ): boolean {
-    const slot = firstSequentialFreeSlot(bags, unlockedBagSlots);
-    if (!slot) return false;
-    const bag = bags[slot.bagIndex] ?? [];
-    bag.push({ slotIndex: slot.slotIndex, itemId, quantity });
-    bag.sort((a, b) => a.slotIndex - b.slotIndex);
-    bags[slot.bagIndex] = bag;
-    return true;
+    const result = addQuantityToBags(bags, itemId, quantity, unlockedBagSlots, rules);
+    return result.added > 0 && result.overflow === 0;
 }
 
 export function countGoldInBags(bags: BackpackSlotRow[][], unlockedBagSlots: number): number {

@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { DepthSortFingerprintCache } from './depthSortCache';
+import { computeDepthSortFingerprint, DepthSortFingerprintCache } from './depthSortCache';
 import type { DepthDrawable } from './depthSortDraw';
+
+describe('computeDepthSortFingerprint', () => {
+    it('ignora sub-pixel durante deslize no mesmo tile', () => {
+        const a: DepthDrawable[] = [{ sortY: 320.1, sortX: 160.2, draw: () => {} }];
+        const b: DepthDrawable[] = [{ sortY: 330.9, sortX: 165.7, draw: () => {} }];
+        expect(computeDepthSortFingerprint(a)).toBe(computeDepthSortFingerprint(b));
+    });
+});
 
 describe('DepthSortFingerprintCache stats', () => {
     it('consumeSortStats acumula hits e misses', () => {

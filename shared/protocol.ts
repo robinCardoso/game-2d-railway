@@ -409,6 +409,10 @@ export interface ErrorMessage {
     retryAfterMs?: number;
     /** Seq do `move` rejeitado — cliente descarta predições a partir deste número. */
     seq?: number;
+    /** Tile de destino rejeitado (ex.: TILE_OCCUPIED). */
+    tileX?: number;
+    tileY?: number;
+    z?: number;
 }
 
 export interface PongMessage {

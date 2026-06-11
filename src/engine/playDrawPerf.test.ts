@@ -12,9 +12,10 @@ function drawable(sortY: number, sortX = 0): DepthDrawable {
 }
 
 describe('computeDepthSortFingerprint', () => {
-    it('muda quando sortY de algum drawable muda', () => {
-        const a = [drawable(10), drawable(20)];
-        const b = [drawable(10), drawable(21)];
+    it('muda quando sortY cruza tile de pé', () => {
+        const tile = ENGINE_CONFIG.TILE_SIZE;
+        const a = [drawable(tile), drawable(tile * 2)];
+        const b = [drawable(tile), drawable(tile * 2 + tile)];
         expect(computeDepthSortFingerprint(a)).not.toBe(computeDepthSortFingerprint(b));
     });
 

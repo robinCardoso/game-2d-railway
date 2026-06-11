@@ -1,6 +1,9 @@
-import type { ItemCatalogDocument } from '../src/game-data/itemCatalogTypes.js';
+import {
+    getItemStackRules,
+    type ItemCatalogDocument,
+} from '../src/game-data/itemCatalogTypes.js';
 import { type CharacterInventoryDocument } from './inventory.js';
-import { cloneBags, findSequentialSlot } from './inventoryBags.js';
+import { addQuantityToBags, cloneBags } from './inventoryBags.js';
 import type { LootGrant } from './mobLoot.js';
 
 export interface AutolootApplyResult {
@@ -43,31 +46,19 @@ export function applyAutolootGrants(
         const quantity = Math.max(1, Math.floor(grant.quantity));
         if (!itemId || !isGrantableItem(itemId, catalog)) continue;
 
-        let remaining = quantity;
+        const entry = catalog.items.find((i) => i.id === itemId);
+        if (!entry) continue;
+        const rules = getItemStackRules(entry);
 
-        while (remaining > 0) {
-            const target = findSequentialSlot(next.bags, itemId, next.unlockedBagSlots);
-            if (!target) {
-                overflow.push({ itemId, quantity: remaining });
-                break;
-            }
-
-            if (target.kind === 'stack') {
-                const bag = next.bags[target.bagIndex];
-                bag[target.rowIndex].quantity += remaining;
-                granted.push({ itemId, quantity: remaining });
-                remaining = 0;
-            } else {
-                const stackQty = remaining;
-                next.bags[target.bagIndex].push({
-                    slotIndex: target.slotIndex,
-                    itemId,
-                    quantity: stackQty,
-                });
-                granted.push({ itemId, quantity: stackQty });
-                remaining = 0;
-            }
-        }
+        const { added, overflow: leftover } = addQuantityToBags(
+            next.bags,
+            itemId,
+            quantity,
+            next.unlockedBagSlots,
+            rules
+        );
+        if (added > 0) granted.push({ itemId, quantity: added });
+        if (leftover > 0) overflow.push({ itemId, quantity: leftover });
     }
 
     sortBags(next.bags);

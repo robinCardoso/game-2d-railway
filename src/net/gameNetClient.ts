@@ -63,7 +63,11 @@ export interface GameNetClientOptions {
     /** Reserva de deslize (`steppingDest`) — destino bloqueado não envia ao servidor. */
     validateSteppingDest?: (tileX: number, tileY: number, z: number) => boolean;
     /** Passo rejeitado sem `position_correction` — cliente faz rollback ao último ACK. */
-    onMovementRejected?: (code: string, seq?: number) => void;
+    onMovementRejected?: (
+        code: string,
+        seq?: number,
+        rejectedTile?: { tileX: number; tileY: number; z: number }
+    ) => void;
     /** Servidor corrigiu posição após movimento inválido. */
     onPositionCorrection?: (pos: {
         mapId: string;
@@ -849,7 +853,15 @@ export class GameNetClient {
                     msg.code === 'INVALID_TILE' ||
                     msg.code === 'TILE_OCCUPIED'
                 ) {
-                    this.options.onMovementRejected?.(msg.code, msg.seq);
+                    this.options.onMovementRejected?.(
+                        msg.code,
+                        msg.seq,
+                        msg.tileX !== undefined &&
+                            msg.tileY !== undefined &&
+                            msg.z !== undefined
+                            ? { tileX: msg.tileX, tileY: msg.tileY, z: msg.z }
+                            : undefined
+                    );
                 }
                 this.options.onServerError?.({
                     code: msg.code,

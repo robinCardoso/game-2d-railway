@@ -1,4 +1,9 @@
-import type { EquipmentSlot, ItemCatalogDocument, ItemCatalogEntry } from '../src/game-data/itemCatalogTypes.js';
+import {
+    getItemStackRules,
+    type EquipmentSlot,
+    type ItemCatalogDocument,
+    type ItemCatalogEntry,
+} from '../src/game-data/itemCatalogTypes.js';
 import {
     type CharacterInventoryDocument,
 } from './inventory.js';
@@ -106,7 +111,19 @@ export function equipFromBackpack(
     const displaced = next.equipment[targetSlot];
 
     if (displaced) {
-        if (!addToSequentialBags(next.bags, displaced, 1, next.unlockedBagSlots)) {
+        const displacedEntry = catalogEntry(catalog, displaced);
+        if (!displacedEntry) {
+            return { ok: false, code: 'UNKNOWN_ITEM', message: 'Item desconhecido.' };
+        }
+        const displacedRules = getItemStackRules(displacedEntry);
+        const displacedAdd = addToSequentialBags(
+            next.bags,
+            displaced,
+            1,
+            next.unlockedBagSlots,
+            displacedRules
+        );
+        if (!displacedAdd) {
             return {
                 ok: false,
                 code: 'BACKPACK_FULL',
@@ -155,7 +172,8 @@ export function unequipToBackpack(
             message: 'Mochila cheia — não foi possível desequipar.',
         };
     }
-    if (!addToSequentialBags(next.bags, itemId, 1, next.unlockedBagSlots)) {
+    const rules = getItemStackRules(entry);
+    if (!addToSequentialBags(next.bags, itemId, 1, next.unlockedBagSlots, rules)) {
         return {
             ok: false,
             code: 'BACKPACK_FULL',

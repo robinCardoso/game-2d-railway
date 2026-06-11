@@ -8,6 +8,8 @@
       "defenseBonus": 1,
       "description": "Amuleto verde que protege o portador.",
       "implemented": true,
+      "stackable": false,
+      "maxStack": 1,
       "sprite": {
         "iconUrl": "tiles/items/icons/amulet_of_life.png",
         "frameWidth": 32,
@@ -24,6 +26,8 @@
       "speedBonus": 20,
       "description": "Botas encantadas que aceleram a corrida.",
       "implemented": true,
+      "stackable": false,
+      "maxStack": 1,
       "sprite": {
         "iconUrl": "tiles/items/icons/boots_of_haste.png",
         "frameWidth": 32,
@@ -38,6 +42,8 @@
       "category": "loot",
       "description": "Moeda de ouro.",
       "implemented": true,
+      "stackable": true,
+      "maxStack": 100,
       "sprite": {
         "iconUrl": "tiles/items/icons/gold_coin.png",
         "frameWidth": 32,
@@ -52,6 +58,8 @@
       "category": "loot",
       "description": "Poção vermelha de cura (loot de teste).",
       "implemented": true,
+      "stackable": true,
+      "maxStack": 100,
       "sprite": {
         "iconUrl": "tiles/items/icons/health_potion.png",
         "frameWidth": 32,
@@ -68,6 +76,8 @@
       "defenseBonus": 2,
       "description": "Capacete de ferro básico.",
       "implemented": true,
+      "stackable": false,
+      "maxStack": 1,
       "sprite": {
         "iconUrl": "tiles/items/icons/iron_helmet.png",
         "frameWidth": 32,
@@ -84,6 +94,8 @@
       "defenseBonus": 3,
       "description": "Armadura leve de couro.",
       "implemented": true,
+      "stackable": false,
+      "maxStack": 1,
       "sprite": {
         "iconUrl": "tiles/items/icons/leather_armor.png",
         "frameWidth": 32,
@@ -99,6 +111,8 @@
       "slot": "feet",
       "description": "Botas simples de couro.",
       "implemented": true,
+      "stackable": false,
+      "maxStack": 1,
       "sprite": {
         "iconUrl": "tiles/items/icons/leather_boots.png",
         "frameWidth": 32,
@@ -115,6 +129,8 @@
       "attackBonus": 3,
       "description": "Espada de ferro básica.",
       "implemented": true,
+      "stackable": false,
+      "maxStack": 1,
       "sprite": {
         "iconUrl": "tiles/items/icons/iron_sword.png",
         "frameWidth": 32,
@@ -131,6 +147,8 @@
       "defenseBonus": 1,
       "description": "Escudo de madeira.",
       "implemented": true,
+      "stackable": false,
+      "maxStack": 1,
       "sprite": {
         "iconUrl": "tiles/items/icons/wooden_shield.png",
         "frameWidth": 32,
@@ -147,6 +165,8 @@
       "attackBonus": 2,
       "description": "Anel que fortalece o golpe.",
       "implemented": true,
+      "stackable": false,
+      "maxStack": 1,
       "sprite": {
         "iconUrl": "tiles/items/icons/warrior_ring.png",
         "frameWidth": 32,

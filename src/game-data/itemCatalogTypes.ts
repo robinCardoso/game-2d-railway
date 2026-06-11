@@ -31,6 +31,14 @@ export const EQUIPMENT_SLOTS: EquipmentSlot[] = [
 
 export type ItemCategory = 'equipment' | 'loot';
 
+/** Regras de empilhamento resolvidas (com defaults por categoria). */
+export interface ItemStackRules {
+    stackable: boolean;
+    maxStack: number;
+}
+
+const DEFAULT_LOOT_MAX_STACK = 100;
+
 export interface ItemCatalogEntry {
     id: string;
     name: string;
@@ -50,6 +58,23 @@ export interface ItemCatalogEntry {
     implemented: boolean;
     /** Ícone de inventário — `tiles/items/icons/` (fora do tile registry). */
     sprite?: ItemSpriteCalibration;
+    /** Loot/consumíveis: true (padrão). Equipamento: false (padrão). */
+    stackable?: boolean;
+    /** Máximo por slot de bolsa; equipamento padrão 1, loot padrão 100. */
+    maxStack?: number;
+}
+
+export function getItemStackRules(entry: ItemCatalogEntry): ItemStackRules {
+    if (entry.category === 'equipment') {
+        return {
+            stackable: entry.stackable === true,
+            maxStack: 1,
+        };
+    }
+    return {
+        stackable: entry.stackable !== false,
+        maxStack: Math.max(1, entry.maxStack ?? DEFAULT_LOOT_MAX_STACK),
+    };
 }
 
 export interface ItemCatalogDocument {
@@ -97,6 +122,16 @@ export function sanitizeItemCatalogEntry(raw: unknown): ItemCatalogEntry | null 
 
     const sprite = sanitizeItemSpriteCalibration(row.sprite, id);
 
+    const stackRules = getItemStackRules({
+        id,
+        name,
+        category,
+        slot: category === 'equipment' ? slot : undefined,
+        stackable: row.stackable === true ? true : row.stackable === false ? false : undefined,
+        maxStack: parseOptionalInt(row.maxStack),
+        implemented: row.implemented === true,
+    });
+
     const entry: ItemCatalogEntry = {
         id,
         name,
@@ -107,6 +142,8 @@ export function sanitizeItemCatalogEntry(raw: unknown): ItemCatalogEntry | null 
         defenseBonus: parseOptionalInt(row.defenseBonus),
         description: typeof row.description === 'string' ? row.description.trim() : undefined,
         implemented: row.implemented === true,
+        stackable: stackRules.stackable,
+        maxStack: stackRules.maxStack,
     };
     if (sprite) entry.sprite = sprite;
     return entry;
