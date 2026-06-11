@@ -57,6 +57,7 @@ import {
 } from '../movement/gridMovement';
 import { markBlockedTile } from '../movement/blockedMoveTiles';
 import {
+    MAX_MOVE_PIPELINE_DEPTH,
     PUMP_SEND_INTERVAL_FACTOR,
     tickPlayMovementPump,
 } from '../movement/playMovementPump';
@@ -1321,7 +1322,7 @@ function shouldBlockLocalNewSteps(): boolean {
     if (!gameNet?.isConnected()) return false;
     if (positionCorrectionSlide.active) return true;
     if (performance.now() < movementTooFastThrottleUntilMs) return true;
-    return getPendingPredictionCount(movementPrediction) >= 1;
+    return getPendingPredictionCount(movementPrediction) >= MAX_MOVE_PIPELINE_DEPTH;
 }
 
 function clearStalePendingMovement(nowMs: number): void {

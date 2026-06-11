@@ -10,6 +10,7 @@ import {
     cloneBags,
     createEmptyBags,
     firstSequentialFreeSlot,
+    iterateUnlockedBagIndices,
 } from './inventoryBags.js';
 
 /** Número total de storages de bolsa por personagem. */
@@ -257,12 +258,83 @@ export function sanitizeInventoryStackRules(
     };
 }
 
-/** Normaliza documento bruto e aplica regras de pilha (migração automática). */
+export interface RepairInventoryResult {
+    inventory: CharacterInventoryDocument;
+    repaired: boolean;
+}
+
+/**
+ * Corrige estado inválido comum após migração:
+ * - itens equipados ainda presentes na bolsa (bloqueia equip/desequip);
+ * - bolsas 2–3 espelhando a bolsa 1 (corrupção de dados).
+ */
+export function repairInventoryState(
+    inventory: CharacterInventoryDocument
+): RepairInventoryResult {
+    const equipment = { ...inventory.equipment };
+    const bags = cloneBags(inventory.bags);
+    const unlocked = inventory.unlockedBagSlots;
+    let repaired = false;
+
+    const equippedCounts = new Map<string, number>();
+    for (const slot of EQUIPMENT_SLOTS) {
+        const itemId = equipment[slot];
+        if (!itemId) continue;
+        equippedCounts.set(itemId, (equippedCounts.get(itemId) ?? 0) + 1);
+    }
+
+    for (const [itemId, removeCount] of equippedCounts) {
+        let remaining = removeCount;
+        for (const bagIndex of iterateUnlockedBagIndices(unlocked)) {
+            const bag = bags[bagIndex] ?? [];
+            for (let rowIndex = bag.length - 1; rowIndex >= 0 && remaining > 0; rowIndex--) {
+                const row = bag[rowIndex];
+                if (row.itemId !== itemId) continue;
+                if (row.quantity <= remaining) {
+                    remaining -= row.quantity;
+                    bag.splice(rowIndex, 1);
+                    repaired = true;
+                } else {
+                    row.quantity -= remaining;
+                    remaining = 0;
+                    repaired = true;
+                }
+            }
+        }
+    }
+
+    const bagFingerprint = (bag: BackpackSlotRow[]) =>
+        JSON.stringify(bag.map((row) => ({ ...row })));
+    const bag0Key = bagFingerprint(bags[0] ?? []);
+    if (bag0Key !== '[]') {
+        for (let bagIndex = 1; bagIndex < unlocked; bagIndex++) {
+            if (bagFingerprint(bags[bagIndex] ?? []) === bag0Key) {
+                bags[bagIndex] = [];
+                repaired = true;
+            }
+        }
+    }
+
+    return {
+        inventory: { equipment, bags, unlockedBagSlots: unlocked },
+        repaired,
+    };
+}
+
+/** Normaliza documento bruto, pilhas e repara estado fantasma (migração automática). */
 export function normalizeInventoryForStackRules(
     raw: unknown,
     catalog: ItemCatalogDocument
 ): SanitizeStackRulesResult {
-    return sanitizeInventoryStackRules(normalizeInventoryDocument(raw), catalog);
+    const sanitized = sanitizeInventoryStackRules(normalizeInventoryDocument(raw), catalog);
+    const { inventory, repaired } = repairInventoryState(sanitized.inventory);
+    return {
+        inventory,
+        overflow: sanitized.overflow,
+        warnings: repaired
+            ? [...sanitized.warnings, 'repairInventoryState aplicado.']
+            : sanitized.warnings,
+    };
 }
 
 function assertValidStackRules(

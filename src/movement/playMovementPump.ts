@@ -30,6 +30,12 @@ import { consumeMovementInput, peekMovementInput, pushMovementInput } from './mo
 /** Alinhado com `MOVE_RATE_LIMIT_TOLERANCE` do servidor. */
 export const PUMP_SEND_INTERVAL_FACTOR = 0.8;
 
+/**
+ * Passos em voo antes de bloquear novo envio (estilo Tibia: cliente pode estar
+ * ~1 tile à frente do último ack sem parar a animação).
+ */
+export const MAX_MOVE_PIPELINE_DEPTH = 2;
+
 export interface MovementPumpNetBridge {
     isConnected(): boolean;
     sendMoveIntent(intent: {
@@ -85,14 +91,16 @@ export function canMovementPumpSend(ctx: PlayMovementPumpContext): boolean {
     if (!ctx.net?.isConnected()) return false;
     if (ctx.gridMovement.stepping) return false;
     if (ctx.positionCorrectionSlideActive) return false;
-    if (getPendingPredictionCount(ctx.prediction) >= 1) return false;
+    if (getPendingPredictionCount(ctx.prediction) >= MAX_MOVE_PIPELINE_DEPTH) {
+        return false;
+    }
     if (ctx.nowMs < ctx.movementTooFastThrottleUntilMs) return false;
     if (ctx.nowMs < ctx.pumpSendCooldownUntilMs) return false;
     return true;
 }
 
 /**
- * Envia no máximo 1 movimento por tick quando há intenção e o passo anterior foi confirmado.
+ * Envia no máximo 1 movimento por tick quando há intenção e o pipeline não está cheio.
  * @returns true se um passo autoritativo foi iniciado neste frame.
  */
 export function tickPlayMovementPump(ctx: PlayMovementPumpContext): boolean {

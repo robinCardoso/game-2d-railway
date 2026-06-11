@@ -132,6 +132,46 @@ describe('playMovementPump', () => {
         expect(consumeMovementInput(movementInputBuffer)).toBeNull();
     });
 
+    it('envia 2º passo sem ack do 1º (pipeline Tibia-like)', () => {
+        const gridMovement = createGridMovementController();
+        const sendMoveIntent = vi.fn();
+        const prediction = createClientMovementPrediction({ tileX: 10, tileY: 10, z: 0 });
+        const tileGridDeps = {
+            tileSize: 32,
+            mapSize: 256,
+            minFloorZ: 0,
+            maxFloorZ: 7,
+            isWalkablePixels: () => ({ walkable: true }),
+            isStairHoleAtTile: () => false,
+            getStepDurationMs: () => 200,
+        };
+        const baseCtx = {
+            keys: { w: true },
+            player: { ...player },
+            gridMovement,
+            prediction,
+            movementInputBuffer: createMovementInputBuffer(),
+            tileGridDeps,
+            net: { isConnected: () => true, sendMoveIntent },
+            positionCorrectionSlideActive: false,
+            movementTooFastThrottleUntilMs: 0,
+            pumpSendCooldownUntilMs: 0,
+            resolveOutgoingStepDurationMs: () => 200,
+        };
+
+        expect(tickPlayMovementPump({ ...baseCtx, nowMs: 100 })).toBe(true);
+        expect(sendMoveIntent).toHaveBeenCalledTimes(1);
+        expect(prediction.pending).toHaveLength(1);
+
+        gridMovement.stepping = false;
+        gridMovement.activeStepDirection = null;
+        baseCtx.player = { ...player, tileX: 10, tileY: 9 };
+
+        expect(tickPlayMovementPump({ ...baseCtx, nowMs: 320 })).toBe(true);
+        expect(sendMoveIntent).toHaveBeenCalledTimes(2);
+        expect(prediction.pending).toHaveLength(2);
+    });
+
     it('não envia para tile em cooldown TILE_OCCUPIED', () => {
         clearBlockedMoveTiles();
         const gridMovement = createGridMovementController();

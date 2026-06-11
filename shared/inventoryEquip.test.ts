@@ -68,7 +68,7 @@ describe('equipFromBackpack', () => {
         if (!result.ok) expect(result.code).toBe('BAG_LOCKED');
     });
 
-    it('troca item no slot ocupado — anterior volta à bolsa', () => {
+    it('remove duplicata na bolsa quando o mesmo item já está equipado', () => {
         const inv = createEmptyInventory();
         inv.equipment.weapon = 'iron_sword';
         inv.bags[0] = [{ slotIndex: 0, itemId: 'iron_sword', quantity: 1 }];
@@ -76,8 +76,7 @@ describe('equipFromBackpack', () => {
         expect(result.ok).toBe(true);
         if (result.ok) {
             expect(result.inventory.equipment.weapon).toBe('iron_sword');
-            expect(result.inventory.bags[0]).toHaveLength(1);
-            expect(result.inventory.bags[0][0].itemId).toBe('iron_sword');
+            expect(result.inventory.bags[0]).toHaveLength(0);
         }
     });
 

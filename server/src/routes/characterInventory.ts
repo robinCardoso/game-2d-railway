@@ -10,6 +10,7 @@ import {
 import { getCharacterForAccount } from '../db/repositories/characters.repo.js';
 import { loadServerItemCatalog } from '../game/itemCatalogStore.js';
 import {
+    repairInventoryState,
     sanitizeInventoryStackRules,
     validateCharacterInventory,
 } from '../../../shared/inventory.js';
@@ -26,11 +27,11 @@ type CharacterInventoryParams = {
     characterId: string;
 };
 
-function bagsChanged(
+function inventoryChanged(
     before: CharacterInventoryDocument,
     after: CharacterInventoryDocument
 ): boolean {
-    return JSON.stringify(before.bags) !== JSON.stringify(after.bags);
+    return JSON.stringify(before) !== JSON.stringify(after);
 }
 
 async function loadInventoryWithStackMigration(
@@ -41,11 +42,12 @@ async function loadInventoryWithStackMigration(
     const raw = await loadRaw();
     const catalog = loadServerItemCatalog();
     const { inventory: sanitized } = sanitizeInventoryStackRules(raw, catalog);
-    if (bagsChanged(raw, sanitized)) {
-        const saved = await replaceCharacterInventory(characterId, accountId, sanitized);
-        return saved ?? sanitized;
+    const { inventory: repaired } = repairInventoryState(sanitized);
+    if (inventoryChanged(raw, repaired)) {
+        const saved = await replaceCharacterInventory(characterId, accountId, repaired);
+        return saved ?? repaired;
     }
-    return sanitized;
+    return repaired;
 }
 
 function notifyOnlineInventorySync(
@@ -81,10 +83,11 @@ export function createCharacterInventoryRouter(
                 const raw = getDevCharacterInventory(characterId);
                 const catalog = loadServerItemCatalog();
                 const { inventory: sanitized } = sanitizeInventoryStackRules(raw, catalog);
-                if (bagsChanged(raw, sanitized)) {
-                    setDevCharacterInventory(characterId, sanitized);
+                const { inventory: repaired } = repairInventoryState(sanitized);
+                if (inventoryChanged(raw, repaired)) {
+                    setDevCharacterInventory(characterId, repaired);
                 }
-                res.json({ inventory: sanitized });
+                res.json({ inventory: repaired });
                 return;
             }
 
@@ -135,9 +138,13 @@ export function createCharacterInventoryRouter(
             }
 
             const authReq = req as AuthenticatedRequest;
-            const previous =
+            const rawPrevious =
                 (await getCharacterInventoryOrEmpty(characterId, authReq.auth!.sub)) ??
                 emptyInventoryDocument();
+            const catalogForRepair = loadServerItemCatalog();
+            const previous = repairInventoryState(
+                sanitizeInventoryStackRules(rawPrevious, catalogForRepair).inventory
+            ).inventory;
             const serverUnlockedBagSlots =
                 (await getCharacterUnlockedBagSlots(characterId, authReq.auth!.sub)) ??
                 previous.unlockedBagSlots;
