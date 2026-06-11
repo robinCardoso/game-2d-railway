@@ -7,13 +7,26 @@ $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $private = Join-Path $root 'private_key.pem'
 $public = Join-Path $root 'public_key.pem'
 
-if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-    Write-Error 'GitHub CLI (gh) não encontrado. Instale: winget install GitHub.cli'
+function Resolve-GhExe {
+    $cmd = Get-Command gh -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    $candidates = @(
+        "${env:ProgramFiles}\GitHub CLI\gh.exe",
+        "${env:ProgramFiles(x86)}\GitHub CLI\gh.exe",
+        "$env:LOCALAPPDATA\Programs\GitHub CLI\gh.exe"
+    )
+    foreach ($path in $candidates) {
+        if (Test-Path $path) { return $path }
+    }
+    Write-Error 'GitHub CLI (gh) não encontrado. Instale: winget install GitHub.cli e reinicie o terminal.'
 }
 
-gh auth status 2>&1 | Out-Null
+$gh = Resolve-GhExe
+Write-Host "Usando: $gh"
+
+& $gh auth status 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
-    Write-Error 'Execute primeiro: gh auth login'
+    Write-Error "Execute primeiro: & `"$gh`" auth login"
 }
 
 foreach ($pair in @(
@@ -24,7 +37,7 @@ foreach ($pair in @(
         Write-Error "Arquivo não encontrado: $($pair.File). Rode npm run pack antes."
     }
     $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content $pair.File -Raw)))
-    $b64 | gh secret set $pair.Name
+    $b64 | & $gh secret set $pair.Name
     Write-Host "Secret $($pair.Name) atualizado."
 }
 
