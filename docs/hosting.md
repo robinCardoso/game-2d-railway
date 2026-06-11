@@ -151,6 +151,12 @@ gh auth login
 
 Com só `ASSET_PACK_PRIVATE_KEY`, o `pack-assets.mjs` deriva a chave pública automaticamente.
 
+Railway (painel web ou valores base64 para colar):
+
+```powershell
+.\scripts\set-pack-railway-vars.ps1
+```
+
 **Build do frontend** (variáveis `VITE_*` no Railway ou CI):
 
 | Variável build | Descrição |
