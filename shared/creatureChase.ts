@@ -295,13 +295,15 @@ export function collectMeleeChaseGoals(
     canGoalTile: (tx: number, ty: number) => boolean,
     canStepTo: (tx: number, ty: number) => boolean
 ): Array<{ tx: number; ty: number }> {
-    const surround = findMeleeGoalTiles(playerTileX, playerTileY, canGoalTile);
+    const notPlayerTile = (tx: number, ty: number) =>
+        (tx !== playerTileX || ty !== playerTileY) && canGoalTile(tx, ty);
+    const surround = findMeleeGoalTiles(playerTileX, playerTileY, notPlayerTile);
     if (surround.length > 0) return surround;
     return findMeleeRingTiles(
         playerTileX,
         playerTileY,
         MELEE_WAIT_RING_DIST,
-        canStepTo
+        (tx, ty) => (tx !== playerTileX || ty !== playerTileY) && canStepTo(tx, ty)
     );
 }
 
@@ -819,6 +821,20 @@ export function isMonsterWakePaused(mob: ChaseReactionState, nowMs: number): boo
     return mob.wakeUntilMs !== undefined && nowMs < mob.wakeUntilMs;
 }
 
+function wouldStepOntoPlayerTile(
+    mobX: number,
+    mobY: number,
+    mobZ: number,
+    step: { dx: number; dy: number },
+    player: ChasePlayerTarget
+): boolean {
+    return (
+        mobZ === player.z &&
+        mobX + step.dx === player.tileX &&
+        mobY + step.dy === player.tileY
+    );
+}
+
 /** @returns passo escolhido ou null se parado/no alcance/bloqueado. */
 export function tickMonsterChaseStep(
     mob: ChaseMobState,
@@ -905,6 +921,9 @@ export function tickMonsterChaseStep(
                 );
                 if (dir8) {
                     const chaseStep = chaseStepFromDirection8(dir8);
+                    if (wouldStepOntoPlayerTile(mob.tileX, mob.tileY, mob.z, chaseStep, player)) {
+                        continue;
+                    }
                     mob.tileX += chaseStep.dx;
                     mob.tileY += chaseStep.dy;
                     if (mob.lastAggroMoveTime === 0 || nowMs - mob.lastAggroMoveTime > walkStepMs * 2) {
@@ -943,6 +962,10 @@ export function tickMonsterChaseStep(
     }
 
     if (!step) return null;
+
+    if (wouldStepOntoPlayerTile(mob.tileX, mob.tileY, mob.z, step, player)) {
+        return null;
+    }
 
     mob.tileX += step.dx;
     mob.tileY += step.dy;

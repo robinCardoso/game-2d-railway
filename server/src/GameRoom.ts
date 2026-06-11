@@ -337,6 +337,8 @@ export class GameRoom {
                 this.broadcastToPlayerSpectators(room, message, event, exceptId),
             roomKey: (player) => this.roomKey(player),
             isWalkable: (mapId, tileX, tileY, z) => this.isWalkable(mapId, tileX, tileY, z),
+            isTileOccupied: (mapId, tileX, tileY, z, exceptPlayerId) =>
+                this.isTileOccupied(mapId, tileX, tileY, z, exceptPlayerId),
             rejectMove: (player, code, message, logDetail, sendCorrection, seq) =>
                 this.rejectMove(player, code, message, logDetail, sendCorrection, seq),
             persistPlayerPosition: (player, immediate) =>
@@ -470,6 +472,38 @@ export class GameRoom {
             return true;
         }
         return this.collision.isWalkable(mapId, tileX, tileY, z);
+    }
+
+    private isTileOccupied(
+        mapId: string,
+        tileX: number,
+        tileY: number,
+        z: number,
+        exceptPlayerId?: string
+    ): boolean {
+        const mover = exceptPlayerId ? this.players.get(exceptPlayerId) : undefined;
+        const instanceId = mover?.instanceId;
+
+        for (const p of this.players.values()) {
+            if (p.id === exceptPlayerId) continue;
+            if (p.mapId !== mapId) continue;
+            if ((p.instanceId ?? undefined) !== (instanceId ?? undefined)) continue;
+            if (p.z !== z) continue;
+            if (p.tileX === tileX && p.tileY === tileY) return true;
+            expireStaleSteppingDest(p);
+            if (p.steppingDestTileX === tileX && p.steppingDestTileY === tileY) {
+                return true;
+            }
+        }
+
+        if (mover) {
+            const room = this.roomKey(mover);
+            if (this.creatures.isTileOccupiedByCreature(room, tileX, tileY, z)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private sendPositionCorrection(player: ConnectedPlayer): void {

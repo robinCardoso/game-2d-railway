@@ -25,6 +25,7 @@ import {
     validatePlayerStep,
     validatePlayerStepToTile,
 } from '../movement/movementValidator.js';
+import { isDiagonalStep, type TilePos } from '../../../../shared/tileWalkable.js';
 
 /** Intervalo mínimo entre `error` + `position_correction` por rejeição de movimento (anti-spam). */
 const MOVE_REJECTION_THROTTLE_MS = 400;
@@ -83,6 +84,54 @@ function resolveVisualDirection(
     return cardinal;
 }
 
+function logMoveInvalidStepDebug(
+    ctx: MoveHandlerContext,
+    player: ConnectedPlayer,
+    msg: Extract<ClientMessage, { type: 'move' }>,
+    from: TilePos,
+    destTileX: number,
+    destTileY: number,
+    destZ: number,
+    moveDirection8: Direction8 | undefined,
+    extra?: Record<string, unknown>
+): void {
+    const to: TilePos = { tileX: destTileX, tileY: destTileY, z: destZ };
+    const debug: Record<string, unknown> = {
+        playerId: player.id,
+        name: player.name,
+        seq: msg.seq,
+        from: { x: player.tileX, y: player.tileY, z: player.z },
+        to: { x: destTileX, y: destTileY, z: destZ },
+        delta: {
+            dx: destTileX - player.tileX,
+            dy: destTileY - player.tileY,
+            dz: destZ - player.z,
+        },
+        direction8: moveDirection8,
+        steppingDest: {
+            x: player.steppingDestTileX,
+            y: player.steppingDestTileY,
+            expiresAt: player.steppingDestExpiresAtMs,
+        },
+        targetWalkable: ctx.isWalkable(player.mapId, destTileX, destTileY, destZ),
+        targetOccupied: ctx.isTileOccupied?.(
+            player.mapId,
+            destTileX,
+            destTileY,
+            destZ,
+            player.id
+        ),
+        ...extra,
+    };
+    if (isDiagonalStep(from, to)) {
+        debug.cornerBlocked = {
+            sideXOk: ctx.isWalkable(player.mapId, destTileX, from.tileY, from.z),
+            sideYOk: ctx.isWalkable(player.mapId, from.tileX, destTileY, from.z),
+        };
+    }
+    console.warn('[MOVE_INVALID_STEP_DEBUG]', debug);
+}
+
 export function handleMove(
     ctx: MoveHandlerContext,
     socket: WebSocket,
@@ -133,6 +182,17 @@ export function handleMove(
                     : undefined,
             });
             if (!derived.ok) {
+                logMoveInvalidStepDebug(
+                    ctx,
+                    player,
+                    msg,
+                    from,
+                    derived.to.tileX,
+                    derived.to.tileY,
+                    derived.to.z,
+                    moveDirection8,
+                    { code: derived.code ?? 'INVALID_STEP' }
+                );
                 ctx.rejectMove(
                     player,
                     derived.code ?? 'INVALID_STEP',
@@ -262,6 +322,19 @@ export function handleMove(
                     : undefined
             );
             if (!stepCheck.ok) {
+                if (msg.type === 'move') {
+                    logMoveInvalidStepDebug(
+                        ctx,
+                        player,
+                        msg,
+                        from,
+                        to.tileX,
+                        to.tileY,
+                        to.z,
+                        moveDirection8,
+                        { code: stepCheck.code ?? 'INVALID_STEP', legacyTileStep: true }
+                    );
+                }
                 ctx.rejectMove(
                     player,
                     stepCheck.code ?? 'INVALID_STEP',

@@ -158,6 +158,23 @@ export class RoomCreatureManager {
         return { tileX: creature.tileX, tileY: creature.tileY, z: creature.z };
     }
 
+    isTileOccupiedByCreature(
+        room: string,
+        tileX: number,
+        tileY: number,
+        z: number
+    ): boolean {
+        const state = this.rooms.get(room);
+        if (!state) return false;
+        return state.creatures.some(
+            (c) =>
+                !c.isDead &&
+                c.tileX === tileX &&
+                c.tileY === tileY &&
+                c.z === z
+        );
+    }
+
     start(): void {
         if (this.tickTimer) return;
         this.tickTimer = setInterval(() => this.tick(Date.now()), 50);
@@ -542,8 +559,10 @@ export class RoomCreatureManager {
                     !this.isPlayerAt(players, tx, ty, creature.z) &&
                     !this.isCreatureAt(state.creatures, tx, ty, creature.z, creature.id);
 
-                // Meta = tile livre (como OTC canWalkTo — sem creature no destino).
-                const canGoalTile = canStepTo;
+                // Meta adjacente: terreno livre, nunca o tile do jogador (outros mobs não bloqueiam meta).
+                const canGoalTile = (tx: number, ty: number) =>
+                    canWalkTerrain(tx, ty) &&
+                    (tx !== target.tileX || ty !== target.tileY);
 
                 const mobState = {
                     tileX: creature.tileX,
@@ -571,6 +590,9 @@ export class RoomCreatureManager {
                 creature.reactAfterMs = mobState.reactAfterMs;
 
                 if (step) {
+                    if (this.isPlayerAt(players, mobState.tileX, mobState.tileY, creature.z)) {
+                        continue;
+                    }
                     creature.tileX = mobState.tileX;
                     creature.tileY = mobState.tileY;
                     creature.lastAggroMoveTime = mobState.lastAggroMoveTime;

@@ -1210,11 +1210,13 @@ function handleMovementRejected(code: string, rejectedSeq?: number): void {
     gridMovement.activeStepFacing = null;
     gridMovement.activeStepDirection = null;
     resetGridMovementInputState(gridMovement);
-    clearMovementInputBuffer(movementInputBuffer);
-    clearAutoWalk(autoWalkState);
 
     if (code === 'MOVEMENT_TOO_FAST') {
+        clearMovementInputBuffer(movementInputBuffer);
+        clearAutoWalk(autoWalkState);
         movementTooFastThrottleUntilMs = performance.now() + 120;
+    } else if (code === 'INVALID_STEP') {
+        movementTooFastThrottleUntilMs = performance.now() + 80;
     }
 
     rollbackLocalPlayerToLastServerAck();
