@@ -1,7 +1,7 @@
 {
   "name": "tibia-web-engine",
   "private": true,
-  "version": "0.1.4",
+  "version": "0.1.5",
   "type": "module",
   "main": "desktop/electron/dist/main.js",
   "scripts": {
