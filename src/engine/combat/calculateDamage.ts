@@ -3,7 +3,7 @@
  */
 export function calculateMeleeDamage(meleeSkill: number, defenseValue: number = 0): { min: number; max: number; actual: number } {
   const max = Math.max(1, Math.round(meleeSkill * 2));
-  const min = Math.max(1, Math.round(meleeSkill * 0.5));
+  const min = Math.max(1, Math.round(meleeSkill * 1));
   
   const raw = Math.floor(Math.random() * (max - min + 1)) + min;
   const actual = Math.max(0, raw - defenseValue);
@@ -16,7 +16,7 @@ export function calculateMeleeDamage(meleeSkill: number, defenseValue: number = 
  */
 export function calculateDistanceDamage(distSkill: number, defenseValue: number = 0): { min: number; max: number; actual: number } {
   const max = Math.max(1, Math.round(distSkill * 2.5));
-  const min = Math.max(1, Math.round(distSkill * 0.2));
+  const min = Math.max(1, Math.round(distSkill * 1.2));
   
   const raw = Math.floor(Math.random() * (max - min + 1)) + min;
   const actual = Math.max(0, raw - defenseValue);

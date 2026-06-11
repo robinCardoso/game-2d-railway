@@ -10,9 +10,13 @@ import { VocationStore } from './game/VocationStore.js';
 import { runMigrations } from './db/migrate.js';
 import { env } from './config/env.js';
 import { getServerGameRates } from './config/gameRates.js';
+import { paths } from './config/paths.js';
+import { syncBuiltinMapsFromRepo } from './config/mapVolumeSync.js';
 import { initServerMapRegistry } from './mapRegistry.js';
 
 await runMigrations();
+
+syncBuiltinMapsFromRepo(paths.repoMapsDir, paths.mapsDir);
 
 const mapEntries = initServerMapRegistry();
 console.log(`[game-2d-server] Mapas registrados: ${mapEntries.map((m) => m.id).join(', ')}`);

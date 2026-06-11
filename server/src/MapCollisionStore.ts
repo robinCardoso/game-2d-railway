@@ -1,6 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { isTileWalkable, type WorldMapGrids } from '../../shared/tileWalkable.js';
+import {
+    EMPTY_TILE_ID,
+    tilePropsAt,
+    type WorldMapGrids,
+} from '../../shared/tileWalkable.js';
 import { SERVER_MAP_SIZE } from '../../shared/protocol.js';
 import { getServerMapRegistry } from './mapRegistry.js';
 import { paths } from './config/paths.js';
@@ -35,10 +39,15 @@ interface ServerTileMetadata {
     houseId?: number;
 }
 
+interface MapTileRef {
+    ref?: string;
+}
+
 interface LoadedCollisionMap {
     mapId: string;
     size: number;
     worldMap: WorldMapGrids;
+    tileRefs: Record<string, MapTileRef>;
     spawns: MapSpawnEntry[];
     playerSpawn?: MapPlayerSpawn;
     items: ItemOverlayByFloor;
@@ -47,7 +56,7 @@ interface LoadedCollisionMap {
 
 export class MapCollisionStore {
     private templates = new Map<string, LoadedCollisionMap>();
-    private tileProperties: Record<string, { walkable?: boolean }> = {};
+    private tileProperties: Record<string, { walkable?: boolean; isStair?: boolean }> = {};
 
     async loadAll(): Promise<void> {
         await this.loadTileProperties();
@@ -61,7 +70,7 @@ export class MapCollisionStore {
         try {
             const raw = JSON.parse(await readFile(paths.tilePropertiesPath, 'utf8')) as Record<
                 string,
-                { walkable?: boolean }
+                { walkable?: boolean; isStair?: boolean }
             >;
             this.tileProperties = raw ?? {};
         } catch (err) {
@@ -77,6 +86,68 @@ export class MapCollisionStore {
         // Fallback: IDs legados sem ref
         if (tileId === 42) return false;
         return true;
+    }
+
+    /** Base layer — alinhado ao cliente (`queryWalkable` + `tile_properties`). */
+    private resolveBaseTileProps(
+        tileId: number,
+        tileRefs: Record<string, MapTileRef>
+    ): { walkable: boolean; isStair: boolean } {
+        if (tileId === EMPTY_TILE_ID) {
+            return { walkable: false, isStair: false };
+        }
+
+        const ref = tileRefs[String(tileId)]?.ref;
+        if (ref && ref in this.tileProperties) {
+            const props = this.tileProperties[ref];
+            return {
+                walkable: props?.walkable !== false,
+                isStair: !!props?.isStair,
+            };
+        }
+
+        return tilePropsAt(tileId);
+    }
+
+    private isBaseTileWalkable(
+        worldMap: WorldMapGrids,
+        mapSize: number,
+        tileX: number,
+        tileY: number,
+        z: number,
+        tileRefs: Record<string, MapTileRef>,
+        minFloorZ = -7,
+        maxFloorZ = 7
+    ): boolean {
+        if (
+            tileX < 0 ||
+            tileY < 0 ||
+            tileX >= mapSize ||
+            tileY >= mapSize ||
+            z < minFloorZ ||
+            z > maxFloorZ
+        ) {
+            return false;
+        }
+
+        const floor = worldMap[z];
+        if (!floor?.[tileY]) return false;
+
+        const tid = floor[tileY][tileX];
+        const props = this.resolveBaseTileProps(tid, tileRefs);
+
+        if (tid !== EMPTY_TILE_ID) {
+            return props.walkable;
+        }
+
+        if (z > minFloorZ) {
+            const below = worldMap[z - 1]?.[tileY]?.[tileX];
+            if (below !== undefined && this.resolveBaseTileProps(below, tileRefs).isStair) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private parseItemOverlay(
@@ -170,11 +241,13 @@ export class MapCollisionStore {
         const items = this.parseItemOverlay(raw, size);
 
         const metadata = raw.metadata ?? {};
+        const tileRefs = (raw.tileRefs ?? {}) as Record<string, MapTileRef>;
 
         this.templates.set(mapId, {
             mapId,
             size,
             worldMap,
+            tileRefs,
             spawns,
             playerSpawn,
             items,
@@ -243,7 +316,9 @@ export class MapCollisionStore {
     isWalkable(mapId: string, tileX: number, tileY: number, z: number): boolean {
         const tpl = this.templates.get(mapId);
         if (!tpl) return true;
-        if (!isTileWalkable(tpl.worldMap, tpl.size, tileX, tileY, z)) return false;
+        if (!this.isBaseTileWalkable(tpl.worldMap, tpl.size, tileX, tileY, z, tpl.tileRefs)) {
+            return false;
+        }
 
         const item = tpl.items[z]?.[`${tileX},${tileY}`];
         if (item && !item.walkable) return false;

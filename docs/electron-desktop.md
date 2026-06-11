@@ -49,6 +49,8 @@ npm run electron:check   # build + compile + check-electron-asset-bundle
 
 **Regra:** `VITE_USE_LOOSE_ASSETS=true` só no `.env` de **dev Studio** (`npm run dev`). **Nunca** no build de produção/Electron.
 
+**Após editar mapas** (`public/maps/` ou volume local): rode `npm run pack-assets` (ou `npm run build`) antes de `electron:build` / `electron:check` — o instalador embute `assets.pak` com os JSON do build, não os arquivos soltos do dev.
+
 ---
 
 ## 2. URLs em `file://` (Electron)
@@ -170,6 +172,8 @@ VITE_USE_LOOSE_ASSETS=true
 # NÃO ativar sem Postgres local:
 # VITE_USE_SERVER_WS_TICKET=true
 ```
+
+**Paridade de mapas (dev):** use `VITE_WS_BASE_URL=ws://localhost:8787` no `electron:dev` para que colisão e spawn venham do servidor local — o mesmo `MapCollisionStore` que produção. Sem WS local, o cliente usa colisão offline e pode divergir do servidor após edições de mapa.
 
 | Variável | Dev | Produção / Electron build |
 |----------|-----|---------------------------|

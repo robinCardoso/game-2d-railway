@@ -112,6 +112,8 @@ O servidor grava em `/data`:
 
 Na primeira execução, o boot copia seeds do repositório para `/data` se os diretórios estiverem vazios.
 
+**Mapas builtin no deploy:** a cada boot, `mapVolumeSync.ts` compara SHA-256 dos mapas versionados (`rookgaard`, `mainland`, `orc_cave`) entre `public/maps/` e `/data/maps/`. Se o hash do repo for diferente, a cópia no volume é sobrescrita — garante paridade estrutural após deploy sem apagar mapas custom. Mapas editados só no Studio (fora da lista builtin) permanecem no volume.
+
 **Magias em produção:** magias criadas só no Studio ficam no volume (`spell_catalog.json` + PNGs uploadados). Ícones versionados no git entram via seed de `tiles/effects/` no deploy. Ver [spell-system.md](./spell-system.md).
 
 ### 4. Variáveis de ambiente
@@ -287,7 +289,7 @@ O frontend envia `Authorization: Bearer <token>` em rotas autenticadas (`apiFetc
 | `/data/tiles/effects/spells/icons/` | Ícones hotbar 32×32 | `/tiles/effects/spells/icons/...` |
 | `/data/tiles/effects/spells/cast/` | VFX conjuração | `/tiles/effects/spells/cast/...` |
 
-**Baked no build (`dist/`):** HTML, JS, CSS, cópia inicial de `public/maps/` e catálogos. Edições vão para o volume quando `DATA_ROOT` está definido.
+**Baked no build (`dist/`):** HTML, JS, CSS, cópia inicial de `public/maps/` e catálogos. Edições vão para o volume quando `DATA_ROOT` está definido. Mapas builtin são re-sincronizados do repo no boot do servidor (ver `mapVolumeSync.ts` acima).
 
 ---
 
