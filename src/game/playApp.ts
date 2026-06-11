@@ -72,6 +72,7 @@ import { GameEntity } from '../character/entity';
 import { respawnEntitiesFromSpawns } from '../character/respawnEntities';
 import { loadCreaturePresets } from '../editor/creaturePresets';
 import { loadItemCatalog } from '../game-data/itemCatalog';
+import { assetLoader } from '../game-data/assetLoader';
 import { createDefaultCharacterSpeed, type CharacterSpeedState } from '../character/movementSpeed';
 import { SpeedBuffManager } from '../character/speedBuffs';
 import { resolveFullStepDuration } from '../character/characterMovement';
@@ -1986,6 +1987,7 @@ export async function startPlay(
         setWorldEntryStage('character', 'active', 'Carregando personagem...');
     }
 
+    await assetLoader.initialize();
     await loadRuntimeVocations();
     await loadSpellCatalog();
     await loadClientGameRates();

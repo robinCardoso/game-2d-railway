@@ -134,6 +134,23 @@ Na primeira execução, o boot copia seeds do repositório para `/data` se os di
 | `STUDIO_MOCK_GM` | Dev only | `true` = APIs Studio sem JWT (não usar em prod) |
 | `STUDIO_ENABLED` | Prod | `false` por padrão — bloqueia APIs de escrita GM; leitura (`list-maps`, etc.) permanece |
 
+**Empacotamento `assets.pak`** (build Railway + GitHub Actions — ver [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)):
+
+| Variável | Onde | Descrição |
+|----------|------|-----------|
+| `ASSET_PACK_PRIVATE_KEY` | Railway Variables + GitHub Secret | PEM ou base64 da chave privada ECDSA — **nunca** commitar `private_key.pem` |
+| `ASSET_PACK_PUBLIC_KEY` | Railway Variables + GitHub Secret | PEM ou base64 da chave pública (par da privada) |
+| `VITE_USE_LOOSE_ASSETS` | Dev local (`.env`) | `true` = sprites/JSON soltos (Studio hot-reload); omitir em produção |
+
+Configurar secrets no GitHub (repo → Settings → Secrets → Actions):
+
+```powershell
+gh auth login
+.\scripts\set-pack-github-secrets.ps1   # grava PEM em base64 (recomendado no GitHub)
+```
+
+Com só `ASSET_PACK_PRIVATE_KEY`, o `pack-assets.mjs` deriva a chave pública automaticamente.
+
 **Build do frontend** (variáveis `VITE_*` no Railway ou CI):
 
 | Variável build | Descrição |

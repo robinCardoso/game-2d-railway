@@ -1,3 +1,4 @@
+import { assetLoader } from '../../game-data/assetLoader';
 import { markHudUpdate } from '../debug/playPerformanceMonitor';
 import type { SpellBarSlot } from './playSpellBar';
 import { getSpellForSlot } from './playSpellBar';
@@ -48,7 +49,7 @@ function refreshSpellSlotContent(slot: SpellBarSlot): void {
     const spell = getSpellForSlot(slot);
 
     if (iconImg) {
-        iconImg.src = spell?.icon ?? '/ui/play-hud/combat/slot_empty.svg';
+        iconImg.src = assetLoader.resolveAssetUrl(spell?.icon ?? '/ui/play-hud/combat/slot_empty.svg');
         iconImg.alt = spell?.name ?? '';
     }
     if (btn) {

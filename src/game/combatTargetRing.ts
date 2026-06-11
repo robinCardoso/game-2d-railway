@@ -2,8 +2,8 @@
  * Anel de seleção de alvo no chão (estilo Tibia) — strip 3 frames em
  * `tiles/effects/combat/target_ring.png` + JSON de config.
  */
+import { assetLoader } from '../game-data/assetLoader';
 import { removeChromaKey } from '../utils/imageProcessor';
-import { resolveApiUrl } from '../shared/apiUrl';
 
 export interface CombatTargetRingConfig {
     sheetUrl: string;
@@ -47,22 +47,19 @@ export function ensureCombatTargetRingLoaded(): void {
     if (loadStarted) return;
     loadStarted = true;
 
-    void fetch(resolveApiUrl('/tiles/effects/combat/target_ring.json'))
-        .then((res) => (res.ok ? res.json() : null))
-        .then((json: Partial<CombatTargetRingConfig> | null) => {
-            const img = new Image();
-            img.onload = () => applySheetFromImage(img, json);
-            img.onerror = () => {
-                console.warn('[combatTargetRing] PNG não encontrado:', config.sheetUrl);
-            };
-            const sheetUrl = (json?.sheetUrl as string | undefined) ?? DEFAULT_CONFIG.sheetUrl;
-            img.src = resolveApiUrl('/' + sheetUrl.replace(/^\//, ''));
-        })
-        .catch(() => {
-            const img = new Image();
-            img.onload = () => applySheetFromImage(img);
-            img.src = resolveApiUrl('/' + DEFAULT_CONFIG.sheetUrl.replace(/^\//, ''));
-        });
+    void (async () => {
+        await assetLoader.initialize();
+        const json = await assetLoader.fetchJson<Partial<CombatTargetRingConfig>>(
+            'tiles/effects/combat/target_ring.json'
+        );
+        const sheetUrl = (json?.sheetUrl as string | undefined) ?? DEFAULT_CONFIG.sheetUrl;
+        const img = await assetLoader.loadImageElement('/' + sheetUrl.replace(/^\//, ''));
+        if (img.naturalWidth > 0) {
+            applySheetFromImage(img, json);
+            return;
+        }
+        console.warn('[combatTargetRing] PNG não encontrado:', sheetUrl);
+    })();
 }
 
 function drawProceduralRing(

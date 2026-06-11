@@ -12,7 +12,7 @@ import {
     type VocationsMap,
 } from '../game-data/vocationUi';
 import { getRuntimeVocations, loadRuntimeVocations } from '../game-data/vocationRegistry';
-import { resolveApiUrl } from '../shared/apiUrl';
+import { assetLoader } from '../game-data/assetLoader';
 
 const session = await requireAuth();
 
@@ -111,11 +111,11 @@ async function drawStaticCharacterPreview(canvas: HTMLCanvasElement, spriteSheet
     const img = new Image();
     img.crossOrigin = 'anonymous';
 
-    const loaded = await new Promise<boolean>((resolve) => {
+    const loaded = new Promise<boolean>((resolve) => {
         img.onload = () => resolve(true);
         img.onerror = () => resolve(false);
     });
-    img.src = resolveApiUrl('/' + cleanPath);
+    img.src = assetLoader.resolveAssetUrl('/' + cleanPath);
     if (!(await loaded)) return;
 
     const frameWidth = config?.frameWidth ?? 32;
@@ -202,7 +202,7 @@ async function startAnimatedPreview(outfit: OutfitPreset): Promise<void> {
         img.onerror = () => resolve(false);
     });
 
-    img.src = resolveApiUrl('/' + outfit.spriteSheetUrl.replace(/^\//, ''));
+    img.src = assetLoader.resolveAssetUrl('/' + outfit.spriteSheetUrl.replace(/^\//, ''));
     const loaded = await imageLoaded;
     if (!loaded || thisAnimId !== previewAnimId) return;
 

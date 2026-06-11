@@ -11,7 +11,7 @@ import {
 import type { CharacterRow } from '../shared/types';
 import { track } from '../shared/analytics';
 import { resolveAnimationSourceRect } from '../character/sheetFrameLayout';
-import { resolveApiUrl } from '../shared/apiUrl';
+import { assetLoader } from '../game-data/assetLoader';
 import {
     hideWorldEntryOverlay,
     markWorldEntryPending,
@@ -242,7 +242,7 @@ async function drawCharacterPreview(canvas: HTMLCanvasElement, spriteSheetUrl: s
         img.onload = () => resolve(true);
         img.onerror = () => resolve(false);
     });
-    img.src = resolveApiUrl('/' + cleanPath);
+    img.src = assetLoader.resolveAssetUrl('/' + cleanPath);
     if (!(await loaded)) return;
 
     const frameWidth = config?.frameWidth ?? 32;

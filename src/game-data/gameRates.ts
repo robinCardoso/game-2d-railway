@@ -5,6 +5,7 @@ import {
     type GameRatesConfig,
 } from '../../shared/gameRates';
 import { resolveApiUrl } from '../shared/apiUrl';
+import { assetLoader } from './assetLoader';
 
 let cachedRates: GameRatesConfig | null = null;
 let serverAuthoritativeRate: number | null = null;
@@ -28,10 +29,18 @@ export async function loadClientGameRates(): Promise<GameRatesConfig> {
     }
 
     try {
-        const res = await fetch(resolveApiUrl('/game_rates.json'), { cache: 'no-cache' });
-        if (res.ok) {
-            cachedRates = sanitizeGameRatesDocument(await res.json());
-            return cachedRates;
+        if (assetLoader.isPackaged()) {
+            const raw = await assetLoader.getJson<any>('game_rates.json');
+            if (raw) {
+                cachedRates = sanitizeGameRatesDocument(raw);
+                return cachedRates;
+            }
+        } else {
+            const res = await fetch(resolveApiUrl('/game_rates.json'), { cache: 'no-cache' });
+            if (res.ok) {
+                cachedRates = sanitizeGameRatesDocument(await res.json());
+                return cachedRates;
+            }
         }
     } catch {
         /* offline / dev */

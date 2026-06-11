@@ -37,6 +37,7 @@ import {
 } from './game-data/vocationRegistry';
 import { VOCATIONS_UPDATED_EVENT, type VocationsMap } from './game-data/vocationUi';
 import { loadItemCatalog } from './game-data/itemCatalog';
+import { assetLoader } from './game-data/assetLoader';
 import {
     collectBorderDrawTileIdsCached,
     buildBorderMaskTileIndex,
@@ -3350,6 +3351,7 @@ async function tryRestoreStudioSession(): Promise<boolean> {
 
 async function bootstrapApp(): Promise<void> {
     try {
+        await assetLoader.initialize();
         await tileRegistryReady;
         await loadPlayBorderConfig();
         invalidateBorderDrawCache();

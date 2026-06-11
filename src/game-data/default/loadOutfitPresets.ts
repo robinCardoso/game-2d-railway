@@ -11,14 +11,21 @@ export type OutfitPreset = {
   showInCreation?: boolean;
 };
 
+import { assetLoader } from '../assetLoader';
+
 export async function loadOutfitPresets(): Promise<OutfitPreset[]> {
-  const response = await fetch(resolveApiUrl('/outfit_presets.json'));
-
-  if (!response.ok) {
-    throw new Error('Erro ao carregar outfit_presets.json');
+  let outfits: OutfitPreset[];
+  if (assetLoader.isPackaged()) {
+    const raw = await assetLoader.getJson<OutfitPreset[]>('outfit_presets.json');
+    if (!raw) throw new Error('Erro ao carregar outfit_presets.json do pacote assets.pak');
+    outfits = raw;
+  } else {
+    const response = await fetch(resolveApiUrl('/outfit_presets.json'));
+    if (!response.ok) {
+      throw new Error('Erro ao carregar outfit_presets.json');
+    }
+    outfits = (await response.json()) as OutfitPreset[];
   }
-
-  const outfits = (await response.json()) as OutfitPreset[];
 
   // Filtra apenas os que estão ativos ou habilitados (se enabled não for falso)
   return outfits.filter((outfit) => outfit.enabled !== false);

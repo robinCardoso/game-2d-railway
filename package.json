@@ -9,9 +9,11 @@
     "dev:web": "vite",
     "dev:server": "npm run dev --prefix server",
     "server": "npm run start --prefix server",
-    "build": "tsc && vite build && npm run build --prefix server",
+    "build:assets": "node scripts/write-pack-public-key.mjs && node scripts/pack-assets.mjs",
+    "build": "npm run build:assets && tsc && vite build && npm run build --prefix server",
     "start": "npm run start --prefix server",
     "start:railway": "npm run build && npm run start",
+    "pack": "npm run build:assets",
     "preview": "vite preview",
     "test": "vitest run && node scripts/check-calibrator-listeners.mjs",
     "migrate:character-calibration": "node scripts/migrate-character-calibration.mjs",
@@ -57,7 +59,9 @@
       "dist/**/*",
       "desktop/electron/dist/**/*",
       "package.json",
-      "!desktop/electron/dist/**/*.ts"
+      "!desktop/electron/dist/**/*.ts",
+      "!private_key.pem",
+      "!public_key.pem"
     ],
     "win": {
       "target": [
