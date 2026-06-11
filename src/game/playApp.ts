@@ -293,7 +293,6 @@ let movementTooFastThrottleUntilMs = 0;
 let pumpSendCooldownUntilMs = 0;
 const movementInputBuffer = createMovementInputBuffer();
 const autoWalkState = createAutoWalkState();
-let pendingOutboundMoveSeq: number | undefined;
 let frameDepthDrawables = 0;
 let frameSortHits = 0;
 let frameSortMisses = 0;
@@ -1237,7 +1236,6 @@ function revertLastOptimisticStep(rejectedSeq?: number): void {
         clearPendingFromSeq(movementPrediction, rejectedSeq);
     }
     positionCorrectionSlide.active = false;
-    pendingOutboundMoveSeq = undefined;
     gridMovement.stepping = false;
     gridMovement.activeStepFacing = null;
     gridMovement.activeStepDirection = null;
@@ -1275,7 +1273,6 @@ function handleMovementRejected(code: string, rejectedSeq?: number): void {
     }
 
     positionCorrectionSlide.active = false;
-    pendingOutboundMoveSeq = undefined;
     gridMovement.stepping = false;
     gridMovement.activeStepFacing = null;
     gridMovement.activeStepDirection = null;
@@ -1310,7 +1307,6 @@ function clearStalePendingMovement(nowMs: number): void {
     if (!head) return;
     if (nowMs - head.committedAtMs < 1000) return;
     movementPrediction.pending.length = 0;
-    pendingOutboundMoveSeq = undefined;
 }
 
 /** Corrige tile lógico/visual quando diverge do último ack sem passo em andamento. */
@@ -1458,9 +1454,6 @@ function update(dtMs: number): void {
                 resolveOutgoingStepDurationMs: () =>
                     getStepDurationForTile(player.tileX, player.tileY, player.worldZ),
                 validateOutgoingMove: validateOutgoingNetworkMove,
-                onSeqAssigned: (seq) => {
-                    pendingOutboundMoveSeq = seq;
-                },
                 onStepSent: (stepDurationMs, sentAtMs) => {
                     pumpSendCooldownUntilMs =
                         sentAtMs +
@@ -2126,7 +2119,6 @@ function setupNetwork(
                 confirmServerTile(movementPrediction, pos.tileX, pos.tileY, pos.z);
                 updateLastServerAck(pos.tileX, pos.tileY, pos.z);
             }
-            pendingOutboundMoveSeq = undefined;
         },
         onMoveAck: (pos) => {
             if (pos.seq !== undefined && pos.seq < lastServerAck.seq) return;
@@ -2141,7 +2133,6 @@ function setupNetwork(
                     pos.tileY,
                     pos.z
                 );
-                pendingOutboundMoveSeq = undefined;
             } else {
                 confirmServerTile(movementPrediction, pos.tileX, pos.tileY, pos.z);
             }
