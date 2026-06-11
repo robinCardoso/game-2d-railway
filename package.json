@@ -1,7 +1,7 @@
 {
   "name": "tibia-web-engine",
   "private": true,
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "module",
   "main": "desktop/electron/dist/main.js",
   "scripts": {
@@ -10,7 +10,7 @@
     "dev:server": "npm run dev --prefix server",
     "server": "npm run start --prefix server",
     "build:assets": "node scripts/write-pack-public-key.mjs && node scripts/pack-assets.mjs",
-    "build": "npm run build:assets && tsc && vite build && npm run build --prefix server",
+    "build": "npm run build:assets && tsc && vite build && npm run check --prefix server && npm run build --prefix server",
     "start": "npm run start --prefix server",
     "start:railway": "npm run build && npm run start",
     "pack": "npm run build:assets",

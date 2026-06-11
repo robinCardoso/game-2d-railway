@@ -1348,3 +1348,20 @@ Ver **[game-rates.md](./game-rates.md)**.
 - [ ] Alt-tab — câmera estável
 - [ ] Dev: **não** usar `VITE_USE_SERVER_WS_TICKET=true` sem `DATABASE_URL`
 
+---
+
+## 59. Estabilização build + MOVEMENT_TOO_FAST (2026-06-10)
+
+### 59.1 Build servidor (Railway)
+- `server/tsconfig.build.json` — emit `dist/` (`noEmit: false`)
+- `server/package.json`: `check` (`tsc --noEmit`), `build` → `tsconfig.build.json`
+- Raiz `npm run build`: `check` + `build` do server antes do deploy
+
+### 59.2 Movimento sem `position_correction`
+- Removida validação WS contra `serverTile` stale; `onPositionSynced` + `confirmServerTile`
+- `MOVEMENT_TOO_FAST`: `handleMovementTooFastSoft()` — reverte otimismo, throttle 120 ms, sem snap visual
+- `INVALID_*`: `rollbackLocalMovementToServer()` (snap autoritativo)
+
+### 59.3 Electron updater
+- Já ligado: `main.ts` (`registerUpdaterIpcHandlers`, `setupAutoUpdater`), `preload.ts` (`electronAPI.updater`), `desktopUpdateToast.ts` (check ~8 s)
+

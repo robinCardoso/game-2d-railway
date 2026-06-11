@@ -71,8 +71,8 @@ sequenceDiagram
 
 - Valida tile, passo adjacente, walkable, sala `mapId@instanceId`.
 - **Rate limit:** `lastMoveAcceptedAtMs` — intervalo mínimo `stepDurationMs × 0.80` entre passos (`MOVEMENT_TOO_FAST`).
-- **`MOVEMENT_TOO_FAST`:** envia só `error` (sem `position_correction`) — evita rubber-band em latência alta; o cliente reenvia o tile com `forceResyncPosition()`.
-- **`INVALID_STEP` / `NOT_WALKABLE` / `INVALID_TILE`:** só `error` (sem `position_correction`); cliente valida passo antes do WS (`validateOutgoingMove`) e faz rollback suave ao tile autoritativo (`onMovementRejected`).
+- **`MOVEMENT_TOO_FAST`:** envia só `error` (sem `position_correction`) — evita rubber-band em latência alta; cliente: `forceResyncPosition()` + `handleMovementTooFastSoft()` (reverte tile otimista, throttle ~120 ms, **sem** teleporte visual).
+- **`INVALID_STEP` / `NOT_WALKABLE` / `INVALID_TILE`:** só `error` (sem `position_correction`); cliente valida passo antes do WS (`validateOutgoingMove`) e faz rollback ao tile autoritativo (`rollbackLocalMovementToServer`).
 - **Anti-spam rejeição:** `rejectMove()` — no máximo um par `error` (+ correção quando aplicável) a cada 400ms **por jogador**; demais `move` inválidos no intervalo são ignorados silenciosamente.
 - Guarda `lastStepDurationMs` do cliente e repassa em `player_moved`.
 - Kick por `characterId` duplicado na mesma conexão.

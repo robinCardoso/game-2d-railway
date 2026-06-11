@@ -255,6 +255,10 @@ let movementPrediction: ClientMovementPrediction = createClientMovementPredictio
 });
 const playCameraJuice = createPlayCameraJuiceState();
 let lastLoopMs = 0;
+/** Após `MOVEMENT_TOO_FAST` — evita spam de `move` sem teleporte visual. */
+let movementTooFastThrottleUntilMs = 0;
+/** Tile autoritativo antes do último `onPositionSynced` (reverte otimismo se servidor rejeitar). */
+let lastOutboundSyncedPrevTile: { tileX: number; tileY: number; z: number } | null = null;
 let frameDepthDrawables = 0;
 let frameSortHits = 0;
 let frameSortMisses = 0;
@@ -1040,6 +1044,34 @@ function validateSteppingDestForNetwork(tileX: number, tileY: number, z: number)
     return isWalkable(wx, wy, z).walkable;
 }
 
+/** `MOVEMENT_TOO_FAST` — servidor sem `position_correction`; reverte otimismo e segura input. */
+function handleMovementTooFastSoft(): void {
+    gridMovement.stepping = false;
+    gridMovement.activeStepFacing = null;
+    resetGridMovementInputState(gridMovement);
+    clearPlayMovementInput();
+
+    if (lastOutboundSyncedPrevTile) {
+        confirmServerTile(
+            movementPrediction,
+            lastOutboundSyncedPrevTile.tileX,
+            lastOutboundSyncedPrevTile.tileY,
+            lastOutboundSyncedPrevTile.z
+        );
+        lastOutboundSyncedPrevTile = null;
+    }
+
+    movementTooFastThrottleUntilMs = performance.now() + 120;
+}
+
+function handleMovementRejected(code: string): void {
+    if (code === 'MOVEMENT_TOO_FAST') {
+        handleMovementTooFastSoft();
+        return;
+    }
+    rollbackLocalMovementToServer();
+}
+
 /** Rollback sem slide quando o servidor rejeita passo (INVALID_STEP / NOT_WALKABLE). */
 function rollbackLocalMovementToServer(): void {
     const { serverTileX, serverTileY, serverZ } = movementPrediction;
@@ -1114,6 +1146,9 @@ function update(dtMs: number): void {
 
     const correctionSliding = tickPositionCorrectionSlide(positionCorrectionSlide, player, nowMs);
     let editingFloorResult = editingFloor;
+    if (!correctionSliding && performance.now() < movementTooFastThrottleUntilMs) {
+        clearPlayMovementInput();
+    }
     if (!correctionSliding) {
         const result = PlayerMovement.updateMovement({
             keys,
@@ -1769,11 +1804,16 @@ function setupNetwork(
         }),
         isMovementStepping: () => gridMovement.stepping,
         onPositionSynced: (pos) => {
+            lastOutboundSyncedPrevTile = {
+                tileX: movementPrediction.serverTileX,
+                tileY: movementPrediction.serverTileY,
+                z: movementPrediction.serverZ,
+            };
             confirmServerTile(movementPrediction, pos.tileX, pos.tileY, pos.z);
         },
         validateOutgoingMove: validateOutgoingNetworkMove,
         validateSteppingDest: validateSteppingDestForNetwork,
-        onMovementRejected: rollbackLocalMovementToServer,
+        onMovementRejected: handleMovementRejected,
         onPositionCorrection: (pos) => {
             if (pos.mapId !== (currentMapId ?? char.spawnMapId)) return;
             const targetX = pos.tileX * TILE_SIZE_SCREEN;
@@ -1786,8 +1826,10 @@ function setupNetwork(
                 Math.abs(player.worldY - targetY) < 0.5;
             if (alreadyAligned) {
                 confirmServerTile(movementPrediction, pos.tileX, pos.tileY, pos.z);
+                lastOutboundSyncedPrevTile = null;
                 return;
             }
+            lastOutboundSyncedPrevTile = null;
             const reconcile = reconcileMovementPrediction(
                 movementPrediction,
                 pos.tileX,

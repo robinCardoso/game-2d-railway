@@ -201,6 +201,8 @@ npm install && npm install --prefix server && npm run build
 npm run start --prefix server
 ```
 
+O `npm run build` da raiz roda `tsc` (check) + `vite build` + `npm run check --prefix server` + `npm run build --prefix server` (`server/tsconfig.build.json` → `server/dist/`).
+
 ### 6. Conta GM
 
 Registre com e-mail `*@gm.dev` (ex.: `gm@gm.dev`) — o servidor define `role=gm` e `can_access_studio=true` automaticamente.

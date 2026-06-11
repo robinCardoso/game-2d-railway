@@ -706,19 +706,15 @@ export class GameNetClient {
                 break;
             case 'error':
                 console.warn(`[GameNet] ${msg.code}: ${msg.message}`);
-                if (
-                    msg.code === 'MOVEMENT_TOO_FAST' ||
+                if (msg.code === 'MOVEMENT_TOO_FAST') {
+                    this.forceResyncPosition();
+                    this.options.onMovementRejected?.(msg.code);
+                } else if (
                     msg.code === 'INVALID_STEP' ||
                     msg.code === 'NOT_WALKABLE' ||
                     msg.code === 'INVALID_TILE'
                 ) {
                     this.forceResyncPosition();
-                }
-                if (
-                    msg.code === 'INVALID_STEP' ||
-                    msg.code === 'NOT_WALKABLE' ||
-                    msg.code === 'INVALID_TILE'
-                ) {
                     this.options.onMovementRejected?.(msg.code);
                 }
                 this.options.onServerError?.({
