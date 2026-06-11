@@ -2,7 +2,7 @@
 
 Documento de **auditoria**: o que foi implementado na sessão jun/2026, onde está no código e qual doc cobre cada parte.
 
-Última revisão: **2026-06-10**
+Última revisão: **2026-06-10** (incl. Electron desktop §10)
 
 ---
 
@@ -90,6 +90,23 @@ Documento de **auditoria**: o que foi implementado na sessão jun/2026, onde est
 | Testes server excluídos do `tsc` prod | ✅ | `server/tsconfig.json` — `src/**/*.test.ts` em `exclude` |
 | `grantKillExperience.test.ts` mock atualizado | ✅ | `ConnectedPlayer` completo |
 | Comandos npm novos | ✅ | `generate:spell-icons`, `generate:spell-cast-sprites` |
+| Check bundle Electron (anti loose) | ✅ | `check-electron-asset-bundle.mjs` em `electron:check` |
+| Sync versão desktop | ✅ | `sync-desktop-version.mjs`, `check-desktop-version-sync.mjs` |
+
+---
+
+## 10. Cliente desktop Electron (2026-06-10)
+
+**Doc completa:** [electron-desktop.md](./electron-desktop.md)
+
+| Item | Status | Código | Notas |
+|------|--------|--------|-------|
+| Sprites no instalador (`assets.pak`) | ✅ | `assetLoader.ts`, `check-electron-asset-bundle.mjs` | `VITE_USE_LOOSE_ASSETS=false` no build Electron |
+| URLs `file://` | ✅ | `resolvePublicAssetUrl()` em `apiUrl.ts` | Catálogos, HUD, auth, world entry |
+| Release GitHub automática | ✅ | `electron-release.yml`, `sync-desktop-version.mjs` | Bump em `.env.production` na `main` |
+| Auto-update com confirmação | ✅ | `updater.ts`, `desktopUpdateToast.ts` | Não é silencioso |
+| Lifecycle minimizar/restaurar | ✅ | `playApp.ts`, `electronLifecycle.ts` | blur ≠ minimize; snap câmera |
+| Predição movimento dev vs prod | ✅ | `confirmServerTile`, `isServerAuthoritativePosition()` | Dev: ticket local; prod: `POST /api/ws-ticket` |
 
 ---
 
@@ -112,11 +129,17 @@ npm test
 npm run generate:spell-icons      # PNG 32×32 + atualiza icon no spell_catalog.json
 npm run generate:spell-cast-sprites # strips VFX em tiles/effects/spells/cast/
 npm run dev                         # Vite + Express unificado
+npm run electron:dev                # dev desktop (API + Vite + Electron)
+npm run electron:check              # build + validação assets.pak (pré-release)
+npm run sync:desktop-version        # .env.production → package.json
+npm run electron:publish            # build + Release GitHub (local)
 ```
 
 Variáveis novas em `.env.example`:
 
 - `GAME_RATE_EXP` — multiplicador global de XP (servidor)
+- `VITE_BUILD_VERSION` — versão desktop (`.env.production`)
+- `VITE_USE_LOOSE_ASSETS` — só dev Studio; nunca no build Electron
 
 ---
 
@@ -130,4 +153,5 @@ Variáveis novas em `.env.example`:
 | [multiplayer-remote-players.md](./multiplayer-remote-players.md) | Remotos, AOI, movimento WS |
 | [analise-chatgpt.md](./analise-chatgpt.md) | Checklist escala OTC (P1) |
 | [studio-improvements-log.md](./studio-improvements-log.md) | Log histórico + checklist regressão mapa/sprites |
+| [electron-desktop.md](./electron-desktop.md) | Instalador Windows, pak, release CI, lifecycle |
 | [AGENTS.md](../AGENTS.md) | Guia rápido agentes + invariantes |

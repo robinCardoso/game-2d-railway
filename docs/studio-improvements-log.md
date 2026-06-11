@@ -1294,3 +1294,57 @@ Ver **[game-rates.md](./game-rates.md)**.
 - Evita falha de build Railway quando mocks de teste não batem com tipos de produção
 - `grantKillExperience.test.ts`: mock `ConnectedPlayer` completo
 
+---
+
+## 56. Electron — sprites no instalador (`assets.pak`) (2026-06-10)
+
+### 56.1 Problema
+- `.env` local com `VITE_USE_LOOSE_ASSETS=true` vazava no `electron:build` → bundle só com ramo loose; sprites não carregavam no `.exe` instalado.
+
+### 56.2 Solução
+- `electron:build` / `electron:check`: `cross-env VITE_USE_LOOSE_ASSETS=false`
+- `scripts/check-electron-asset-bundle.mjs` — falha se bundle tem early-return loose ou `dist/assets.pak` ausente
+- `resolvePublicAssetUrl()` em `src/shared/apiUrl.ts` — paths `/assets/`, `/tiles/` em `file://`
+
+### 56.3 Doc
+- **[electron-desktop.md](./electron-desktop.md)** §1–2
+
+### 56.4 Checklist
+- [ ] `npm run electron:check` verde
+- [ ] Instalador: log `[AssetLoader] Inicializado com sucesso!`
+
+---
+
+## 57. Electron — release automático GitHub (2026-06-10)
+
+### 57.1 Escopo
+- Versão desktop única: `VITE_BUILD_VERSION` em `.env.production` → `package.json` via `sync-desktop-version.mjs`
+- Workflow `.github/workflows/electron-release.yml` — Windows, publish Release no bump de versão
+- `check-desktop-version-sync.mjs` em `npm test`
+
+### 57.2 Doc
+- **[electron-desktop.md](./electron-desktop.md)** §3
+- [hosting.md](./hosting.md) § Electron
+- [README.md](../README.md) § Release automático
+
+---
+
+## 58. Play — lifecycle minimizar/restaurar (2026-06-10)
+
+### 58.1 Problema
+- Minimizar/restaurar ou alt-tab deslocava personagem ou câmera (blur pós-restore, snap para `serverTile` stale em dev, câmera sem realinhar).
+
+### 58.2 Implementação
+- `playApp.ts`: handlers separados — `handlePlayFocusLost` (só teclas) vs `handlePlayPageHidden` (minimize)
+- `snapPlayCameraToLocalPlayer()`, `stabilizeLocalPlayerOnLifecyclePause()`
+- Dev sem ticket: `confirmServerTile()` por tile; snap autoritativo só com `isServerAuthoritativePosition()`
+- `position_correction` ignorado se já alinhado; `dtMs` cap 100 ms
+
+### 58.3 Doc
+- **[electron-desktop.md](./electron-desktop.md)** §4–5
+
+### 58.4 Checklist manual
+- [ ] Parado: minimizar → restaurar — sem salto
+- [ ] Alt-tab — câmera estável
+- [ ] Dev: **não** usar `VITE_USE_SERVER_WS_TICKET=true` sem `DATABASE_URL`
+

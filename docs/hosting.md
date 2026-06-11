@@ -166,9 +166,11 @@ Railway (painel web ou valores base64 para colar):
 | Pack local | `npm run pack` → `public/assets.pak` + `assets.sig` |
 | Assinatura válida | `node scripts/smoke-asset-pack.mjs` |
 | Build completo | `npm run build` e `npm run electron:check` |
+| Bundle sem modo loose | `npm run electron:check` → `check-electron-asset-bundle.mjs` |
 | CI `main` verde | GitHub Actions com secrets |
 | Versão desktop alinhada | `npm test` inclui `check-desktop-version-sync.mjs` |
 | Dev Studio | `.env` com `VITE_USE_LOOSE_ASSETS=true` (não definir em Railway) |
+| Doc Electron | [electron-desktop.md](./electron-desktop.md) |
 
 **Auditoria externa:** visualizar arquivos via GitHub *raw* pode colapsar quebras de linha em comentários/strings e parecer “sintaxe quebrada” em `.gitignore`, `pack-assets.mjs` ou `assetLoader.ts`. Valide sempre com clone local ou `npm test` / `npm run build`.
 
@@ -181,7 +183,7 @@ Chaves que já apareceram em commits antigos devem ser tratadas como **vazadas**
 | `VITE_STUDIO_ENABLED` | `false` em build de produção (padrão); `true` só para builds com Studio |
 | `VITE_STUDIO_GUARD` | `true` em produção |
 | `VITE_GAME_SERVER_WS` | Deixar vazio = same-origin `wss://` |
-| `VITE_USE_SERVER_WS_TICKET` | Dev: força `POST /api/ws-ticket` |
+| `VITE_USE_SERVER_WS_TICKET` | Dev: força `POST /api/ws-ticket` — **exige** `DATABASE_URL` no servidor |
 | `VITE_USE_API_AUTH` | Só em dev: força API em vez de mock |
 | `VITE_AUTH_MOCK` | `true`/`false` para override explícito |
 
@@ -385,7 +387,11 @@ Secrets: `ASSET_PACK_PRIVATE_KEY`, `ASSET_PACK_PUBLIC_KEY` (mesmos do CI). `GITH
 | `VITE_WS_BASE_URL` | WebSocket fixo (ex.: `wss://api.seujogo.com`) |
 | `VITE_GAME_SERVER_WS` | Alternativa legada; preferir `VITE_WS_BASE_URL` em app instalado |
 
-> **Não** definir `VITE_USE_LOOSE_ASSETS` em produção/Electron — sprites vêm do `assets.pak`. Use **domínio próprio** antes de distribuir em escala.
+> **Não** definir `VITE_USE_LOOSE_ASSETS` em produção/Electron — sprites vêm do `assets.pak`. O build Electron força `VITE_USE_LOOSE_ASSETS=false` e valida com `check-electron-asset-bundle.mjs`. Use **domínio próprio** antes de distribuir em escala.
+
+**Lifecycle (minimizar/restaurar):** blur de janela não deve realinhar posição — só minimizar (`window-background`). Ver [electron-desktop.md](./electron-desktop.md) §4.
+
+**Dev `electron:dev`:** não ativar `VITE_USE_SERVER_WS_TICKET` sem Postgres local; use ticket mock (`createEnterTicket`). Aviso CSP no console é normal em dev.
 
 ### Capacitor (Android)
 

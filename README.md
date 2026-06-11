@@ -381,6 +381,8 @@ Abra **duas abas** em `http://localhost:5173/play.html` com personagens diferent
 
 ### Electron (Windows)
 
+Documentação completa: **[docs/electron-desktop.md](docs/electron-desktop.md)** (assets.pak, release CI, lifecycle minimizar/restaurar).
+
 Cliente desktop com `backgroundThrottling: false` — timers e rede não pausam ao minimizar.
 
 #### Build local
@@ -411,8 +413,11 @@ Sem isso, o app instalado não encontra o servidor. URL Railway que muda quebra 
 | Sintoma | Solução |
 |---------|---------|
 | `EBUSY` / `EPERM` em `app.asar` ou `win-unpacked` | Feche o jogo e o Explorer em `release/`; `prepare-electron-release.mjs` mata `Elarion Online.exe` (e legado `Game 2D Railway.exe`), limpa pastas e, se falhar, empacota em `%TEMP%\elarion-electron-build\`. Opcional: `FORCE_KILL_ELECTRON_DEV=true` mata também `electron.exe` em dev |
+| Sprites não carregam no `.exe` | Console com `Usando modo loose assets` — rebuild com `npm run electron:check` (força `VITE_USE_LOOSE_ASSETS=false`). Ver [electron-desktop.md](docs/electron-desktop.md) §1 |
+| Personagem salta ao minimizar/restaurar | Reinicie `electron:dev` após mudar `.env`; não use `VITE_USE_SERVER_WS_TICKET` sem `DATABASE_URL`. Ver [electron-desktop.md](docs/electron-desktop.md) §4 |
 | Entrada órfã em “Apps instalados” | `scripts/cleanup-orphan-desktop-install.ps1` (PowerShell **como Administrador**) |
 | SmartScreen no Windows | Normal sem code signing na primeira instalação |
+| Aviso CSP no console (dev) | Normal em `electron:dev`; some no instalador empacotado |
 
 ---
 
@@ -468,6 +473,8 @@ Artefatos na Release:
 | `desktop/electron/updater.ts` | `electron-updater` — check, download, install |
 | `src/ui/desktopUpdateToast.ts` | Toast de progresso e restart |
 | `scripts/run-electron-builder.mjs` | `ELECTRON_PUBLISH=true` → `--publish always` |
+| `scripts/check-electron-asset-bundle.mjs` | Falha se bundle tem modo loose ou pak ausente |
+| `docs/electron-desktop.md` | Guia completo desktop (pak, release, lifecycle) |
 
 ---
 

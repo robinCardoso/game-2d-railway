@@ -1,13 +1,15 @@
 ## 27. Suporte Multiplataforma (Electron + Capacitor) (2026-06-06)
 
 ### 27.1 Estado Autoritativo e Ciclo de Vida
-- **Arquivos:** `src/net/serverStateStore.ts`, `src/net/resyncController.ts`, `src/game/runtime/*`
+- **Arquivos:** `src/net/serverStateStore.ts`, `src/net/resyncController.ts`, `src/game/runtime/*`, `src/game/playApp.ts`
 - **Mudança:** O estado do servidor (jogadores, criaturas, pings) é gravado no `serverStateStore` antes de despachar eventos para o loop do jogo. Isso evita que minimizar a janela do Electron (ou aba em background) "congele" o estado se o `requestAnimationFrame` for throttlado. O `resyncController` coordena o snap visual ao voltar de background com rate-limit local.
 - **Ciclos de Vida:** `appLifecycle.ts` unifica eventos de visibility e focus, com implementações específicas para Web (`webLifecycle.ts`), Electron (`electronLifecycle.ts`) e Android/Capacitor (`capacitorLifecycle.ts`).
+- **Atualização 2026-06-10:** `blur` (perda de foco) **≠** minimizar — `handlePlayFocusLost` só limpa teclas; `handlePlayPageHidden` trata minimize/visibility. Snap de câmera ao restaurar; dev sem ticket usa `confirmServerTile` em vez de snap para spawn stale. Ver [electron-desktop.md](./electron-desktop.md) §4.
 
 ### 27.2 Electron (Windows)
 - **Arquivos:** `desktop/electron/main.ts`, `desktop/electron/preload.ts`, `package.json` (`build` — fonte única do electron-builder)
 - **Mudança:** Cliente desktop que não pausa quando minimizado. Configurado com `backgroundThrottling: false` e `disable-renderer-backgrounding` para contornar problemas de rede e tick da engine durante combate em background.
+- **Atualização 2026-06-10:** Sprites no instalador via `assets.pak` (`check-electron-asset-bundle.mjs`); `resolvePublicAssetUrl` para `file://`; release CI (`electron-release.yml`). Ver [electron-desktop.md](./electron-desktop.md).
 
 ### 27.3 Capacitor (Android)
 - **Arquivos:** `capacitor.config.ts`, script `mobile:build`

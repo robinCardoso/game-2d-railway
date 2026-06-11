@@ -25,6 +25,7 @@ Este repositório é **Elarion Online** — MMORPG 2D estilo Tibia com **Elarion
 | [docs/loot-system.md](docs/loot-system.md) | Autoloot, loot pessoal multi-jogador, elegibilidade AOI |
 | [docs/game-rates.md](docs/game-rates.md) | `GAME_RATE_EXP` — multiplicador global de XP |
 | [docs/recent-features-jun-2026.md](docs/recent-features-jun-2026.md) | **Índice** — features jun/2026 + mapa de docs |
+| [docs/electron-desktop.md](docs/electron-desktop.md) | Instalador Windows, `assets.pak`, release CI, lifecycle minimizar |
 | [docs/analise-chatgpt.md](docs/analise-chatgpt.md) | Escala OTC (AOI, cap aggro, viewport cull) |
 | [docs/playstore-steam-roadmap.md](docs/playstore-steam-roadmap.md) | Planejamento, empacotamento e adaptações para Steam e Play Store |
 
@@ -48,6 +49,9 @@ Este repositório é **Elarion Online** — MMORPG 2D estilo Tibia com **Elarion
 15. **Movimento WS:** `MOVEMENT_TOO_FAST` não envia `position_correction` (anti rubber-band em latência alta)
 16. **Studio editor-only:** `editorOnly` no bootstrap — sem `NpcAI`/`PlayerMovement`/`respawnEntities`; câmera em `editorCamera.ts`; produção sem `studio.html` (editar local → deploy)
 17. **Loot:** roll **só no servidor** (`rollMobLoot`); loot pessoal por participante elegível (AOI + 5% dano); política A — ver [docs/loot-system.md](docs/loot-system.md)
+18. **Electron build:** `electron:build` / `electron:check` forçam `VITE_USE_LOOSE_ASSETS=false`; `check-electron-asset-bundle.mjs` no CI — ver [docs/electron-desktop.md](docs/electron-desktop.md)
+19. **Electron lifecycle:** `blur` ≠ minimize — `onFocusLost` só limpa input; snap câmera no foreground; dev sem ticket usa `confirmServerTile`, não snap para spawn stale
+20. **Versão desktop:** `VITE_BUILD_VERSION` em `.env.production` → `sync-desktop-version.mjs` → `package.json`; bump na `main` dispara `electron-release.yml`
 
 ## Ao implementar melhorias nesta área
 
@@ -62,7 +66,10 @@ Este repositório é **Elarion Online** — MMORPG 2D estilo Tibia com **Elarion
 npm run dev         # Vite :5173 + servidor :8787 (APIs unificadas via proxy)
 npm run dev:web     # só frontend (sem APIs)
 npm run dev:server  # só Express
-npm test            # vitest — tile ref / registry
+npm test            # vitest + checks (desktop version sync, calibrator, pack tracked)
+npm run electron:check                 # build web + compile Electron + check assets.pak
+npm run sync:desktop-version           # .env.production → package.json
+npm run electron:publish               # build + Release GitHub (GH_TOKEN)
 npm run generate:spell-icons           # placeholders PNG hotbar + paths no catálogo
 npm run generate:spell-cast-sprites    # placeholders VFX conjuração
 npm run migrate:character-calibration  # sidecar + JSON enxuto para outfits legados
