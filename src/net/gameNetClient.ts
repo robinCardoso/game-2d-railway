@@ -409,6 +409,12 @@ export class GameNetClient {
             last.steppingDestTileY !== steppingDestTileY;
         const mapChanged =
             last.mapId !== '' && (last.mapId !== mapId || last.instanceId !== instanceId);
+        const isSteppingReserve =
+            steppingDestTileX !== undefined &&
+            steppingDestTileY !== undefined &&
+            tileX === last.tileX &&
+            tileY === last.tileY &&
+            z === last.z;
 
         if (
             last.mapId === mapId &&
@@ -420,13 +426,14 @@ export class GameNetClient {
             return;
         }
 
-        // Durante deslize: não envia mudança só de direção (evita divergência com servidor)
-        if (
-            this.options.isMovementStepping?.() &&
-            !tileChanged &&
-            directionChanged
-        ) {
-            return;
+        // Durante deslize: só reserva steppingDest — não commit de tile novo nem só direção
+        if (this.options.isMovementStepping?.()) {
+            if (tileChanged && !isSteppingReserve) {
+                return;
+            }
+            if (!tileChanged && directionChanged) {
+                return;
+            }
         }
 
         const validateMove = this.options.validateOutgoingMove;
@@ -444,12 +451,6 @@ export class GameNetClient {
             }
         }
 
-        const isSteppingReserve =
-            steppingDestTileX !== undefined &&
-            steppingDestTileY !== undefined &&
-            tileX === last.tileX &&
-            tileY === last.tileY &&
-            z === last.z;
         const validateDest = this.options.validateSteppingDest;
         if (
             isSteppingReserve &&
@@ -671,6 +672,16 @@ export class GameNetClient {
                 break;
             case 'player_moved': {
                 if (msg.playerId === this.localPlayerId) {
+                    this.lastSynced = {
+                        mapId: msg.mapId,
+                        instanceId: msg.instanceId,
+                        tileX: msg.tileX,
+                        tileY: msg.tileY,
+                        z: msg.z,
+                        direction: msg.direction ?? this.lastSynced.direction,
+                        steppingDestTileX: undefined,
+                        steppingDestTileY: undefined,
+                    };
                     this.options.onMoveAck?.({
                         tileX: msg.tileX,
                         tileY: msg.tileY,

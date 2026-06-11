@@ -1191,16 +1191,10 @@ function resetLastServerAck(tileX: number, tileY: number, z: number): void {
     lastServerAck = { tileX, tileY, z, seq: 0 };
 }
 
-/** Rollback sem slide ao último ACK confirmado (não ao tile predito local). */
+/** Rollback sem slide ao último tile confirmado pelo servidor (predição, não tile local). */
 function rollbackLocalPlayerToLastServerAck(): void {
-    movementPrediction.serverTileX = lastServerAck.tileX;
-    movementPrediction.serverTileY = lastServerAck.tileY;
-    movementPrediction.serverZ = lastServerAck.z;
-    snapLocalPlayerToAuthoritativeTile(
-        lastServerAck.tileX,
-        lastServerAck.tileY,
-        lastServerAck.z
-    );
+    const { serverTileX, serverTileY, serverZ } = movementPrediction;
+    snapLocalPlayerToAuthoritativeTile(serverTileX, serverTileY, serverZ);
     previousPlayerTileKey = getPlayerTileKey();
 }
 
@@ -1212,11 +1206,15 @@ function handleMovementRejected(code: string, rejectedSeq?: number): void {
     }
     positionCorrectionSlide.active = false;
     pendingOutboundMoveSeq = undefined;
+    gridMovement.stepping = false;
+    gridMovement.activeStepFacing = null;
+    gridMovement.activeStepDirection = null;
+    resetGridMovementInputState(gridMovement);
     clearMovementInputBuffer(movementInputBuffer);
     clearAutoWalk(autoWalkState);
+    clearPlayMovementInput();
 
     if (code === 'MOVEMENT_TOO_FAST') {
-        clearPlayMovementInput();
         movementTooFastThrottleUntilMs = performance.now() + 120;
     }
 
@@ -1359,7 +1357,8 @@ function update(dtMs: number): void {
             movementInputBuffer,
             blockNewSteps:
                 isServerAuthoritativePosition() &&
-                getPendingPredictionCount(movementPrediction) > 0,
+                (getPendingPredictionCount(movementPrediction) > 0 ||
+                    gridMovement.stepping),
         });
         editingFloorResult = result.editingFloor;
     } else {
