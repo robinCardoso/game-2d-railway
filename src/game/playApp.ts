@@ -1605,27 +1605,6 @@ function snapPlayCameraToLocalPlayer(): void {
     snapPlayCamera(camera, target.x, target.y);
 }
 
-/** Alinha jogador local + câmera ao tile autoritativo do servidor (evita drift ao minimizar/restaurar). */
-function snapLocalPlayerToServerAuthoritativeTile(): void {
-    const tx = movementPrediction.serverTileX;
-    const ty = movementPrediction.serverTileY;
-    const tz = movementPrediction.serverZ;
-    movementPrediction.pending.length = 0;
-    positionCorrectionSlide.active = false;
-    gridMovement.stepping = false;
-    gridMovement.activeStepFacing = null;
-    resetGridMovementInputState(gridMovement);
-    player.worldZ = clampFloorZ(tz);
-    syncGridPlayerVisual(player, TILE_SIZE_SCREEN, tx, ty);
-    resetClientMovementPrediction(movementPrediction, tx, ty, tz);
-    snapPlayCameraToLocalPlayer();
-}
-
-/** Snap autoritativo só com ticket WS (predição ativa). Sem ticket, serverTile pode ficar no spawn. */
-function shouldSnapLocalPlayerToServerOnLifecycle(): boolean {
-    return (gameNet?.isConnected() ?? false) && isServerAuthoritativePosition();
-}
-
 function stabilizeLocalPlayerOnLifecyclePause(): void {
     positionCorrectionSlide.active = false;
     gridMovement.stepping = false;
@@ -1648,22 +1627,14 @@ function handlePlayFocusGained(): void {
 
 function handlePlayPageHidden(): void {
     clearPlayMovementInput();
+    stabilizeLocalPlayerOnLifecyclePause();
     if (gameNet?.isConnected()) {
         gameNet.syncPositionIfChanged();
-    }
-    if (shouldSnapLocalPlayerToServerOnLifecycle()) {
-        snapLocalPlayerToServerAuthoritativeTile();
-    } else {
-        stabilizeLocalPlayerOnLifecyclePause();
     }
 }
 
 function handlePlayPageVisible(): void {
-    if (shouldSnapLocalPlayerToServerOnLifecycle()) {
-        snapLocalPlayerToServerAuthoritativeTile();
-    } else {
-        stabilizeLocalPlayerOnLifecyclePause();
-    }
+    stabilizeLocalPlayerOnLifecyclePause();
     lastLoopMs = performance.now();
     resyncController?.requestResync();
 }
@@ -1797,11 +1768,9 @@ function setupNetwork(
             spellBar: getPlaySpellBarState(),
         }),
         isMovementStepping: () => gridMovement.stepping,
-        getServerAuthoritativeTile: () => ({
-            tileX: movementPrediction.serverTileX,
-            tileY: movementPrediction.serverTileY,
-            z: movementPrediction.serverZ,
-        }),
+        onPositionSynced: (pos) => {
+            confirmServerTile(movementPrediction, pos.tileX, pos.tileY, pos.z);
+        },
         validateOutgoingMove: validateOutgoingNetworkMove,
         validateSteppingDest: validateSteppingDestForNetwork,
         onMovementRejected: rollbackLocalMovementToServer,

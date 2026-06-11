@@ -125,16 +125,18 @@ Ao minimizar e restaurar (ou alt-tab), o personagem ou a câmera “saltavam” 
 | `onFocusLost` (blur) | `handlePlayFocusLost` | **Só** `clearPlayMovementInput()` |
 | `onFocusGained` (focus) | `handlePlayFocusGained` | Snap câmera + reset `lastLoopMs` |
 
-**Modo ticket WS** (`isServerAuthoritativePosition()` = true em produção):
+**Minimize/restaurar (produção e dev):**
 
-- Snap para `movementPrediction.serverTile*` no minimize/restore.
-- `recordPredictedMove` a cada tile novo.
+- Sempre `stabilizeLocalPlayerOnLifecyclePause()` — mantém tile/câmera atuais; **não** teleporta para `serverTile` antigo.
+- `resync` no foreground; `position_correction` só se servidor divergir de fato.
 
-**Dev sem ticket** (localhost, mock):
+**Sincronização de movimento (WS):**
 
-- `confirmServerTile()` a cada tile com WS conectado — mantém `serverTile` alinhado.
-- Estabilização local (sem teleporte para spawn antigo).
-- `VITE_USE_SERVER_WS_TICKET=true` **exige** `DATABASE_URL` no servidor — ver §5.
+- `onPositionSynced` → `confirmServerTile()` após cada `move` enviado — `serverTile` acompanha o último tile sincronizado.
+- Removida validação que bloqueava passos contra `serverTile` desatualizado (causava “só o primeiro passo” + `INVALID_STEP` no resync).
+- `recordPredictedMove` em produção; fila reconciliada em `position_correction`.
+
+**Dev sem ticket:** `confirmServerTile` também no tile enter local. `VITE_USE_SERVER_WS_TICKET=true` **exige** `DATABASE_URL` — ver §5.
 
 Outras proteções:
 

@@ -49,10 +49,10 @@ export interface GameNetClientOptions {
     onServerInstanceId?: (instanceId: string | undefined) => void;
     /** Deslize em andamento — adia sync só de direção (tile ainda não mudou). */
     isMovementStepping?: () => boolean;
-    /** Tile autoritativo conhecido (predição) — valida passos antes de enviar `move`. */
-    getServerAuthoritativeTile?: () => TilePos;
     /** Valida passo adjacente antes de enviar (terreno + criaturas no cliente). */
     validateOutgoingMove?: (from: TilePos, to: TilePos) => boolean;
+    /** `move` / `map_change` enviado ao servidor — atualiza predição otimista. */
+    onPositionSynced?: (pos: TilePos) => void;
     /** Reserva de deslize (`steppingDest`) — destino bloqueado não envia ao servidor. */
     validateSteppingDest?: (tileX: number, tileY: number, z: number) => boolean;
     /** Passo rejeitado sem `position_correction` — cliente faz rollback suave. */
@@ -435,10 +435,6 @@ export class GameNetClient {
                     return;
                 }
             }
-            const serverTile = this.options.getServerAuthoritativeTile?.();
-            if (serverTile && !validateMove(serverTile, to)) {
-                return;
-            }
         }
 
         const isSteppingReserve =
@@ -448,10 +444,12 @@ export class GameNetClient {
             tileY === last.tileY &&
             z === last.z;
         const validateDest = this.options.validateSteppingDest;
-        if (isSteppingReserve && validateDest) {
-            if (!validateDest(steppingDestTileX, steppingDestTileY, z)) {
-                return;
-            }
+        if (
+            isSteppingReserve &&
+            validateDest &&
+            !validateDest(steppingDestTileX, steppingDestTileY, z)
+        ) {
+            return;
         }
 
         if (mapChanged && !getMapEntry(mapId)?.instanced) {
@@ -495,6 +493,10 @@ export class GameNetClient {
             steppingDestTileX,
             steppingDestTileY,
         };
+
+        if (tileChanged || mapChanged) {
+            this.options.onPositionSynced?.({ tileX, tileY, z });
+        }
     }
 
     private async reconnectWithFreshTicket(): Promise<void> {
