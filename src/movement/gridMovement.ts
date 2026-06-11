@@ -570,6 +570,59 @@ export interface TickGridMovementParams {
     blockNewSteps?: boolean;
 }
 
+/** Tile de destino para uma direção (sem validar walkable). */
+export function getDestTileForDirection(
+    tileX: number,
+    tileY: number,
+    mapSize: number,
+    dir: GridDirection
+): { tileX: number; tileY: number } | null {
+    let ntx = tileX;
+    let nty = tileY;
+    switch (dir) {
+        case 'north':
+            if (tileY <= 0) return null;
+            nty -= 1;
+            break;
+        case 'south':
+            if (tileY >= mapSize - 1) return null;
+            nty += 1;
+            break;
+        case 'west':
+            if (tileX <= 0) return null;
+            ntx -= 1;
+            break;
+        case 'east':
+            if (tileX >= mapSize - 1) return null;
+            ntx += 1;
+            break;
+        case 'northwest':
+            if (tileX <= 0 || tileY <= 0) return null;
+            ntx -= 1;
+            nty -= 1;
+            break;
+        case 'northeast':
+            if (tileX >= mapSize - 1 || tileY <= 0) return null;
+            ntx += 1;
+            nty -= 1;
+            break;
+        case 'southwest':
+            if (tileX <= 0 || tileY >= mapSize - 1) return null;
+            ntx -= 1;
+            nty += 1;
+            break;
+        case 'southeast':
+            if (tileX >= mapSize - 1 || tileY >= mapSize - 1) return null;
+            ntx += 1;
+            nty += 1;
+            break;
+    }
+    ntx = clampTile(ntx, mapSize);
+    nty = clampTile(nty, mapSize);
+    if (ntx === tileX && nty === tileY) return null;
+    return { tileX: ntx, tileY: nty };
+}
+
 function tryStartStep(
     ctrl: GridMovementController,
     player: GridPlayerMotion,
@@ -594,63 +647,23 @@ function tryStartStep(
         return true;
     }
 
-    let ntx = tx;
-    let nty = ty;
-    switch (dir) {
-        case 'north':
-            if (ty <= 0) return false;
-            nty -= 1;
-            break;
-        case 'south':
-            if (ty >= mapSize - 1) return false;
-            nty += 1;
-            break;
-        case 'west':
-            if (tx <= 0) return false;
-            ntx -= 1;
-            break;
-        case 'east':
-            if (tx >= mapSize - 1) return false;
-            ntx += 1;
-            break;
-        case 'northwest':
-            if (tx <= 0 || ty <= 0) return false;
-            ntx -= 1;
-            nty -= 1;
-            break;
-        case 'northeast':
-            if (tx >= mapSize - 1 || ty <= 0) return false;
-            ntx += 1;
-            nty -= 1;
-            break;
-        case 'southwest':
-            if (tx <= 0 || ty >= mapSize - 1) return false;
-            ntx -= 1;
-            nty += 1;
-            break;
-        case 'southeast':
-            if (tx >= mapSize - 1 || ty >= mapSize - 1) return false;
-            ntx += 1;
-            nty += 1;
-            break;
-    }
-
-    ntx = clampTile(ntx, mapSize);
-    nty = clampTile(nty, mapSize);
-    if (ntx === tx && nty === ty) return false;
+    const dest = getDestTileForDirection(tx, ty, mapSize, dir);
+    if (!dest) return false;
+    const ntx = dest.tileX;
+    const nty = dest.tileY;
 
     if (!canStepToTile(tx, ty, ntx, nty, player.worldZ, tileSize, deps)) {
         return false;
     }
 
-    const dest = tileToWorld(ntx, nty, tileSize);
+    const destWorld = tileToWorld(ntx, nty, tileSize);
     let stepMs = deps.getStepDurationMs(ntx, nty, player.worldZ);
     if (isDiagonalDirection(dir)) {
         stepMs = Math.round(stepMs * DIAGONAL_STEP_DURATION_FACTOR);
     }
     beginStep(ctrl, player, tileSize, ntx, nty, nowMs, false, stepMs, dir);
 
-    const landed = deps.isWalkablePixels(dest.x, dest.y, player.worldZ);
+    const landed = deps.isWalkablePixels(destWorld.x, destWorld.y, player.worldZ);
     if (
         !isDiagonalDirection(dir) &&
         landed.isStair &&
@@ -690,7 +703,11 @@ export function tickGridMovement(params: TickGridMovementParams): boolean {
     if (ctrl.stepping) {
         if (liveDir && inputBuffer) {
             const buffered = peekMovementInput(inputBuffer);
-            if (buffered !== liveDir) {
+            if (
+                ctrl.activeStepDirection &&
+                liveDir !== ctrl.activeStepDirection &&
+                buffered !== liveDir
+            ) {
                 pushMovementInput(inputBuffer, liveDir);
             }
         }
@@ -714,5 +731,16 @@ export function tickGridMovement(params: TickGridMovementParams): boolean {
     }
     if (!dir) return false;
 
+    return tryStartStep(ctrl, player, dir, nowMs, deps);
+}
+
+/** Inicia passo local validado — usado pelo movement pump online. */
+export function tryStartGridStep(
+    ctrl: GridMovementController,
+    player: GridPlayerMotion,
+    dir: GridDirection,
+    nowMs: number,
+    deps: TileGridDeps
+): boolean {
     return tryStartStep(ctrl, player, dir, nowMs, deps);
 }

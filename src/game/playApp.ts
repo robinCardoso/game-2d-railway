@@ -52,7 +52,12 @@ import {
     resetGridMovementInputState,
     setGridStepDuration,
     syncGridPlayerVisual,
+    type TileGridDeps,
 } from '../movement/gridMovement';
+import {
+    PUMP_SEND_INTERVAL_FACTOR,
+    tickPlayMovementPump,
+} from '../movement/playMovementPump';
 import {
     clearMovementInputBuffer,
     createMovementInputBuffer,
@@ -63,11 +68,6 @@ import {
     setAutoWalkGoal,
     tickAutoWalkDirection,
 } from '../movement/autoWalk';
-import {
-    direction8FromTiles,
-    toProtocolDirection8,
-    type Direction8,
-} from '../../shared/movement/direction8';
 import {
     beginPositionCorrectionSlide,
     createPositionCorrectionSlide,
@@ -80,7 +80,6 @@ import {
     createClientMovementPrediction,
     getPendingPredictionCount,
     reconcileMovementPrediction,
-    recordPredictedMove,
     resetClientMovementPrediction,
     type ClientMovementPrediction,
 } from '../movement/clientMovementPrediction';
@@ -290,6 +289,8 @@ const playCameraJuice = createPlayCameraJuiceState();
 let lastLoopMs = 0;
 /** Após `MOVEMENT_TOO_FAST` — evita spam de `move` sem teleporte visual. */
 let movementTooFastThrottleUntilMs = 0;
+/** Cooldown do pump alinhado ao intervalo mínimo do servidor (step × 0.8). */
+let pumpSendCooldownUntilMs = 0;
 const movementInputBuffer = createMovementInputBuffer();
 const autoWalkState = createAutoWalkState();
 let pendingOutboundMoveSeq: number | undefined;
@@ -1122,6 +1123,16 @@ function isPlayerOccupyingTile(tx: number, ty: number, z: number): boolean {
 function canCommitPlayerStepToTile(destTileX: number, destTileY: number, z: number): boolean {
     const wx = destTileX * TILE_SIZE_SCREEN;
     const wy = destTileY * TILE_SIZE_SCREEN;
+    // Online: servidor já validou ocupação no accept — mob no destino não pode reverter o passo.
+    if (
+        isPlayWsAuthoritative() &&
+        gameNet?.isConnected() &&
+        lastServerAck.tileX === destTileX &&
+        lastServerAck.tileY === destTileY &&
+        lastServerAck.z === z
+    ) {
+        return isTerrainWalkable(wx, wy, z).walkable;
+    }
     return isWalkable(wx, wy, z).walkable;
 }
 
@@ -1206,50 +1217,78 @@ function rollbackLocalPlayerToLastServerAck(): void {
     previousPlayerTileKey = getPlayerTileKey();
 }
 
-/** direction8 do passo pendente — fallback se grid ainda não commitou facing. */
-function resolveOutboundDirection8(): Direction8 | undefined {
-    if (!isPlayWsAuthoritative() || pendingOutboundMoveSeq === undefined) {
-        return undefined;
-    }
-    const gridDir =
-        gridMovement.lastCompletedStepDirection ?? gridMovement.activeStepDirection;
-    if (gridDir) {
-        return toProtocolDirection8(gridDir);
-    }
-    const pending = movementPrediction.pending.find(
-        (step) => step.seq === pendingOutboundMoveSeq
-    );
-    if (!pending) return undefined;
-    return (
-        direction8FromTiles(
-            { tileX: pending.fromTileX, tileY: pending.fromTileY, z: pending.z },
-            { tileX: pending.toTileX, tileY: pending.toTileY, z: pending.z }
-        ) ?? undefined
-    );
+function buildPlayTileGridDeps(): TileGridDeps {
+    return {
+        tileSize: TILE_SIZE_SCREEN,
+        mapSize: activeMapSize,
+        minFloorZ: ENGINE_CONFIG.MIN_FLOOR_Z,
+        maxFloorZ: ENGINE_CONFIG.MAX_FLOOR_Z,
+        isWalkablePixels: (x, y, z) => isWalkable(x, y, z),
+        isTerrainWalkablePixels: (x, y, z) => isTerrainWalkable(x, y, z),
+        canCommitStepToTile: canCommitPlayerStepToTile,
+        isStairHoleAtTile,
+        getStepDurationMs: getStepDurationForTile,
+    };
 }
 
-function handleMovementRejected(code: string, rejectedSeq?: number): void {
+/** Reverte passo otimista local ao último tile confirmado pelo servidor. */
+function revertLastOptimisticStep(rejectedSeq?: number): void {
     if (rejectedSeq !== undefined) {
         clearPendingFromSeq(movementPrediction, rejectedSeq);
-    } else {
-        movementPrediction.pending.length = 0;
     }
     positionCorrectionSlide.active = false;
     pendingOutboundMoveSeq = undefined;
     gridMovement.stepping = false;
     gridMovement.activeStepFacing = null;
     gridMovement.activeStepDirection = null;
+    snapLocalPlayerToAuthoritativeTile(
+        lastServerAck.tileX,
+        lastServerAck.tileY,
+        lastServerAck.z
+    );
+    previousPlayerTileKey = getPlayerTileKey();
+    gameNet?.alignLastSyncedFromLocalState();
+}
 
-    const preserveHeldInput = code === 'TILE_OCCUPIED';
-    if (!preserveHeldInput) {
-        resetGridMovementInputState(gridMovement);
-    }
+function handleMovementRejected(code: string, rejectedSeq?: number): void {
+    const preserveHeldInput =
+        code === 'TILE_OCCUPIED' || code === 'MOVEMENT_TOO_FAST';
 
     if (code === 'MOVEMENT_TOO_FAST') {
+        const stepMs = Math.max(
+            200,
+            Math.round(
+                getStepDurationForTile(player.tileX, player.tileY, player.worldZ) *
+                    PUMP_SEND_INTERVAL_FACTOR
+            )
+        );
+        movementTooFastThrottleUntilMs = performance.now() + stepMs;
+        pumpSendCooldownUntilMs = movementTooFastThrottleUntilMs;
+        revertLastOptimisticStep(rejectedSeq);
+        return;
+    }
+
+    if (rejectedSeq !== undefined) {
+        clearPendingFromSeq(movementPrediction, rejectedSeq);
+    } else if (code !== 'TILE_OCCUPIED') {
+        movementPrediction.pending.length = 0;
+    }
+
+    positionCorrectionSlide.active = false;
+    pendingOutboundMoveSeq = undefined;
+    gridMovement.stepping = false;
+    gridMovement.activeStepFacing = null;
+    gridMovement.activeStepDirection = null;
+
+    if (!preserveHeldInput) {
+        resetGridMovementInputState(gridMovement);
         clearMovementInputBuffer(movementInputBuffer);
         clearAutoWalk(autoWalkState);
-        movementTooFastThrottleUntilMs = performance.now() + 120;
-    } else if (code === 'INVALID_STEP') {
+    }
+
+    if (code === 'INVALID_STEP') {
+        movementTooFastThrottleUntilMs = performance.now() + 80;
+    } else if (code === 'TILE_OCCUPIED') {
         movementTooFastThrottleUntilMs = performance.now() + 80;
     }
 
@@ -1272,6 +1311,25 @@ function clearStalePendingMovement(nowMs: number): void {
     if (nowMs - head.committedAtMs < 1000) return;
     movementPrediction.pending.length = 0;
     pendingOutboundMoveSeq = undefined;
+}
+
+/** Corrige tile lógico/visual quando diverge do último ack sem passo em andamento. */
+function reconcileIdleServerDrift(): void {
+    if (!isPlayWsAuthoritative() || !gameNet?.isConnected()) return;
+    if (gridMovement.stepping || positionCorrectionSlide.active) return;
+    if (getPendingPredictionCount(movementPrediction) > 0) return;
+    if (
+        player.tileX === lastServerAck.tileX &&
+        player.tileY === lastServerAck.tileY &&
+        player.worldZ === lastServerAck.z
+    ) {
+        return;
+    }
+    reconcileLocalTileToAuthoritative(
+        lastServerAck.tileX,
+        lastServerAck.tileY,
+        lastServerAck.z
+    );
 }
 
 function isEntityAtTile(tx: number, ty: number, z: number, excludeId?: string): boolean {
@@ -1305,6 +1363,7 @@ function updatePlayCameraFollow(dtMs: number): void {
 function update(dtMs: number): void {
     const nowMs = performance.now();
     clearStalePendingMovement(nowMs);
+    reconcileIdleServerDrift();
     const playEntities = getPlayEntities();
     const aiEntities = usesServerCreatures() ? npcs.filter((n) => n.type === 'npc') : npcs;
 
@@ -1383,6 +1442,33 @@ function update(dtMs: number): void {
             }
         }
 
+        if (isPlayWsAuthoritative() && gameNet) {
+            tickPlayMovementPump({
+                nowMs,
+                keys,
+                player,
+                gridMovement,
+                prediction: movementPrediction,
+                movementInputBuffer,
+                tileGridDeps: buildPlayTileGridDeps(),
+                net: gameNet,
+                positionCorrectionSlideActive: positionCorrectionSlide.active,
+                movementTooFastThrottleUntilMs,
+                pumpSendCooldownUntilMs,
+                resolveOutgoingStepDurationMs: () =>
+                    getStepDurationForTile(player.tileX, player.tileY, player.worldZ),
+                validateOutgoingMove: validateOutgoingNetworkMove,
+                onSeqAssigned: (seq) => {
+                    pendingOutboundMoveSeq = seq;
+                },
+                onStepSent: (stepDurationMs, sentAtMs) => {
+                    pumpSendCooldownUntilMs =
+                        sentAtMs +
+                        Math.max(16, Math.round(stepDurationMs * PUMP_SEND_INTERVAL_FACTOR));
+                },
+            });
+        }
+
         const result = PlayerMovement.updateMovement({
             keys,
             player,
@@ -1406,7 +1492,7 @@ function update(dtMs: number): void {
             posZEl: document.getElementById('posZ') as HTMLElement,
             skipCameraUpdate: true,
             movementInputBuffer,
-            blockNewSteps: shouldBlockLocalNewSteps(),
+            blockNewSteps: isPlayWsAuthoritative() ? true : shouldBlockLocalNewSteps(),
         });
         editingFloorResult = result.editingFloor;
     } else {
@@ -1418,25 +1504,18 @@ function update(dtMs: number): void {
 
     const currentTileKey = getPlayerTileKey();
     const enteredNewTile = currentTileKey !== previousPlayerTileKey;
-    if (enteredNewTile && gameNet?.isConnected() && previousPlayerTileKey) {
-        if (isPlayWsAuthoritative()) {
-            const parts = previousPlayerTileKey.split('_').map(Number);
-            const fromZ = parts[2] ?? player.worldZ;
-            pendingOutboundMoveSeq = recordPredictedMove(
-                movementPrediction,
-                { tileX: parts[0]!, tileY: parts[1]!, z: fromZ },
-                { tileX: player.tileX, tileY: player.tileY, z: player.worldZ },
-                nowMs
-            );
-        } else {
-            // Dev sem ticket: servidor aceita moves mas não há fila de predição — manter serverTile alinhado.
-            confirmServerTile(
-                movementPrediction,
-                player.tileX,
-                player.tileY,
-                player.worldZ
-            );
-        }
+    if (
+        enteredNewTile &&
+        gameNet?.isConnected() &&
+        previousPlayerTileKey &&
+        !isPlayWsAuthoritative()
+    ) {
+        confirmServerTile(
+            movementPrediction,
+            player.tileX,
+            player.tileY,
+            player.worldZ
+        );
     }
     if (enteredNewTile) previousPlayerTileKey = currentTileKey;
 
@@ -2034,8 +2113,6 @@ function setupNetwork(
             direction: getPlayerDirection(),
             appearance: localAppearance,
             stepDurationMs: getNetworkStepDurationMs(gridMovement),
-            direction8: resolveOutboundDirection8(),
-            seq: isPlayWsAuthoritative() ? pendingOutboundMoveSeq : undefined,
             steppingDestTileX: gridMovement.stepping ? gridMovement.destTileX : undefined,
             steppingDestTileY: gridMovement.stepping ? gridMovement.destTileY : undefined,
             level: activeCharacter?.level,
@@ -2068,6 +2145,19 @@ function setupNetwork(
             } else {
                 confirmServerTile(movementPrediction, pos.tileX, pos.tileY, pos.z);
             }
+
+            const steppingTowardAck =
+                gridMovement.stepping &&
+                gridMovement.destTileX === pos.tileX &&
+                gridMovement.destTileY === pos.tileY &&
+                player.worldZ === pos.z;
+            if (steppingTowardAck) {
+                // Tile lógico = servidor durante o deslize (evita revert quando mob ocupa o destino).
+                player.tileX = pos.tileX;
+                player.tileY = pos.tileY;
+                return;
+            }
+
             reconcileLocalTileToAuthoritative(pos.tileX, pos.tileY, pos.z);
         },
         validateOutgoingMove: validateOutgoingNetworkMove,
@@ -2498,6 +2588,7 @@ export async function startPlay(
     });
 
     window.addEventListener('keydown', (e) => {
+        if (e.repeat) return;
         keys[e.key.toLowerCase()] = true;
         if (e.key === 'Escape') {
             clearPlayCombatTarget();

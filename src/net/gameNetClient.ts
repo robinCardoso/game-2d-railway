@@ -384,6 +384,82 @@ export class GameNetClient {
         };
     }
 
+    /**
+     * Passo autoritativo — somente seq + direction8 (servidor deriva destino).
+     * Nunca envia tile de destino como commit.
+     */
+    sendMoveIntent(intent: {
+        seq: number;
+        direction8: Direction8;
+        stepDurationMs?: number;
+    }): void {
+        if (!this.isConnected()) return;
+        const state = this.options.getLocalState();
+        const mapId = state.mapId;
+        const instanceId = state.instanceId ?? this.networkInstanceId ?? undefined;
+        this.send({
+            type: 'move',
+            v: PROTOCOL_VERSION,
+            mapId,
+            instanceId,
+            tileX: state.tileX,
+            tileY: state.tileY,
+            z: state.z,
+            direction: state.direction,
+            direction8: intent.direction8,
+            seq: intent.seq,
+            clientTime: Date.now(),
+            stepDurationMs: intent.stepDurationMs,
+        });
+        this.lastSynced = {
+            mapId,
+            instanceId,
+            tileX: state.tileX,
+            tileY: state.tileY,
+            z: state.z,
+            direction: state.direction,
+            steppingDestTileX: undefined,
+            steppingDestTileY: undefined,
+        };
+    }
+
+    /** Reserva tile de deslize — tile lógico permanece na origem até o commit. */
+    sendSteppingDestReserve(
+        destTileX: number,
+        destTileY: number,
+        z: number,
+        stepDurationMs?: number
+    ): void {
+        if (!this.isConnected()) return;
+        const state = this.options.getLocalState();
+        const mapId = state.mapId;
+        const instanceId = state.instanceId ?? this.networkInstanceId ?? undefined;
+        this.send({
+            type: 'move',
+            v: PROTOCOL_VERSION,
+            mapId,
+            instanceId,
+            tileX: state.tileX,
+            tileY: state.tileY,
+            z,
+            direction: state.direction,
+            clientTime: Date.now(),
+            stepDurationMs,
+            steppingDestTileX: destTileX,
+            steppingDestTileY: destTileY,
+        });
+        this.lastSynced = {
+            mapId,
+            instanceId,
+            tileX: state.tileX,
+            tileY: state.tileY,
+            z: state.z,
+            direction: state.direction,
+            steppingDestTileX: destTileX,
+            steppingDestTileY: destTileY,
+        };
+    }
+
     /** Alinha `lastSynced` ao estado local após rollback — evita reenvio de sync legado. */
     alignLastSyncedFromLocalState(): void {
         const state = this.options.getLocalState();
@@ -410,22 +486,31 @@ export class GameNetClient {
             tileY,
             z,
             direction,
-            direction8,
-            seq,
             stepDurationMs,
-            steppingDestTileX,
-            steppingDestTileY,
         } = state;
         const last = this.lastSynced;
+
+        const mapChanged =
+            last.mapId !== '' && (last.mapId !== mapId || last.instanceId !== instanceId);
+
+        const authoritative = this.options.authoritativeMovement?.() ?? false;
+        if (authoritative) {
+            if (!mapChanged) {
+                if (last.direction !== direction) {
+                    this.lastSynced = { ...this.lastSynced, direction };
+                }
+                return;
+            }
+        }
 
         const tileChanged =
             last.tileX !== tileX || last.tileY !== tileY || last.z !== z;
         const directionChanged = last.direction !== direction;
+        const steppingDestTileX = state.steppingDestTileX;
+        const steppingDestTileY = state.steppingDestTileY;
         const steppingDestChanged =
             last.steppingDestTileX !== steppingDestTileX ||
             last.steppingDestTileY !== steppingDestTileY;
-        const mapChanged =
-            last.mapId !== '' && (last.mapId !== mapId || last.instanceId !== instanceId);
         const isSteppingReserve =
             steppingDestTileX !== undefined &&
             steppingDestTileY !== undefined &&
@@ -443,20 +528,11 @@ export class GameNetClient {
             return;
         }
 
-        const authoritative = this.options.authoritativeMovement?.() ?? false;
-        const hasMoveIntent = direction8 !== undefined && seq !== undefined;
-
         if (!mapChanged && !tileChanged && !isSteppingReserve) {
             if (directionChanged) {
                 this.lastSynced = { ...this.lastSynced, direction };
             }
             return;
-        }
-
-        if (authoritative && !mapChanged) {
-            if (!isSteppingReserve && !hasMoveIntent) {
-                return;
-            }
         }
 
         // Durante deslize: só reserva steppingDest — não commit de tile novo nem só direção
@@ -518,8 +594,6 @@ export class GameNetClient {
                 tileY,
                 z,
                 direction,
-                direction8,
-                seq,
                 clientTime: Date.now(),
                 stepDurationMs,
                 steppingDestTileX,
@@ -539,11 +613,7 @@ export class GameNetClient {
         };
 
         if (tileChanged || mapChanged) {
-            if (direction8 && seq !== undefined) {
-                // Confirmação otimista adiada até `player_moved` com mesmo seq.
-            } else {
-                this.options.onPositionSynced?.({ tileX, tileY, z });
-            }
+            this.options.onPositionSynced?.({ tileX, tileY, z });
         }
     }
 
