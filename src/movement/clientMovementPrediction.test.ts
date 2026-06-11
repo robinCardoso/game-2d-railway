@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+    clearPendingFromSeq,
     confirmServerSeq,
     confirmServerTile,
     createClientMovementPrediction,
@@ -32,6 +33,15 @@ describe('clientMovementPrediction', () => {
         recordPredictedMove(pred, { tileX: 10, tileY: 10, z: 0 }, { tileX: 11, tileY: 10, z: 0 }, 100);
         confirmServerTile(pred, 11, 10, 0);
         expect(pred.pending).toHaveLength(0);
+    });
+
+    it('clearPendingFromSeq remove passos a partir do seq rejeitado', () => {
+        const pred = createClientMovementPrediction({ tileX: 10, tileY: 10, z: 0 });
+        recordPredictedMove(pred, { tileX: 10, tileY: 10, z: 0 }, { tileX: 11, tileY: 10, z: 0 }, 100);
+        recordPredictedMove(pred, { tileX: 11, tileY: 10, z: 0 }, { tileX: 12, tileY: 10, z: 0 }, 200);
+        recordPredictedMove(pred, { tileX: 12, tileY: 10, z: 0 }, { tileX: 13, tileY: 10, z: 0 }, 300);
+        clearPendingFromSeq(pred, 2);
+        expect(pred.pending.map((m) => m.seq)).toEqual([1]);
     });
 
     it('reconcile limpa fila e reporta divergência', () => {

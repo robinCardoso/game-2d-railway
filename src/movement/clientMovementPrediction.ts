@@ -163,3 +163,18 @@ export function reconcileMovementPrediction(
 export function getPendingPredictionCount(pred: ClientMovementPrediction): number {
     return pred.pending.length;
 }
+
+/** Remove passos pendentes com seq >= rejeitado (servidor recusou a partir deste input). */
+export function clearPendingFromSeq(
+    pred: ClientMovementPrediction,
+    rejectedSeq: number
+): void {
+    let i = 0;
+    while (i < pred.pending.length) {
+        if (pred.pending[i]!.seq >= rejectedSeq) {
+            pred.pending.splice(i, 1);
+        } else {
+            i++;
+        }
+    }
+}

@@ -407,6 +407,8 @@ export interface ErrorMessage {
     message: string;
     /** Tempo restante de cooldown (ms) — ex.: CHAT_COOLDOWN. */
     retryAfterMs?: number;
+    /** Seq do `move` rejeitado — cliente descarta predições a partir deste número. */
+    seq?: number;
 }
 
 export interface PongMessage {

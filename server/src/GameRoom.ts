@@ -337,8 +337,8 @@ export class GameRoom {
                 this.broadcastToPlayerSpectators(room, message, event, exceptId),
             roomKey: (player) => this.roomKey(player),
             isWalkable: (mapId, tileX, tileY, z) => this.isWalkable(mapId, tileX, tileY, z),
-            rejectMove: (player, code, message, logDetail, sendCorrection) =>
-                this.rejectMove(player, code, message, logDetail, sendCorrection),
+            rejectMove: (player, code, message, logDetail, sendCorrection, seq) =>
+                this.rejectMove(player, code, message, logDetail, sendCorrection, seq),
             persistPlayerPosition: (player, immediate) =>
                 this.persistPlayerPosition(player, immediate),
             sendCreatureSync: (socket, room, mapId, instanceId) =>
@@ -495,7 +495,8 @@ export class GameRoom {
         code: string,
         message: string,
         logDetail?: string,
-        sendCorrection = true
+        sendCorrection = true,
+        seq?: number
     ): void {
         const now = Date.now();
         if (
@@ -513,6 +514,7 @@ export class GameRoom {
             v: PROTOCOL_VERSION,
             code,
             message,
+            ...(seq !== undefined ? { seq } : {}),
         });
         if (sendCorrection) {
             this.sendPositionCorrection(player);

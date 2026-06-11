@@ -70,6 +70,7 @@ import {
     tickPositionCorrectionSlide,
 } from '../movement/positionCorrectionSlide';
 import {
+    clearPendingFromSeq,
     confirmServerSeq,
     confirmServerTile,
     createClientMovementPrediction,
@@ -270,12 +271,17 @@ let movementPrediction: ClientMovementPrediction = createClientMovementPredictio
     tileY: player.tileY,
     z: player.worldZ,
 });
+/** Último tile confirmado pelo servidor (`player_moved` com seq ou resync). */
+let lastServerAck = {
+    tileX: player.tileX,
+    tileY: player.tileY,
+    z: player.worldZ,
+    seq: 0,
+};
 const playCameraJuice = createPlayCameraJuiceState();
 let lastLoopMs = 0;
 /** Após `MOVEMENT_TOO_FAST` — evita spam de `move` sem teleporte visual. */
 let movementTooFastThrottleUntilMs = 0;
-/** Tile autoritativo antes do último `onPositionSynced` (reverte otimismo se servidor rejeitar). */
-let lastOutboundSyncedPrevTile: { tileX: number; tileY: number; z: number } | null = null;
 const movementInputBuffer = createMovementInputBuffer();
 const autoWalkState = createAutoWalkState();
 let pendingOutboundMoveSeq: number | undefined;
@@ -553,6 +559,7 @@ function applyLoadedMap(loaded: ReturnType<typeof loadMapFromJson>): void {
     const target = computePlayCameraTarget(player.worldX, player.worldY, canvas, zoom);
     snapPlayCamera(camera, target.x, target.y);
     resetClientMovementPrediction(movementPrediction, player.tileX, player.tileY, player.worldZ);
+    resetLastServerAck(player.tileX, player.tileY, player.worldZ);
     editingFloor = player.worldZ;
     refreshPlayerMovementSpeed();
     respawnEntities();
@@ -1165,66 +1172,55 @@ function reconcileLocalTileToAuthoritative(tileX: number, tileY: number, z: numb
     previousPlayerTileKey = getPlayerTileKey();
 }
 
-/** `MOVEMENT_TOO_FAST` — servidor sem `position_correction`; reverte otimismo e segura input. */
-function handleMovementTooFastSoft(): void {
-    clearMovementInputBuffer(movementInputBuffer);
-    clearAutoWalk(autoWalkState);
-    clearPlayMovementInput();
-    pendingOutboundMoveSeq = undefined;
+function updateLastServerAck(
+    tileX: number,
+    tileY: number,
+    z: number,
+    seq?: number
+): void {
+    if (seq !== undefined && seq < lastServerAck.seq) return;
+    lastServerAck = {
+        tileX,
+        tileY,
+        z,
+        seq: seq ?? lastServerAck.seq,
+    };
+}
 
-    if (lastOutboundSyncedPrevTile) {
-        confirmServerTile(
-            movementPrediction,
-            lastOutboundSyncedPrevTile.tileX,
-            lastOutboundSyncedPrevTile.tileY,
-            lastOutboundSyncedPrevTile.z
-        );
-        snapLocalPlayerToAuthoritativeTile(
-            lastOutboundSyncedPrevTile.tileX,
-            lastOutboundSyncedPrevTile.tileY,
-            lastOutboundSyncedPrevTile.z
-        );
-        lastOutboundSyncedPrevTile = null;
+function resetLastServerAck(tileX: number, tileY: number, z: number): void {
+    lastServerAck = { tileX, tileY, z, seq: 0 };
+}
+
+/** Rollback sem slide ao último ACK confirmado (não ao tile predito local). */
+function rollbackLocalPlayerToLastServerAck(): void {
+    movementPrediction.serverTileX = lastServerAck.tileX;
+    movementPrediction.serverTileY = lastServerAck.tileY;
+    movementPrediction.serverZ = lastServerAck.z;
+    snapLocalPlayerToAuthoritativeTile(
+        lastServerAck.tileX,
+        lastServerAck.tileY,
+        lastServerAck.z
+    );
+    previousPlayerTileKey = getPlayerTileKey();
+}
+
+function handleMovementRejected(code: string, rejectedSeq?: number): void {
+    if (rejectedSeq !== undefined) {
+        clearPendingFromSeq(movementPrediction, rejectedSeq);
     } else {
-        snapLocalPlayerToAuthoritativeTile(
-            movementPrediction.serverTileX,
-            movementPrediction.serverTileY,
-            movementPrediction.serverZ
-        );
+        movementPrediction.pending.length = 0;
     }
-
-    movementTooFastThrottleUntilMs = performance.now() + 120;
-}
-
-function handleMovementRejected(code: string): void {
-    if (code === 'MOVEMENT_TOO_FAST') {
-        handleMovementTooFastSoft();
-        return;
-    }
-    rollbackLocalMovementToServer();
-}
-
-/** Rollback sem slide quando o servidor rejeita passo (INVALID_STEP / NOT_WALKABLE). */
-function rollbackLocalMovementToServer(): void {
-    const { serverTileX, serverTileY, serverZ } = movementPrediction;
-    movementPrediction.pending.length = 0;
     positionCorrectionSlide.active = false;
-    gridMovement.stepping = false;
-    gridMovement.activeStepFacing = null;
-    gridMovement.activeStepDirection = null;
-    resetGridMovementInputState(gridMovement);
+    pendingOutboundMoveSeq = undefined;
     clearMovementInputBuffer(movementInputBuffer);
     clearAutoWalk(autoWalkState);
-    pendingOutboundMoveSeq = undefined;
 
-    if (
-        player.tileX !== serverTileX ||
-        player.tileY !== serverTileY ||
-        player.worldZ !== serverZ
-    ) {
-        player.worldZ = clampFloorZ(serverZ);
-        syncGridPlayerVisual(player, TILE_SIZE_SCREEN, serverTileX, serverTileY);
+    if (code === 'MOVEMENT_TOO_FAST') {
+        clearPlayMovementInput();
+        movementTooFastThrottleUntilMs = performance.now() + 120;
     }
+
+    rollbackLocalPlayerToLastServerAck();
 }
 
 function isEntityAtTile(tx: number, ty: number, z: number, excludeId?: string): boolean {
@@ -1385,11 +1381,6 @@ function update(dtMs: number): void {
                 { tileX: player.tileX, tileY: player.tileY, z: player.worldZ },
                 nowMs
             );
-            lastOutboundSyncedPrevTile = {
-                tileX: movementPrediction.serverTileX,
-                tileY: movementPrediction.serverTileY,
-                z: movementPrediction.serverZ,
-            };
         } else {
             // Dev sem ticket: servidor aceita moves mas não há fila de predição — manter serverTile alinhado.
             confirmServerTile(
@@ -1846,6 +1837,7 @@ function stabilizeLocalPlayerOnLifecyclePause(): void {
     gridMovement.activeStepFacing = null;
     resetGridMovementInputState(gridMovement);
     resetClientMovementPrediction(movementPrediction, player.tileX, player.tileY, player.worldZ);
+    resetLastServerAck(player.tileX, player.tileY, player.worldZ);
     syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
     snapPlayCameraToLocalPlayer();
 }
@@ -2012,15 +2004,15 @@ function setupNetwork(
         }),
         isMovementStepping: () => gridMovement.stepping,
         onPositionSynced: (pos) => {
-            lastOutboundSyncedPrevTile = {
-                tileX: movementPrediction.serverTileX,
-                tileY: movementPrediction.serverTileY,
-                z: movementPrediction.serverZ,
-            };
             confirmServerTile(movementPrediction, pos.tileX, pos.tileY, pos.z);
+            updateLastServerAck(pos.tileX, pos.tileY, pos.z);
             pendingOutboundMoveSeq = undefined;
         },
         onMoveAck: (pos) => {
+            if (pos.seq !== undefined && pos.seq < lastServerAck.seq) return;
+
+            updateLastServerAck(pos.tileX, pos.tileY, pos.z, pos.seq);
+
             if (pos.seq !== undefined) {
                 confirmServerSeq(
                     movementPrediction,
@@ -2030,12 +2022,10 @@ function setupNetwork(
                     pos.z
                 );
                 pendingOutboundMoveSeq = undefined;
-                lastOutboundSyncedPrevTile = null;
-                reconcileLocalTileToAuthoritative(pos.tileX, pos.tileY, pos.z);
             } else {
                 confirmServerTile(movementPrediction, pos.tileX, pos.tileY, pos.z);
-                reconcileLocalTileToAuthoritative(pos.tileX, pos.tileY, pos.z);
             }
+            reconcileLocalTileToAuthoritative(pos.tileX, pos.tileY, pos.z);
         },
         validateOutgoingMove: validateOutgoingNetworkMove,
         validateSteppingDest: validateSteppingDestForNetwork,
@@ -2052,10 +2042,9 @@ function setupNetwork(
                 Math.abs(player.worldY - targetY) < 0.5;
             if (alreadyAligned) {
                 confirmServerTile(movementPrediction, pos.tileX, pos.tileY, pos.z);
-                lastOutboundSyncedPrevTile = null;
+                updateLastServerAck(pos.tileX, pos.tileY, pos.z);
                 return;
             }
-            lastOutboundSyncedPrevTile = null;
             const reconcile = reconcileMovementPrediction(
                 movementPrediction,
                 pos.tileX,
@@ -2071,6 +2060,7 @@ function setupNetwork(
                         `dropped ${reconcile.droppedPending} predicted step(s)`
                 );
             }
+            updateLastServerAck(pos.tileX, pos.tileY, pos.z);
             player.worldZ = clampFloorZ(pos.z);
             gridMovement.stepping = false;
             gridMovement.activeStepFacing = null;

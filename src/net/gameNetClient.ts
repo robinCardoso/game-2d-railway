@@ -60,8 +60,8 @@ export interface GameNetClientOptions {
     onMoveAck?: (pos: TilePos & { seq?: number }) => void;
     /** Reserva de deslize (`steppingDest`) — destino bloqueado não envia ao servidor. */
     validateSteppingDest?: (tileX: number, tileY: number, z: number) => boolean;
-    /** Passo rejeitado sem `position_correction` — cliente faz rollback suave. */
-    onMovementRejected?: (code: string) => void;
+    /** Passo rejeitado sem `position_correction` — cliente faz rollback ao último ACK. */
+    onMovementRejected?: (code: string, seq?: number) => void;
     /** Servidor corrigiu posição após movimento inválido. */
     onPositionCorrection?: (pos: {
         mapId: string;
@@ -368,9 +368,9 @@ export class GameNetClient {
         this.setStatus('disconnected');
     }
 
-    /** Chamar após movimento ou troca de mapa no loop do jogo. */
     /**
-     * Reenvia o tile atual após `MOVEMENT_TOO_FAST` (servidor não manda `position_correction`).
+     * Invalida `lastSynced` para forçar reenvio do tile no próximo `syncPositionIfChanged`.
+     * Usar só em reconexão, troca de mapa ou retorno de background — não em erro de movimento.
      */
     forceResyncPosition(): void {
         if (!this.isConnected()) return;
@@ -728,16 +728,13 @@ export class GameNetClient {
                 break;
             case 'error':
                 console.warn(`[GameNet] ${msg.code}: ${msg.message}`);
-                if (msg.code === 'MOVEMENT_TOO_FAST') {
-                    this.forceResyncPosition();
-                    this.options.onMovementRejected?.(msg.code);
-                } else if (
+                if (
+                    msg.code === 'MOVEMENT_TOO_FAST' ||
                     msg.code === 'INVALID_STEP' ||
                     msg.code === 'NOT_WALKABLE' ||
                     msg.code === 'INVALID_TILE'
                 ) {
-                    this.forceResyncPosition();
-                    this.options.onMovementRejected?.(msg.code);
+                    this.options.onMovementRejected?.(msg.code, msg.seq);
                 }
                 this.options.onServerError?.({
                     code: msg.code,

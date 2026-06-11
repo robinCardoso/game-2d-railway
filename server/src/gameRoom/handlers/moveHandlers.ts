@@ -53,7 +53,8 @@ export interface MoveHandlerContext {
         code: string,
         message: string,
         logDetail?: string,
-        sendCorrection?: boolean
+        sendCorrection?: boolean,
+        seq?: number
     ) => void;
     persistPlayerPosition: (player: ConnectedPlayer, immediate?: boolean) => void;
     sendCreatureSync: (
@@ -137,7 +138,8 @@ export function handleMove(
                     derived.code ?? 'INVALID_STEP',
                     'Movimento rejeitado: passo inválido.',
                     undefined,
-                    false
+                    false,
+                    msg.seq
                 );
                 return;
             }
@@ -153,7 +155,8 @@ export function handleMove(
             'INVALID_TILE',
             'Movimento rejeitado: coordenadas fora dos limites.',
             undefined,
-            false
+            false,
+            !isMapChange && msg.type === 'move' ? msg.seq : undefined
         );
         return;
     }
@@ -238,7 +241,8 @@ export function handleMove(
             'NOT_WALKABLE',
             'Movimento rejeitado: tile bloqueado.',
             undefined,
-            false
+            false,
+            !isMapChange && msg.type === 'move' ? msg.seq : undefined
         );
         return;
     }
@@ -263,7 +267,8 @@ export function handleMove(
                     stepCheck.code ?? 'INVALID_STEP',
                     'Movimento rejeitado: passo inválido (adjacente, diagonal ou canto bloqueado).',
                     undefined,
-                    false
+                    false,
+                    msg.type === 'move' ? msg.seq : undefined
                 );
                 return;
             }
@@ -293,7 +298,8 @@ export function handleMove(
                     'Movimento rejeitado: aguarde o intervalo do passo.',
                     `movimento rápido demais: ${player.name} ` +
                         `${rate.elapsedMs}ms < ${rate.minIntervalMs}ms (step ${stepMs}ms, obs ${player.lastObservedMoveIntervalMs}ms)`,
-                    false
+                    false,
+                    msg.type === 'move' ? msg.seq : undefined
                 );
                 return;
             }
