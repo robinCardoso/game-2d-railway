@@ -1,6 +1,6 @@
 import type { VocationConfig } from '../engine/character/calculateStats';
 import { VOCATIONS as BUNDLED_VOCATIONS } from './default/vocations';
-import { resolveApiUrl } from '../shared/apiUrl';
+import { resolvePublicAssetUrl } from '../shared/apiUrl';
 import { assetLoader } from './assetLoader';
 
 const VOCATIONS_URL = '/vocations.json';
@@ -46,7 +46,7 @@ export async function loadRuntimeVocations(): Promise<Record<string, VocationCon
         if (assetLoader.isPackaged()) {
             raw = await assetLoader.getJson<any>('vocations.json');
         } else {
-            const res = await fetch(resolveApiUrl(VOCATIONS_URL), { cache: 'no-store' });
+            const res = await fetch(resolvePublicAssetUrl(VOCATIONS_URL), { cache: 'no-store' });
             if (res.ok) {
                 raw = await res.json();
             }

@@ -1,4 +1,4 @@
-import { resolveApiUrl } from '../shared/apiUrl';
+import { resolvePublicAssetUrl } from '../shared/apiUrl';
 
 const PAK_URL = '/assets.pak';
 const SIG_URL = '/assets.sig';
@@ -105,9 +105,9 @@ class AssetLoader {
             console.log('[AssetLoader] Tentando baixar assets.pak ...');
 
             const [pakRes, sigRes, pubKeyRes] = await Promise.all([
-                fetch(resolveApiUrl(PAK_URL)),
-                fetch(resolveApiUrl(SIG_URL)),
-                fetch(resolveApiUrl(PUB_KEY_URL)),
+                fetch(resolvePublicAssetUrl(PAK_URL)),
+                fetch(resolvePublicAssetUrl(SIG_URL)),
+                fetch(resolvePublicAssetUrl(PUB_KEY_URL)),
             ]);
 
             if (!pakRes.ok) {
@@ -206,7 +206,7 @@ class AssetLoader {
 
         try {
             const url = publicPath.startsWith('/') ? publicPath : `/${publicPath}`;
-            const res = await fetch(resolveApiUrl(url), { cache: 'no-store' });
+            const res = await fetch(resolvePublicAssetUrl(url), { cache: 'no-store' });
             if (!res.ok) return null;
             return (await res.json()) as T;
         } catch {
@@ -222,7 +222,7 @@ class AssetLoader {
 
         try {
             const url = publicPath.startsWith('/') ? publicPath : `/${publicPath}`;
-            const res = await fetch(resolveApiUrl(url), { cache: 'no-store' });
+            const res = await fetch(resolvePublicAssetUrl(url), { cache: 'no-store' });
             if (!res.ok) return null;
             return await res.text();
         } catch {
@@ -256,7 +256,7 @@ class AssetLoader {
             if (blobUrl) return blobUrl;
         }
         const withSlash = publicPath.startsWith('/') ? publicPath : `/${publicPath}`;
-        return resolveApiUrl(withSlash);
+        return resolvePublicAssetUrl(withSlash);
     }
 
     /** Carrega HTMLImageElement de tile/sprite (pacote ou loose). */

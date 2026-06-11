@@ -1,5 +1,5 @@
 import { ENGINE_CONFIG } from './config';
-import { resolveApiUrl } from '../shared/apiUrl';
+import { resolvePublicAssetUrl } from '../shared/apiUrl';
 import { isVariantBrush } from './tileVariants';
 import type { MapCoordSystem, MapTileEntry, TileCatalogEntry, TileRegistry } from './types';
 
@@ -12,7 +12,7 @@ export const TILE_CATALOG_PATH = '/tile_catalog.json';
 
 /** URL resolvida para fetch em Electron/produção (`VITE_API_BASE_URL`). */
 export function getTileCatalogUrl(): string {
-    return resolveApiUrl(TILE_CATALOG_PATH);
+    return resolvePublicAssetUrl(TILE_CATALOG_PATH);
 }
 
 export function getMapCoordSystem(): MapCoordSystem {

@@ -1,5 +1,5 @@
 import type { Gender, VocationId } from '../../../shared/types/character';
-import { resolveApiUrl } from '../../shared/apiUrl';
+import { resolvePublicAssetUrl } from '../../shared/apiUrl';
 
 export type OutfitPreset = {
   id: string;
@@ -20,7 +20,7 @@ export async function loadOutfitPresets(): Promise<OutfitPreset[]> {
     if (!raw) throw new Error('Erro ao carregar outfit_presets.json do pacote assets.pak');
     outfits = raw;
   } else {
-    const response = await fetch(resolveApiUrl('/outfit_presets.json'));
+    const response = await fetch(resolvePublicAssetUrl('/outfit_presets.json'));
     if (!response.ok) {
       throw new Error('Erro ao carregar outfit_presets.json');
     }

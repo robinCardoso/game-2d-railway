@@ -7,7 +7,7 @@ import {
     type MobRace,
 } from '../game-data/mobPresetTypes';
 import { invalidateCreatureThumbnailCache } from './creaturePresetThumbnail';
-import { resolveApiUrl } from '../shared/apiUrl';
+import { resolvePublicAssetUrl } from '../shared/apiUrl';
 import { assetLoader } from '../game-data/assetLoader';
 
 export type { CreatureVisualSize, MobLootEntry, MobRace };
@@ -75,7 +75,7 @@ export async function loadCreaturePresets(): Promise<void> {
             if (!raw) throw new Error('creature_presets.json não encontrado no pacote assets.pak');
             rawArray = raw;
         } else {
-            const res = await fetch(resolveApiUrl(PRESETS_URL), { cache: 'no-store' });
+            const res = await fetch(resolvePublicAssetUrl(PRESETS_URL), { cache: 'no-store' });
             if (!res.ok) {
                 console.warn('[CreaturePresets] creature_presets.json ausente — nenhuma criatura na paleta.');
                 return;

@@ -1,3 +1,5 @@
+import { resolvePublicAssetUrl } from '../shared/apiUrl';
+
 const EYE_ICON = '/assets/ui/icon-eye.svg';
 const EYE_OFF_ICON = '/assets/ui/icon-eye-off.svg';
 
@@ -17,7 +19,7 @@ export function bindPasswordToggles(): void {
 
             const icon = button.querySelector('img');
             if (icon) {
-                icon.src = shouldShow ? EYE_OFF_ICON : EYE_ICON;
+                icon.src = resolvePublicAssetUrl(shouldShow ? EYE_OFF_ICON : EYE_ICON);
             }
         });
     });

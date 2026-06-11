@@ -3,7 +3,7 @@ import {
     type ItemCatalogDocument,
     type ItemCatalogEntry,
 } from './itemCatalogTypes';
-import { resolveApiUrl } from '../shared/apiUrl';
+import { resolvePublicAssetUrl } from '../shared/apiUrl';
 
 import { assetLoader } from './assetLoader';
 
@@ -44,7 +44,7 @@ export async function loadItemCatalog(): Promise<ItemCatalogDocument> {
             raw = await assetLoader.getJson<ItemCatalogDocument>('item_catalog.json');
             if (!raw) throw new Error('item_catalog.json não encontrado no pacote assets.pak');
         } else {
-            const res = await fetch(resolveApiUrl(CATALOG_URL), { cache: 'no-store' });
+            const res = await fetch(resolvePublicAssetUrl(CATALOG_URL), { cache: 'no-store' });
             if (!res.ok) {
                 console.warn('[ItemCatalog] item_catalog.json ausente — catálogo vazio.');
                 rebuildIndex({ items: [] });

@@ -1,5 +1,5 @@
 import type { RegistryTile, TileRegistry } from './types';
-import { resolveApiUrl } from '../shared/apiUrl';
+import { resolvePublicAssetUrl } from '../shared/apiUrl';
 
 export const VARIANT_BRUSH_ID_BASE = 9000;
 export const VARIANT_BRUSH_ID_MAX = 9999;
@@ -54,7 +54,7 @@ export async function loadVariantGroupManifest(): Promise<VariantGroupManifest> 
                 return manifestCache;
             }
         } else {
-            const res = await fetch(resolveApiUrl('/tile_variant_groups.json'));
+            const res = await fetch(resolvePublicAssetUrl('/tile_variant_groups.json'));
             if (res.ok) {
                 manifestCache = (await res.json()) as VariantGroupManifest;
                 return manifestCache;

@@ -1,4 +1,5 @@
 import './worldEntryOverlay.css';
+import { resolvePublicAssetUrl } from '../shared/apiUrl';
 
 export type WorldEntryStage =
     | 'version'
@@ -70,8 +71,9 @@ function createOverlay(): HTMLElement {
       <div class="world-entry-header">
         <img
           class="world-entry-logo"
-          src="/assets/brand/elarion-logo.png"
+          src=""
           alt="Elarion Online"
+          data-world-entry-logo
         />
         <h1>Entrando no mundo</h1>
         <p>Prepare-se para sua aventura</p>
@@ -133,6 +135,11 @@ function createOverlay(): HTMLElement {
       </div>
     </div>
   `;
+
+    const logo = overlay.querySelector<HTMLImageElement>('[data-world-entry-logo]');
+    if (logo) {
+        logo.src = resolvePublicAssetUrl('/assets/brand/elarion-logo.png');
+    }
 
     document.body.appendChild(overlay);
     return overlay;

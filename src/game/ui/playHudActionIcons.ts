@@ -3,6 +3,8 @@
  * Arquivos em public/ui/play-hud/ — substitua PNG/SVG mantendo o mesmo nome.
  */
 
+import { resolvePublicAssetUrl } from '../../shared/apiUrl';
+
 const BASE = '/ui/play-hud';
 
 export type PlayHudActionIconKey = 'character' | 'inventory' | 'map' | 'settings' | 'chat' | 'menu';
@@ -18,5 +20,5 @@ export const PLAY_HUD_ACTION_ICON_URLS: Record<PlayHudActionIconKey, string> = {
 };
 
 export function playHudActionIconUrl(key: PlayHudActionIconKey): string {
-    return PLAY_HUD_ACTION_ICON_URLS[key];
+    return resolvePublicAssetUrl(PLAY_HUD_ACTION_ICON_URLS[key]);
 }
