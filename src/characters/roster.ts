@@ -1,6 +1,7 @@
 import './roster.css';
 import '../ui/player-flow-mobile.css';
 import { requireAuth, signOut, getProfile } from '../shared/authGuard';
+import { isStudioClientEnabled } from '../shared/studioClient';
 import { enforceDesktopVersionGate, initDesktopClientShell } from '../ui/initDesktopClient';
 import {
     listCharacters,
@@ -10,7 +11,7 @@ import {
 import type { CharacterRow } from '../shared/types';
 import { track } from '../shared/analytics';
 import { resolveAnimationSourceRect } from '../character/sheetFrameLayout';
-import { resolveApiUrl } from '../shared/apiUrl';
+import { assetLoader } from '../game-data/assetLoader';
 import {
     hideWorldEntryOverlay,
     markWorldEntryPending,
@@ -49,7 +50,7 @@ emailEl.textContent = session.email;
 
 const profile = await getProfile();
 const { isStudioMobileBlocked } = await import('../game/runtime/platform');
-if (!profile?.canAccessStudio || isStudioMobileBlocked()) {
+if (!isStudioClientEnabled() || !profile?.canAccessStudio || isStudioMobileBlocked()) {
     studioLink.style.display = 'none';
 }
 
@@ -241,7 +242,7 @@ async function drawCharacterPreview(canvas: HTMLCanvasElement, spriteSheetUrl: s
         img.onload = () => resolve(true);
         img.onerror = () => resolve(false);
     });
-    img.src = resolveApiUrl('/' + cleanPath);
+    img.src = assetLoader.resolveAssetUrl('/' + cleanPath);
     if (!(await loaded)) return;
 
     const frameWidth = config?.frameWidth ?? 32;
@@ -360,6 +361,11 @@ enterBtn.addEventListener('click', async () => {
 
         markWorldEntryPending(selected?.name);
         const characterId = selectedId;
+        try {
+            localStorage.setItem('game2d_last_character_id', characterId);
+        } catch {
+            /* ignore */
+        }
         location.href = `play.html?characterId=${encodeURIComponent(characterId)}`;
     } catch (err) {
         setWorldEntryStage('character', 'error');

@@ -1,3 +1,4 @@
+import type { SpectatorTile } from '../../../shared/creatureSpectatorRange.js';
 import type {
     CreatureDamagedMessage,
     CreatureDiedMessage,
@@ -7,20 +8,26 @@ import type {
     ServerMessage,
 } from '../../../shared/protocol.js';
 import {
-    MONSTER_STEP_MS,
     armMonsterWakeDelay,
-    chaseFaceDirectionWhenEngaged,
+    chaseDistanceToPlayer,
     isMonsterWakePaused,
-    isRangedInComfortZone,
-    resolveChaseIdleDirection,
+    manhattanDist,
+    MONSTER_AGGRO_RADIUS,
+    shouldMonsterApproachChase,
+    resolveAggroFaceDirection,
     tickMonsterChaseStep,
     type CardinalDirection,
 } from '../../../shared/creatureChase.js';
+import { creatureHasPlayerInAwareRange } from '../../../shared/creatureSpectatorRange.js';
 import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
 import { MONSTER_RESPAWN_MS } from '../../../shared/creatureDeath.js';
 import type { VocationId } from '../../../shared/types/character.js';
 import { processAttack } from '../combat/combat.js';
+import { validateAndResolveSpellCast, type SpellCastAttacker } from '../combat/spellCast.js';
 import { isPlayerInAttackRange, resolvePlayerAttackProfile } from '../../../shared/playerAttack.js';
+import type { SpellDefinition } from '../../../src/game-data/spellCatalogTypes.js';
+import type { MobLootEntry } from '../../../src/game-data/mobPresetTypes.js';
+import type { VocationConfig } from '../../../src/engine/character/calculateStats.js';
 import type { MapCollisionStore } from '../MapCollisionStore.js';
 import type { CreaturePresetStore } from './CreaturePresetStore.js';
 import type { VocationStore } from './VocationStore.js';
@@ -55,8 +62,18 @@ interface ServerCreature {
     health: number;
     defense: number;
     xpReward: number;
+    loot: MobLootEntry[];
+    /** Dano acumulado por jogador nesta vida (loot/XP pessoal). */
+    damageByPlayer: Map<string, number>;
     isDead: boolean;
     respawnAtMs?: number;
+}
+
+export interface CreatureKillRewardData {
+    damageByPlayer: Map<string, number>;
+    maxHealth: number;
+    creatureTile: SpectatorTile;
+    loot: MobLootEntry[];
 }
 
 interface RoomCreatureState {
@@ -93,9 +110,53 @@ export class RoomCreatureManager {
         private readonly collision: MapCollisionStore,
         private readonly presets: CreaturePresetStore,
         private readonly vocations: VocationStore,
-        private readonly broadcastToRoom: (room: string, message: ServerMessage) => void,
+        private readonly broadcastToSpectators: (
+            room: string,
+            message: ServerMessage,
+            event: SpectatorTile
+        ) => void,
         private readonly getPlayersInRoom: (room: string) => RoomPlayerRef[]
     ) {}
+
+    getCreatureLoot(room: string, creatureId: string): MobLootEntry[] {
+        return this.getCreatureKillRewardData(room, creatureId)?.loot ?? [];
+    }
+
+    getCreatureKillRewardData(
+        room: string,
+        creatureId: string
+    ): CreatureKillRewardData | null {
+        const state = this.rooms.get(room);
+        const creature = state?.creatures.find((c) => c.id === creatureId);
+        if (!creature) return null;
+        return {
+            damageByPlayer: creature.damageByPlayer,
+            maxHealth: creature.maxHealth,
+            creatureTile: {
+                tileX: creature.tileX,
+                tileY: creature.tileY,
+                z: creature.z,
+            },
+            loot: creature.loot.map((row) => ({ ...row })),
+        };
+    }
+
+    private recordCreatureDamage(creature: ServerCreature, playerId: string, damage: number): void {
+        if (damage <= 0) return;
+        const prev = creature.damageByPlayer.get(playerId) ?? 0;
+        creature.damageByPlayer.set(playerId, prev + damage);
+    }
+
+    getCreatureTile(
+        room: string,
+        creatureId: string
+    ): SpectatorTile | undefined {
+        const state = this.rooms.get(room);
+        if (!state) return undefined;
+        const creature = state.creatures.find((c) => c.id === creatureId);
+        if (!creature) return undefined;
+        return { tileX: creature.tileX, tileY: creature.tileY, z: creature.z };
+    }
 
     start(): void {
         if (this.tickTimer) return;
@@ -133,6 +194,8 @@ export class RoomCreatureManager {
                     health: stats.maxHealth,
                     defense: stats.defense,
                     xpReward: stats.xpReward,
+                    loot: stats.loot.map((row) => ({ ...row })),
+                    damageByPlayer: new Map(),
                     isDead: false,
                 };
             });
@@ -217,6 +280,7 @@ export class RoomCreatureManager {
         );
 
         creature.health = Math.max(0, creature.health - result.finalDamage);
+        this.recordCreatureDamage(creature, attacker.playerId, result.finalDamage);
 
         const damaged: CreatureDamagedMessage = {
             type: 'creature_damaged',
@@ -260,6 +324,106 @@ export class RoomCreatureManager {
         };
     }
 
+    processSpellCast(
+        room: string,
+        spell: SpellDefinition,
+        attacker: SpellCastAttacker,
+        creatureId: string,
+        nowMs: number,
+        vocationConfig: VocationConfig | undefined
+    ): {
+        ok: boolean;
+        code?: string;
+        damaged?: CreatureDamagedMessage;
+        died?: CreatureDiedMessage;
+        newMana?: number;
+        spellCooldownUntil?: Record<string, number>;
+        groupCooldownUntil?: Record<string, number>;
+    } {
+        const state = this.rooms.get(room);
+        if (!state) return { ok: false, code: 'ROOM_NOT_FOUND' };
+
+        const creature = state.creatures.find((c) => c.id === creatureId);
+        const resolved = validateAndResolveSpellCast(
+            spell,
+            attacker,
+            creature
+                ? {
+                      id: creature.id,
+                      name: creature.name,
+                      tileX: creature.tileX,
+                      tileY: creature.tileY,
+                      z: creature.z,
+                      health: creature.health,
+                      maxHealth: creature.maxHealth,
+                      defense: creature.defense,
+                      isDead: creature.isDead,
+                      creatureType: creature.creatureType,
+                  }
+                : undefined,
+            vocationConfig,
+            nowMs
+        );
+
+        if (!resolved.ok) return { ok: false, code: resolved.code };
+
+        if (!creature || resolved.damage === undefined) {
+            return {
+                ok: true,
+                newMana: resolved.newMana,
+                spellCooldownUntil: resolved.spellCooldownUntil,
+                groupCooldownUntil: resolved.groupCooldownUntil,
+            };
+        }
+
+        creature.health = resolved.newHealth ?? creature.health;
+        this.recordCreatureDamage(creature, attacker.playerId, resolved.damage);
+        const damaged: CreatureDamagedMessage = {
+            type: 'creature_damaged',
+            v: PROTOCOL_VERSION,
+            creatureId: creature.id,
+            mapId: state.mapId,
+            instanceId: state.instanceId,
+            health: creature.health,
+            maxHealth: creature.maxHealth,
+            damage: resolved.damage,
+            attackerPlayerId: attacker.playerId,
+        };
+
+        if (creature.health > 0) {
+            return {
+                ok: true,
+                damaged,
+                newMana: resolved.newMana,
+                spellCooldownUntil: resolved.spellCooldownUntil,
+                groupCooldownUntil: resolved.groupCooldownUntil,
+            };
+        }
+
+        creature.isDead = true;
+        creature.health = 0;
+        creature.respawnAtMs = nowMs + MONSTER_RESPAWN_MS;
+        return {
+            ok: true,
+            damaged,
+            died: {
+                type: 'creature_died',
+                v: PROTOCOL_VERSION,
+                creatureId: creature.id,
+                mapId: state.mapId,
+                instanceId: state.instanceId,
+                tileX: creature.tileX,
+                tileY: creature.tileY,
+                z: creature.z,
+                xpReward: creature.xpReward,
+                killerPlayerId: attacker.playerId,
+            },
+            newMana: resolved.newMana,
+            spellCooldownUntil: resolved.spellCooldownUntil,
+            groupCooldownUntil: resolved.groupCooldownUntil,
+        };
+    }
+
     private toSnapshot(c: ServerCreature): CreatureSnapshot {
         return {
             creatureId: c.id,
@@ -270,7 +434,7 @@ export class RoomCreatureManager {
             tileY: c.tileY,
             z: c.z,
             direction: c.direction,
-            stepDurationMs: MONSTER_STEP_MS,
+            stepDurationMs: this.presets.getChaseConfig(c.name).walkStepMs,
             creatureType: c.creatureType,
             health: c.health,
             maxHealth: c.maxHealth,
@@ -302,6 +466,7 @@ export class RoomCreatureManager {
                 creature.reactAfterMs = undefined;
                 creature.wakeUntilMs = undefined;
                 creature.respawnAtMs = undefined;
+                creature.damageByPlayer = new Map();
                 armMonsterWakeDelay(creature, nowMs);
                 respawns.push({
                     type: 'creature_respawned',
@@ -317,7 +482,11 @@ export class RoomCreatureManager {
                 });
             }
             for (const msg of respawns) {
-                this.broadcastToRoom(room, msg);
+                this.broadcastToSpectators(room, msg, {
+                    tileX: msg.tileX,
+                    tileY: msg.tileY,
+                    z: msg.z,
+                });
             }
 
             const players = this.getPlayersInRoom(room);
@@ -327,12 +496,41 @@ export class RoomCreatureManager {
             const reservedGoals = new Set<string>();
             const moves: CreatureMovedMessage[] = [];
 
-            for (const creature of state.creatures) {
-                if (creature.creatureType !== 'monster' || creature.isDead) continue;
-                if (isMonsterWakePaused(creature, nowMs)) continue;
+            const chaseMonsters = state.creatures
+                .filter(
+                    (c) =>
+                        c.creatureType === 'monster' &&
+                        !c.isDead &&
+                        !isMonsterWakePaused(c, nowMs) &&
+                        this.hasPlayerInAwareRange(c, players)
+                )
+                .sort(
+                    (a, b) =>
+                        this.nearestPlayerDist(a, players) - this.nearestPlayerDist(b, players)
+                );
 
+            const activeChasersPerTarget = new Map<string, number>();
+
+            for (const creature of chaseMonsters) {
                 const target = this.pickChaseTarget(creature, players);
                 if (!target) continue;
+
+                const chaseConfig = this.presets.getChaseConfig(creature.name);
+                const combatDist = chaseDistanceToPlayer(
+                    creature.tileX,
+                    creature.tileY,
+                    target.tileX,
+                    target.tileY,
+                    chaseConfig
+                );
+                const targetKey = `${target.tileX},${target.tileY},${target.z}`;
+                const chasing = activeChasersPerTarget.get(targetKey) ?? 0;
+                if (!shouldMonsterApproachChase(combatDist, chaseConfig.attackRange, chasing)) {
+                    continue;
+                }
+                if (combatDist > chaseConfig.attackRange) {
+                    activeChasersPerTarget.set(targetKey, chasing + 1);
+                }
 
                 const canWalkTerrain = (tx: number, ty: number) => {
                     if (tx < 0 || tx >= mapSize || ty < 0 || ty >= mapSize) return false;
@@ -344,10 +542,8 @@ export class RoomCreatureManager {
                     !this.isPlayerAt(players, tx, ty, creature.z) &&
                     !this.isCreatureAt(state.creatures, tx, ty, creature.z, creature.id);
 
-                const canGoalTile = (tx: number, ty: number) => {
-                    if (!canWalkTerrain(tx, ty)) return false;
-                    return !this.isPlayerAt(players, tx, ty, creature.z);
-                };
+                // Meta = tile livre (como OTC canWalkTo — sem creature no destino).
+                const canGoalTile = canStepTo;
 
                 const mobState = {
                     tileX: creature.tileX,
@@ -359,8 +555,6 @@ export class RoomCreatureManager {
                     reactAfterMs: creature.reactAfterMs,
                     wakeUntilMs: creature.wakeUntilMs,
                 };
-
-                const chaseConfig = this.presets.getChaseConfig(creature.name);
 
                 const step = tickMonsterChaseStep(
                     mobState,
@@ -392,35 +586,20 @@ export class RoomCreatureManager {
                         tileY: creature.tileY,
                         z: creature.z,
                         direction: creature.direction,
-                        stepDurationMs: MONSTER_STEP_MS,
+                        stepDurationMs: chaseConfig.walkStepMs,
                     });
                     continue;
                 }
 
-                const distToPlayer =
-                    Math.abs(target.tileX - creature.tileX) +
-                    Math.abs(target.tileY - creature.tileY);
-                const inCombatPosition =
-                    chaseConfig.chaseBehavior === 'melee'
-                        ? distToPlayer <= chaseConfig.attackRange
-                        : isRangedInComfortZone(distToPlayer, chaseConfig);
-
-                const faceDir = inCombatPosition
-                    ? chaseFaceDirectionWhenEngaged(
-                          creature.tileX,
-                          creature.tileY,
-                          target.tileX,
-                          target.tileY,
-                          chaseConfig
-                      )
-                    : resolveChaseIdleDirection(
-                          creature.tileX,
-                          creature.tileY,
-                          target.tileX,
-                          target.tileY,
-                          target.z,
-                          creature.z
-                      );
+                const faceDir = resolveAggroFaceDirection(
+                    creature.tileX,
+                    creature.tileY,
+                    target.tileX,
+                    target.tileY,
+                    target.z,
+                    creature.z,
+                    creature.direction
+                );
                 if (faceDir && faceDir !== creature.direction) {
                     creature.direction = faceDir;
                     moves.push({
@@ -433,15 +612,36 @@ export class RoomCreatureManager {
                         tileY: creature.tileY,
                         z: creature.z,
                         direction: creature.direction,
-                        stepDurationMs: MONSTER_STEP_MS,
+                        stepDurationMs: chaseConfig.walkStepMs,
                     });
                 }
             }
 
             for (const move of moves) {
-                this.broadcastToRoom(room, move);
+                this.broadcastToSpectators(room, move, {
+                    tileX: move.tileX,
+                    tileY: move.tileY,
+                    z: move.z,
+                });
             }
         }
+    }
+
+    private hasPlayerInAwareRange(creature: ServerCreature, players: RoomPlayerRef[]): boolean {
+        return creatureHasPlayerInAwareRange(
+            { tileX: creature.tileX, tileY: creature.tileY, z: creature.z },
+            players.map((p) => ({ tileX: p.tileX, tileY: p.tileY, z: p.z }))
+        );
+    }
+
+    private nearestPlayerDist(creature: ServerCreature, players: RoomPlayerRef[]): number {
+        let best = Infinity;
+        for (const p of players) {
+            if (p.z !== creature.z) continue;
+            const d = manhattanDist(creature.tileX, creature.tileY, p.tileX, p.tileY);
+            if (d < best) best = d;
+        }
+        return best;
     }
 
     private pickChaseTarget(
@@ -452,8 +652,8 @@ export class RoomCreatureManager {
         let bestDist = Infinity;
         for (const p of players) {
             if (p.z !== creature.z) continue;
-            const d =
-                Math.abs(p.tileX - creature.tileX) + Math.abs(p.tileY - creature.tileY);
+            const d = manhattanDist(creature.tileX, creature.tileY, p.tileX, p.tileY);
+            if (d > MONSTER_AGGRO_RADIUS) continue;
             if (d < bestDist) {
                 bestDist = d;
                 best = p;

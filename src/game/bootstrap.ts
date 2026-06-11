@@ -4,13 +4,27 @@ import { track } from '../shared/analytics';
 import { enforceDesktopVersionGate, initDesktopClientShell } from '../ui/initDesktopClient';
 import { resumeWorldEntryOverlayIfPending } from '../world-entry/worldEntryOverlay';
 import { initPlayMobileHud } from './playMobileHud';
+import { initPlayHudActionBar } from './ui/playHudActionBar';
+import { initPlayHudMinimap } from './ui/playHudMinimap';
+import { initPlayHudCharacterCard } from './ui/playHudCharacterCard';
 import { initPlayHudPanels } from './ui/playHudPanels';
 import { initPlayHudSettings } from './ui/playHudSettings';
+import { initPlayCombatHub } from './ui/playCombatHub';
+import { initPlaySpellModal } from './ui/playSpellModal';
+import { initPlayChatController } from './chat/playChatController';
+import { initPlayPerformanceMonitor } from './debug/playPerformanceMonitor';
 import { startPlay, stopLocationAutosave } from './playApp';
 
 resumeWorldEntryOverlayIfPending();
 initPlayHudPanels();
 initPlayHudSettings();
+initPlayHudCharacterCard();
+initPlayHudActionBar();
+initPlayChatController();
+initPlayHudMinimap();
+initPlayCombatHub();
+initPlaySpellModal();
+initPlayPerformanceMonitor();
 initPlayMobileHud();
 
 initDesktopClientShell();
@@ -37,6 +51,7 @@ document.getElementById('logoutPlayMobile')?.addEventListener('click', (e) => vo
 
 const params = new URLSearchParams(location.search);
 const characterId = params.get('characterId');
+const overrideMapId = params.get('mapId') ?? undefined;
 
 if (!characterId) {
     location.href = 'characters.html';
@@ -50,7 +65,7 @@ if (!characterId) {
             const versionOk = await enforceDesktopVersionGate();
             if (versionOk) {
                 track('first_world_enter', { characterId });
-                await startPlay(character, session.userId);
+                await startPlay(character, session.userId, { overrideMapId });
             }
         }
     } catch {

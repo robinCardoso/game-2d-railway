@@ -10,6 +10,7 @@ import {
 } from '../../../src/character/characterCalibration.js';
 import type { CharacterSpriteConfig } from '../../../src/character/characterSpriteTypes.js';
 import { sanitizeCreaturePresetEntry } from '../../../src/game-data/mobPresetTypes.js';
+import { sanitizeSpellCatalogDocument } from '../../../src/game-data/spellCatalogTypes.js';
 import { sanitizeItemCatalogDocument, findUnknownLootItemIds } from '../../../src/game-data/itemCatalogTypes.js';
 import {
     defaultItemIconUrl,
@@ -879,6 +880,60 @@ export const VOCATIONS: Record<string, VocationConfig> = ${JSON.stringify(vocati
             status: 200,
             body: { success: true, item: catalog.items[idx], catalog },
         };
+    }
+
+    getSpellCatalog(): ApiResult {
+        if (!fs.existsSync(paths.spellCatalogPath)) {
+            return { status: 200, body: { spells: [] } };
+        }
+        try {
+            const raw = JSON.parse(fs.readFileSync(paths.spellCatalogPath, 'utf-8'));
+            return { status: 200, body: sanitizeSpellCatalogDocument(raw) };
+        } catch {
+            return { status: 200, body: { spells: [] } };
+        }
+    }
+
+    saveSpellCatalog(body: Record<string, unknown>): ApiResult {
+        const doc = sanitizeSpellCatalogDocument(body);
+        fs.mkdirSync(path.dirname(paths.spellCatalogPath), { recursive: true });
+        fs.writeFileSync(paths.spellCatalogPath, JSON.stringify(doc, null, 2) + '\n');
+        return { status: 200, body: { success: true, catalog: doc } };
+    }
+
+    saveSpellIcon(body: Record<string, unknown>): ApiResult {
+        const spellId = typeof body.spellId === 'string' ? body.spellId.trim() : '';
+        if (!spellId || !/^[a-z0-9_]+$/.test(spellId)) {
+            return { status: 400, body: { error: 'spellId inválido (use slug a-z0-9_).' } };
+        }
+        const spriteBase64 = body.spriteBase64;
+        if (!spriteBase64 || !String(spriteBase64).startsWith('data:image/png;base64,')) {
+            return { status: 400, body: { error: 'spriteBase64 PNG obrigatório.' } };
+        }
+
+        const targetDir = path.join(paths.tilesDir, 'effects', 'spells', 'icons');
+        fs.mkdirSync(targetDir, { recursive: true });
+        const imageBuffer = Buffer.from(String(spriteBase64).split(',')[1] ?? '', 'base64');
+        fs.writeFileSync(path.join(targetDir, `${spellId}.png`), imageBuffer);
+
+        const iconUrl = `tiles/effects/spells/icons/${spellId}.png`;
+        let doc = { spells: [] as ReturnType<typeof sanitizeSpellCatalogDocument>['spells'] };
+        if (fs.existsSync(paths.spellCatalogPath)) {
+            try {
+                doc = sanitizeSpellCatalogDocument(
+                    JSON.parse(fs.readFileSync(paths.spellCatalogPath, 'utf-8'))
+                );
+            } catch {
+                doc = { spells: [] };
+            }
+        }
+        const idx = doc.spells.findIndex((s) => s.id === spellId);
+        if (idx >= 0) {
+            doc.spells[idx] = { ...doc.spells[idx], icon: `/${iconUrl}` };
+            fs.writeFileSync(paths.spellCatalogPath, JSON.stringify(doc, null, 2) + '\n');
+        }
+
+        return { status: 200, body: { success: true, iconUrl: `/${iconUrl}` } };
     }
 }
 

@@ -1,10 +1,15 @@
-export type PlayPanelName = 'character' | 'inventory' | 'settings' | 'map' | 'chat';
+export type PlayPanelName = 'character' | 'inventory' | 'settings' | 'map' | 'spells';
 
 type PanelOpenListener = (name: PlayPanelName) => void;
 
 let closePanelsImpl: (() => void) | null = null;
 let openPanelImpl: ((name: PlayPanelName) => void) | null = null;
 const openListeners = new Set<PanelOpenListener>();
+
+export function isPlayPanelOpen(name: PlayPanelName): boolean {
+    const panel = document.querySelector<HTMLElement>(`[data-panel-name="${name}"]`);
+    return panel ? !panel.hidden : false;
+}
 
 export function openPlayPanel(name: PlayPanelName): void {
     openPanelImpl?.(name);
@@ -39,7 +44,17 @@ export function initPlayHudPanels(): void {
         document.body.classList.remove('play-panel-open');
     };
 
+    const closeHudMenu = (): void => {
+        const dropdown = document.getElementById('playHudMenuDropdown');
+        const menuBtn = document.getElementById('playHudMenuBtn');
+        if (!dropdown || dropdown.hidden) return;
+        dropdown.hidden = true;
+        menuBtn?.setAttribute('aria-expanded', 'false');
+        menuBtn?.classList.remove('is-active');
+    };
+
     const openPanel = (name: PlayPanelName): void => {
+        closeHudMenu();
         closePanels();
 
         const panel = document.querySelector<HTMLElement>(`[data-panel-name="${name}"]`);

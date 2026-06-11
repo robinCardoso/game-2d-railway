@@ -1,5 +1,5 @@
 import { apiFetch } from '../shared/apiFetch';
-import type { CharacterInventoryDocument } from '../../shared/inventory';
+import { normalizeInventoryDocument, type CharacterInventoryDocument } from '../../shared/inventory';
 
 export async function fetchCharacterInventory(
     characterId: string
@@ -10,7 +10,7 @@ export async function fetchCharacterInventory(
         throw new Error(body.error ?? `Falha ao carregar inventário (${res.status}).`);
     }
     const data = (await res.json()) as { inventory: CharacterInventoryDocument };
-    return data.inventory;
+    return normalizeInventoryDocument(data.inventory);
 }
 
 export async function saveCharacterInventory(
@@ -30,5 +30,5 @@ export async function saveCharacterInventory(
         throw new Error((body.error ?? `Falha ao salvar inventário (${res.status}).`) + detail);
     }
     const data = (await res.json()) as { inventory: CharacterInventoryDocument };
-    return data.inventory;
+    return normalizeInventoryDocument(data.inventory);
 }

@@ -1,11 +1,33 @@
 /** Lógica pura de chase de monstros — compartilhada cliente/servidor. */
 
 export const MONSTER_AGGRO_RADIUS = 7;
+/** Máximo de mobs com IA de chase ativa por jogador-alvo (surround 8 + fila no anel). */
+export const MONSTER_MAX_ACTIVE_CHASERS_PER_TARGET = 10;
+
+/** Mobs já no alcance de combate sempre pensam; fora dele respeitam o cap de aproximação. */
+export function shouldMonsterApproachChase(
+    combatDist: number,
+    attackRange: number,
+    activeApproachersForTarget: number,
+    cap = MONSTER_MAX_ACTIVE_CHASERS_PER_TARGET
+): boolean {
+    if (combatDist <= attackRange) return true;
+    return activeApproachersForTarget < cap;
+}
+
+/** Distância Manhattan do anel de espera quando slots melee adjacentes estão cheios. */
+export const MELEE_WAIT_RING_DIST = 2;
 export const MONSTER_STEP_MS = 300;
+export const WALK_STEP_MS_MIN = 150;
+export const WALK_STEP_MS_MAX = 2000;
 /** Pausa após spawn/respawn ou quando o jogador entra no mapa (estático estilo Tibia). */
 export const MONSTER_WAKE_DELAY_MS = 2000;
 /** Pausa após o jogador mudar de tile (think time). 0 = desligado — evita travar perseguição contínua. */
 export const MONSTER_REACTION_DELAY_MS = 0;
+/** Limite de nós no BFS de pathfinding (paridade OTC MAX_NODES). */
+export const CHASE_PATH_MAX_NODES = 512;
+/** Raio Manhattan máximo de busca a partir do mob (paridade OTC maxSearchDist). */
+export const CHASE_PATH_SEARCH_RADIUS = 12;
 
 export type MobChaseBehavior = 'melee' | 'ranged';
 
@@ -17,6 +39,8 @@ export interface ChaseMobConfig {
     minRange: number;
     /** Ranged: distância máxima confortável — acima disso aproxima. */
     maxRange: number;
+    /** Ms por tile cardinal (velocidade de caminhada). */
+    walkStepMs: number;
 }
 
 export const DEFAULT_MELEE_CHASE_CONFIG: ChaseMobConfig = {
@@ -24,6 +48,7 @@ export const DEFAULT_MELEE_CHASE_CONFIG: ChaseMobConfig = {
     attackRange: 1,
     minRange: 1,
     maxRange: 1,
+    walkStepMs: MONSTER_STEP_MS,
 };
 
 /** Faixa de conforto efetiva para mobs ranged (defaults derivados de attackRange). */
@@ -65,22 +90,87 @@ export function manhattanDist(x1: number, y1: number, x2: number, y2: number): n
     return Math.abs(x2 - x1) + Math.abs(y2 - y1);
 }
 
+/** Distância Chebyshev (1 = adjacente inclusive diagonal — surround Tibia). */
+export function chebyshevDist(x1: number, y1: number, x2: number, y2: number): number {
+    return Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
+}
+
+/** Alcance efetivo mob→jogador: melee usa Chebyshev; ranged mantém Manhattan. */
+export function chaseDistanceToPlayer(
+    mobTileX: number,
+    mobTileY: number,
+    playerTileX: number,
+    playerTileY: number,
+    config: ChaseMobConfig
+): number {
+    if (config.chaseBehavior === 'melee') {
+        return chebyshevDist(mobTileX, mobTileY, playerTileX, playerTileY);
+    }
+    return manhattanDist(mobTileX, mobTileY, playerTileX, playerTileY);
+}
+
 /** Direção cardinal dominante de um tile em direção a outro (sem movimento). */
 export function directionTowardTile(
     fromTileX: number,
     fromTileY: number,
     toTileX: number,
-    toTileY: number
+    toTileY: number,
+    currentDirection?: CardinalDirection
 ): CardinalDirection {
     const dx = toTileX - fromTileX;
     const dy = toTileY - fromTileY;
-    if (Math.abs(dx) > Math.abs(dy)) {
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+    if (absDx > absDy) {
         return dx > 0 ? 'east' : 'west';
+    }
+    if (absDy > absDx) {
+        return dy > 0 ? 'south' : 'north';
+    }
+    // Empate diagonal — histerese para não oscilar norte/sul vs leste/oeste
+    if (absDx > 0 && currentDirection) {
+        if (
+            (currentDirection === 'east' || currentDirection === 'west') &&
+            absDx >= absDy
+        ) {
+            return dx > 0 ? 'east' : 'west';
+        }
+        if (
+            (currentDirection === 'north' || currentDirection === 'south') &&
+            absDy >= absDx
+        ) {
+            return dy > 0 ? 'south' : 'north';
+        }
     }
     if (dy !== 0) {
         return dy > 0 ? 'south' : 'north';
     }
-    return 'south';
+    if (dx !== 0) {
+        return dx > 0 ? 'east' : 'west';
+    }
+    return currentDirection ?? 'south';
+}
+
+/** Olhar para o jogador durante aggro (unifica engaged + idle). */
+export function resolveAggroFaceDirection(
+    mobTileX: number,
+    mobTileY: number,
+    playerTileX: number,
+    playerTileY: number,
+    playerZ: number,
+    mobZ: number,
+    currentDirection?: CardinalDirection
+): CardinalDirection | null {
+    const distToPlayer = manhattanDist(mobTileX, mobTileY, playerTileX, playerTileY);
+    if (distToPlayer > MONSTER_AGGRO_RADIUS || playerZ !== mobZ) return null;
+    if (distToPlayer === 0) return null;
+    return directionTowardTile(
+        mobTileX,
+        mobTileY,
+        playerTileX,
+        playerTileY,
+        currentDirection
+    );
 }
 
 /** Direção para olhar ao jogador quando parado no alcance de combate. */
@@ -91,18 +181,21 @@ export function chaseFaceDirectionWhenEngaged(
     playerTileY: number,
     config: ChaseMobConfig
 ): CardinalDirection | null {
-    const distToPlayer = manhattanDist(mobTileX, mobTileY, playerTileX, playerTileY);
+    const distToPlayer = chaseDistanceToPlayer(
+        mobTileX,
+        mobTileY,
+        playerTileX,
+        playerTileY,
+        config
+    );
     const { chaseBehavior, attackRange } = config;
+    const engaged =
+        chaseBehavior === 'melee'
+            ? distToPlayer > 0 && distToPlayer <= attackRange
+            : isRangedInComfortZone(distToPlayer, config);
 
-    if (chaseBehavior === 'melee') {
-        if (distToPlayer > 0 && distToPlayer <= attackRange) {
-            return directionTowardTile(mobTileX, mobTileY, playerTileX, playerTileY);
-        }
-    } else if (isRangedInComfortZone(distToPlayer, config)) {
-        return directionTowardTile(mobTileX, mobTileY, playerTileX, playerTileY);
-    }
-
-    return null;
+    if (!engaged) return null;
+    return directionTowardTile(mobTileX, mobTileY, playerTileX, playerTileY);
 }
 
 /** Direção quando aggroed mas sem passo (paridade npcAI faceTowardTile / !step). */
@@ -114,14 +207,94 @@ export function resolveChaseIdleDirection(
     playerZ: number,
     mobZ: number
 ): CardinalDirection | null {
-    const distToPlayer = manhattanDist(mobTileX, mobTileY, playerTileX, playerTileY);
-    if (distToPlayer > MONSTER_AGGRO_RADIUS || playerZ !== mobZ) return null;
-    if (distToPlayer === 0) return null;
-    return directionTowardTile(mobTileX, mobTileY, playerTileX, playerTileY);
+    return resolveAggroFaceDirection(
+        mobTileX,
+        mobTileY,
+        playerTileX,
+        playerTileY,
+        playerZ,
+        mobZ
+    );
 }
 
 function tileKey(tx: number, ty: number): string {
     return `${tx},${ty}`;
+}
+
+/**
+ * BFS cardinal — primeiro passo em direção ao tile-livre mais próximo (qualquer meta).
+ * Contorna mobs/obstáculos que o greedy de 1 passo não resolve.
+ */
+export function findCardinalPathFirstStep(
+    startTileX: number,
+    startTileY: number,
+    goals: ReadonlyArray<{ tx: number; ty: number }>,
+    canStepTo: (tx: number, ty: number) => boolean
+): (typeof CARDINAL_STEPS)[number] | null {
+    if (goals.length === 0) return null;
+
+    const goalKeys = new Set<string>();
+    for (const goal of goals) {
+        goalKeys.add(tileKey(goal.tx, goal.ty));
+    }
+
+    if (goalKeys.has(tileKey(startTileX, startTileY))) {
+        return null;
+    }
+
+    type QueueNode = { x: number; y: number; firstStep: (typeof CARDINAL_STEPS)[number] };
+    const visited = new Set<string>();
+    const queue: QueueNode[] = [];
+
+    const withinSearch = (tx: number, ty: number) =>
+        manhattanDist(tx, ty, startTileX, startTileY) <= CHASE_PATH_SEARCH_RADIUS;
+
+    for (const step of CARDINAL_STEPS) {
+        const nx = startTileX + step.dx;
+        const ny = startTileY + step.dy;
+        if (!canStepTo(nx, ny) || !withinSearch(nx, ny)) continue;
+        const key = tileKey(nx, ny);
+        if (goalKeys.has(key)) return step;
+        if (visited.has(key)) continue;
+        visited.add(key);
+        queue.push({ x: nx, y: ny, firstStep: step });
+    }
+
+    let expanded = 0;
+    while (queue.length > 0 && expanded < CHASE_PATH_MAX_NODES) {
+        const cur = queue.shift()!;
+        expanded += 1;
+
+        for (const step of CARDINAL_STEPS) {
+            const nx = cur.x + step.dx;
+            const ny = cur.y + step.dy;
+            if (!canStepTo(nx, ny) || !withinSearch(nx, ny)) continue;
+            const key = tileKey(nx, ny);
+            if (goalKeys.has(key)) return cur.firstStep;
+            if (visited.has(key)) continue;
+            visited.add(key);
+            queue.push({ x: nx, y: ny, firstStep: cur.firstStep });
+        }
+    }
+
+    return null;
+}
+
+/** Metas de surround livres ou, se cheio, tiles livres no anel de espera. */
+export function collectMeleeChaseGoals(
+    playerTileX: number,
+    playerTileY: number,
+    canGoalTile: (tx: number, ty: number) => boolean,
+    canStepTo: (tx: number, ty: number) => boolean
+): Array<{ tx: number; ty: number }> {
+    const surround = findMeleeGoalTiles(playerTileX, playerTileY, canGoalTile);
+    if (surround.length > 0) return surround;
+    return findMeleeRingTiles(
+        playerTileX,
+        playerTileY,
+        MELEE_WAIT_RING_DIST,
+        canStepTo
+    );
 }
 
 /** Caminho cardinal reto mob→meta passa por tile bloqueado (ex.: árvore na mesma coluna). */
@@ -133,17 +306,21 @@ function isCardinalPathBlocked(
     canWalkTo: (tx: number, ty: number) => boolean
 ): boolean {
     if (fromX === toX) {
-        const dy = Math.sign(toY - fromY);
-        if (dy === 0) return false;
+        const stepY = toY - fromY;
+        if (stepY === 0) return false;
+        const dy = Math.sign(stepY);
         for (let y = fromY + dy; y !== toY; y += dy) {
             if (!canWalkTo(fromX, y)) return true;
         }
-    } else if (fromY === toY) {
-        const dx = Math.sign(toX - fromX);
-        if (dx === 0) return false;
-        for (let x = fromX + dx; x !== toX; x += dx) {
-            if (!canWalkTo(x, fromY)) return true;
-        }
+        return false;
+    }
+    if (fromY !== toY) return false;
+
+    const stepX = toX - fromX;
+    if (stepX === 0) return false;
+    const dx = Math.sign(stepX);
+    for (let x = fromX + dx; x !== toX; x += dx) {
+        if (!canWalkTo(x, fromY)) return true;
     }
     return false;
 }
@@ -180,22 +357,26 @@ function isBetterChaseGoal(
         return !candidateBlocked;
     }
 
-    const candidatePlayerDist = manhattanDist(candidate.tx, candidate.ty, playerTileX, playerTileY);
-    const currentPlayerDist = manhattanDist(current.tx, current.ty, playerTileX, playerTileY);
+    const candidatePlayerDist = chebyshevDist(candidate.tx, candidate.ty, playerTileX, playerTileY);
+    const currentPlayerDist = chebyshevDist(current.tx, current.ty, playerTileX, playerTileY);
     return candidatePlayerDist < currentPlayerDist;
 }
 
+/** Tiles adjacentes ao jogador (8 direções — surround estilo Tibia). */
 export function findMeleeGoalTiles(
     playerTileX: number,
     playerTileY: number,
     canWalkTo: (tx: number, ty: number) => boolean
 ): Array<{ tx: number; ty: number }> {
     const goals: Array<{ tx: number; ty: number }> = [];
-    for (const { dx, dy } of CARDINAL_STEPS) {
-        const tx = playerTileX + dx;
-        const ty = playerTileY + dy;
-        if (canWalkTo(tx, ty)) {
-            goals.push({ tx, ty });
+    for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+            if (dx === 0 && dy === 0) continue;
+            const tx = playerTileX + dx;
+            const ty = playerTileY + dy;
+            if (canWalkTo(tx, ty)) {
+                goals.push({ tx, ty });
+            }
         }
     }
     return goals;
@@ -206,9 +387,14 @@ export function pickMeleeGoalTile(
     mobTileY: number,
     playerTileX: number,
     playerTileY: number,
+    /** Slots adjacentes livres (terreno + sem jogador/outro mob). */
     canWalkTo: (tx: number, ty: number) => boolean,
-    reservedGoals: Set<string>
-): { tx: number; ty: number } {
+    reservedGoals: Set<string>,
+    /** Quando informado, ignora metas sem passo cardinal alcançável neste tick. */
+    canStepTo?: (tx: number, ty: number) => boolean,
+    /** Metas já tentadas neste tick — tenta o próximo slot livre (estilo OTC, sem reserva global). */
+    excludeGoals?: Set<string>
+): { tx: number; ty: number } | null {
     const goals = findMeleeGoalTiles(playerTileX, playerTileY, canWalkTo);
     let best: { tx: number; ty: number } | null = null;
     let bestDist = Infinity;
@@ -216,6 +402,13 @@ export function pickMeleeGoalTile(
     for (const goal of goals) {
         const key = tileKey(goal.tx, goal.ty);
         if (reservedGoals.has(key)) continue;
+        if (excludeGoals?.has(key)) continue;
+        if (
+            canStepTo &&
+            pickMonsterChaseStep(mobTileX, mobTileY, goal.tx, goal.ty, canStepTo) === null
+        ) {
+            continue;
+        }
         const d = manhattanDist(mobTileX, mobTileY, goal.tx, goal.ty);
         if (
             !best ||
@@ -227,12 +420,99 @@ export function pickMeleeGoalTile(
     }
 
     if (best) {
-        reservedGoals.add(tileKey(best.tx, best.ty));
         return best;
     }
 
-    // Sem slot melee livre — aproximar do jogador (canWalkTo impede pisar no tile do player).
-    return { tx: playerTileX, ty: playerTileY };
+    return null;
+}
+
+/** Tiles em anel Manhattan a N SQM do jogador (fila de espera melee). */
+export function findMeleeRingTiles(
+    playerTileX: number,
+    playerTileY: number,
+    ringDist: number,
+    canWalkTo: (tx: number, ty: number) => boolean
+): Array<{ tx: number; ty: number }> {
+    const goals: Array<{ tx: number; ty: number }> = [];
+    for (let dx = -ringDist; dx <= ringDist; dx++) {
+        const dyMag = ringDist - Math.abs(dx);
+        const dyValues = dyMag === 0 ? [0] : [dyMag, -dyMag];
+        for (const dy of dyValues) {
+            const tx = playerTileX + dx;
+            const ty = playerTileY + dy;
+            if (canWalkTo(tx, ty)) {
+                goals.push({ tx, ty });
+            }
+        }
+    }
+    return goals;
+}
+
+/** Meta no anel de espera (tile livre) — nunca o tile do jogador. */
+export function pickMeleeRingGoalTile(
+    mobTileX: number,
+    mobTileY: number,
+    playerTileX: number,
+    playerTileY: number,
+    canWalkTo: (tx: number, ty: number) => boolean,
+    excludeGoals?: Set<string>
+): { tx: number; ty: number } | null {
+    const goals = findMeleeRingTiles(
+        playerTileX,
+        playerTileY,
+        MELEE_WAIT_RING_DIST,
+        canWalkTo
+    );
+    let best: { tx: number; ty: number } | null = null;
+    let bestDist = Infinity;
+
+    for (const goal of goals) {
+        const key = tileKey(goal.tx, goal.ty);
+        if (excludeGoals?.has(key)) continue;
+        const d = manhattanDist(mobTileX, mobTileY, goal.tx, goal.ty);
+        if (d < bestDist) {
+            bestDist = d;
+            best = goal;
+        }
+    }
+
+    return best;
+}
+
+/**
+ * Orbita no anel de espera (estilo dance step OTC) — mantém distância ao jogador.
+ */
+export function pickDanceStep(
+    mobTileX: number,
+    mobTileY: number,
+    playerTileX: number,
+    playerTileY: number,
+    canWalkTo: (tx: number, ty: number) => boolean,
+    holdDist = MELEE_WAIT_RING_DIST
+): (typeof CARDINAL_STEPS)[number] | null {
+    const currentDist = manhattanDist(mobTileX, mobTileY, playerTileX, playerTileY);
+    if (currentDist < holdDist) return null;
+
+    let best: (typeof CARDINAL_STEPS)[number] | null = null;
+    let bestScore = -Infinity;
+
+    for (const step of CARDINAL_STEPS) {
+        const nx = mobTileX + step.dx;
+        const ny = mobTileY + step.dy;
+        if (!canWalkTo(nx, ny)) continue;
+        const d = manhattanDist(nx, ny, playerTileX, playerTileY);
+        if (d !== holdDist) continue;
+
+        const onSameRow = mobTileY === playerTileY && step.dy === 0;
+        const onSameCol = mobTileX === playerTileX && step.dx === 0;
+        const score = onSameRow || onSameCol ? 2 : 1;
+        if (score > bestScore) {
+            bestScore = score;
+            best = step;
+        }
+    }
+
+    return best;
 }
 
 /** Ping-pong na mesma linha/coluna do alvo — não bloqueia contorno perpendicular. */
@@ -493,50 +773,67 @@ export function tickMonsterChaseStep(
     /** Tiles candidatos a meta (terreno + não-pisar no jogador). Outros mobs não bloqueiam a meta. */
     canGoalTile: (tx: number, ty: number) => boolean = canStepTo
 ): (typeof CARDINAL_STEPS)[number] | null {
-    const distToPlayer = manhattanDist(mob.tileX, mob.tileY, player.tileX, player.tileY);
-    if (distToPlayer > MONSTER_AGGRO_RADIUS || player.z !== mob.z) return null;
+    const aggroDist = manhattanDist(mob.tileX, mob.tileY, player.tileX, player.tileY);
+    if (aggroDist > MONSTER_AGGRO_RADIUS || player.z !== mob.z) return null;
 
     if (isMonsterWakePaused(mob, nowMs)) return null;
 
     applyPlayerMoveReactionDelay(mob, player, nowMs);
 
     const { chaseBehavior, attackRange } = config;
+    const combatDist = chaseDistanceToPlayer(
+        mob.tileX,
+        mob.tileY,
+        player.tileX,
+        player.tileY,
+        config
+    );
 
     if (chaseBehavior === 'melee') {
-        if (distToPlayer <= attackRange) return null;
-    } else if (isRangedInComfortZone(distToPlayer, config)) {
+        if (combatDist <= attackRange) return null;
+    } else if (isRangedInComfortZone(combatDist, config)) {
         return null;
     }
 
     if (isMonsterReactionPaused(mob, nowMs)) return null;
 
-    if (nowMs - mob.lastAggroMoveTime < MONSTER_STEP_MS) return null;
+    const walkStepMs = config.walkStepMs ?? MONSTER_STEP_MS;
+    if (nowMs - mob.lastAggroMoveTime < walkStepMs) return null;
 
     let step: (typeof CARDINAL_STEPS)[number] | null = null;
 
     if (chaseBehavior === 'melee') {
-        const goal = pickMeleeGoalTile(
-            mob.tileX,
-            mob.tileY,
+        const goals = collectMeleeChaseGoals(
             player.tileX,
             player.tileY,
             canGoalTile,
-            reservedGoals
+            canStepTo
         );
-        step = pickMonsterChaseStep(
+        step = findCardinalPathFirstStep(
             mob.tileX,
             mob.tileY,
-            goal.tx,
-            goal.ty,
-            canStepTo,
-            player.tileX,
-            player.tileY
+            goals,
+            canStepTo
         );
+
+        if (
+            !step &&
+            aggroDist >= MELEE_WAIT_RING_DIST &&
+            aggroDist <= MONSTER_AGGRO_RADIUS
+        ) {
+            step = pickDanceStep(
+                mob.tileX,
+                mob.tileY,
+                player.tileX,
+                player.tileY,
+                canStepTo
+            );
+        }
     } else {
         const { minRange, maxRange } = resolveRangedComfortBand(config);
-        if (distToPlayer < minRange) {
+        if (combatDist < minRange) {
             step = pickFleeStep(mob.tileX, mob.tileY, player.tileX, player.tileY, canStepTo);
-        } else if (distToPlayer > maxRange) {
+        } else if (combatDist > maxRange) {
             const goal = pickRangedGoalTile(
                 mob.tileX,
                 mob.tileY,
@@ -564,10 +861,10 @@ export function tickMonsterChaseStep(
     mob.tileY += step.dy;
     
     // Accumulate to prevent drift and stuttering, resync if fell too far behind
-    if (mob.lastAggroMoveTime === 0 || nowMs - mob.lastAggroMoveTime > MONSTER_STEP_MS * 2) {
+    if (mob.lastAggroMoveTime === 0 || nowMs - mob.lastAggroMoveTime > walkStepMs * 2) {
         mob.lastAggroMoveTime = nowMs;
     } else {
-        mob.lastAggroMoveTime += MONSTER_STEP_MS;
+        mob.lastAggroMoveTime += walkStepMs;
     }
     
     return step;

@@ -1,20 +1,80 @@
 {
   "items": [
     {
+      "id": "amulet_of_life",
+      "name": "Amulet of Life",
+      "category": "equipment",
+      "slot": "amulet",
+      "defenseBonus": 1,
+      "description": "Amuleto verde que protege o portador.",
+      "implemented": true,
+      "sprite": {
+        "iconUrl": "tiles/items/icons/amulet_of_life.png",
+        "frameWidth": 32,
+        "frameHeight": 32,
+        "gridCols": 1,
+        "gridRows": 1
+      }
+    },
+    {
       "id": "boots_of_haste",
       "name": "Boots of Haste",
       "category": "equipment",
       "slot": "feet",
       "speedBonus": 20,
       "description": "Botas encantadas que aceleram a corrida.",
-      "implemented": false
+      "implemented": true,
+      "sprite": {
+        "iconUrl": "tiles/items/icons/boots_of_haste.png",
+        "frameWidth": 32,
+        "frameHeight": 32,
+        "gridCols": 1,
+        "gridRows": 1
+      }
     },
     {
       "id": "gold_coin",
       "name": "Gold Coin",
       "category": "loot",
       "description": "Moeda de ouro.",
-      "implemented": false
+      "implemented": true,
+      "sprite": {
+        "iconUrl": "tiles/items/icons/gold_coin.png",
+        "frameWidth": 32,
+        "frameHeight": 32,
+        "gridCols": 1,
+        "gridRows": 1
+      }
+    },
+    {
+      "id": "health_potion",
+      "name": "Health Potion",
+      "category": "loot",
+      "description": "Poção vermelha de cura (loot de teste).",
+      "implemented": true,
+      "sprite": {
+        "iconUrl": "tiles/items/icons/health_potion.png",
+        "frameWidth": 32,
+        "frameHeight": 32,
+        "gridCols": 1,
+        "gridRows": 1
+      }
+    },
+    {
+      "id": "iron_helmet",
+      "name": "Iron Helmet",
+      "category": "equipment",
+      "slot": "head",
+      "defenseBonus": 2,
+      "description": "Capacete de ferro básico.",
+      "implemented": true,
+      "sprite": {
+        "iconUrl": "tiles/items/icons/iron_helmet.png",
+        "frameWidth": 32,
+        "frameHeight": 32,
+        "gridCols": 1,
+        "gridRows": 1
+      }
     },
     {
       "id": "leather_armor",
@@ -23,7 +83,14 @@
       "slot": "body",
       "defenseBonus": 3,
       "description": "Armadura leve de couro.",
-      "implemented": false
+      "implemented": true,
+      "sprite": {
+        "iconUrl": "tiles/items/icons/leather_armor.png",
+        "frameWidth": 32,
+        "frameHeight": 32,
+        "gridCols": 1,
+        "gridRows": 1
+      }
     },
     {
       "id": "leather_boots",
@@ -31,7 +98,46 @@
       "category": "equipment",
       "slot": "feet",
       "description": "Botas simples de couro.",
-      "implemented": false
+      "implemented": true,
+      "sprite": {
+        "iconUrl": "tiles/items/icons/leather_boots.png",
+        "frameWidth": 32,
+        "frameHeight": 32,
+        "gridCols": 1,
+        "gridRows": 1
+      }
+    },
+    {
+      "id": "iron_sword",
+      "name": "Iron Sword",
+      "category": "equipment",
+      "slot": "weapon",
+      "attackBonus": 3,
+      "description": "Espada de ferro básica.",
+      "implemented": true,
+      "sprite": {
+        "iconUrl": "tiles/items/icons/iron_sword.png",
+        "frameWidth": 32,
+        "frameHeight": 32,
+        "gridCols": 1,
+        "gridRows": 1
+      }
+    },
+    {
+      "id": "wooden_shield",
+      "name": "Wooden Shield",
+      "category": "equipment",
+      "slot": "shield",
+      "defenseBonus": 1,
+      "description": "Escudo de madeira.",
+      "implemented": true,
+      "sprite": {
+        "iconUrl": "tiles/items/icons/wooden_shield.png",
+        "frameWidth": 32,
+        "frameHeight": 32,
+        "gridCols": 1,
+        "gridRows": 1
+      }
     },
     {
       "id": "warrior_ring",
@@ -40,7 +146,14 @@
       "slot": "ring",
       "attackBonus": 2,
       "description": "Anel que fortalece o golpe.",
-      "implemented": false
+      "implemented": true,
+      "sprite": {
+        "iconUrl": "tiles/items/icons/warrior_ring.png",
+        "frameWidth": 32,
+        "frameHeight": 32,
+        "gridCols": 1,
+        "gridRows": 1
+      }
     }
   ]
 }

@@ -2,7 +2,7 @@
 
 Documento de referência para humanos e agentes IA. Descreve o que **já está implementado** no Play (2+ jogadores na mesma sala) e o que **fazer quando houver muitos players online**.
 
-Última revisão: **2026-06-05**
+Última revisão: **2026-06-09**
 
 Relacionado: [instanced-maps-and-multiplayer.md](./instanced-maps-and-multiplayer.md) (salas, instâncias, protocolo base), [hosting.md](./hosting.md) (deploy).
 
@@ -18,7 +18,9 @@ Relacionado: [instanced-maps-and-multiplayer.md](./instanced-maps-and-multiplaye
 | Walk / idle + direção | ✅ |
 | `stepDurationMs` no `player_moved` | ✅ |
 | Buffer de snapshots atrasado (100–150ms) | ⏳ backlog |
-| AOI — só jogadores próximos | ⏳ backlog |
+| AOI — jogadores/criaturas/eventos PvP (25×20 OTC) | ✅ |
+| Viewport cull — NPCs e remotos no draw | ✅ |
+| Cap aggro chase (~10 mobs ativos/alvo) | ✅ |
 | `stepDurationMs` calculado no servidor | ⏳ backlog |
 | `move_request` (intenção, não posição) | ⏳ backlog |
 
@@ -68,8 +70,10 @@ sequenceDiagram
 ### 2.2 Servidor (`server/src/GameRoom.ts`)
 
 - Valida tile, passo adjacente, walkable, sala `mapId@instanceId`.
-- **Rate limit:** `lastMoveAcceptedAtMs` — intervalo mínimo `stepDurationMs × 0.85` entre passos (`MOVEMENT_TOO_FAST`).
-- **Anti-spam rejeição:** `rejectMove()` — no máximo um par `error` + `position_correction` a cada 400ms **por jogador** (não por código); demais `move` inválidos no intervalo são ignorados silenciosamente — inclusive se o código mudar (`MOVEMENT_TOO_FAST` → `NOT_WALKABLE`). Debug granular futuro: `lastMoveRejectionCode` ou contador por código.
+- **Rate limit:** `lastMoveAcceptedAtMs` — intervalo mínimo `stepDurationMs × 0.80` entre passos (`MOVEMENT_TOO_FAST`).
+- **`MOVEMENT_TOO_FAST`:** envia só `error` (sem `position_correction`) — evita rubber-band em latência alta; o cliente reenvia o tile com `forceResyncPosition()`.
+- **`INVALID_STEP` / `NOT_WALKABLE` / `INVALID_TILE`:** só `error` (sem `position_correction`); cliente valida passo antes do WS (`validateOutgoingMove`) e faz rollback suave ao tile autoritativo (`onMovementRejected`).
+- **Anti-spam rejeição:** `rejectMove()` — no máximo um par `error` (+ correção quando aplicável) a cada 400ms **por jogador**; demais `move` inválidos no intervalo são ignorados silenciosamente.
 - Guarda `lastStepDurationMs` do cliente e repassa em `player_moved`.
 - Kick por `characterId` duplicado na mesma conexão.
 
@@ -93,6 +97,24 @@ sequenceDiagram
 
 - `collectRemoteDepthDrawables` usa `worldX` / `worldY` interpolados (não só `tileX * 32`).
 - Depth sort pelo pé do sprite na posição visual.
+- **Viewport cull:** `collectNpcDepthDrawables` e `collectRemoteDepthDrawables` ignoram entidades fora do retângulo visível (`playApp.ts` passa `viewport`).
+
+### 2.6 AOI espectador (`shared/creatureSpectatorRange.ts`)
+
+Retângulo **25×20** tiles (paridade OTC `Map::clientMap*`):
+
+| Evento | Filtro |
+|--------|--------|
+| `welcome` / `state_sync` — jogadores e criaturas | `filterPlayerSnapshotsForViewer` / `filterCreatureSnapshotsForViewer` |
+| `player_moved`, `player_joined`, `player_left` | `broadcastToPlayerSpectators` |
+| `player_damaged`, `player_died`, `player_respawned` | `broadcastToPlayerSpectators` (tile do alvo / morte) |
+| `creature_*` (dano, morte, movimento) | `broadcastToSpectators` via `RoomCreatureManager` |
+| Tick chase servidor | `creatureHasPlayerInAwareRange` — IA só com jogador no retângulo |
+
+### 2.7 Chase em escala (`shared/creatureChase.ts`, `RoomCreatureManager`)
+
+- **Cap aggro:** no máximo `MONSTER_MAX_ACTIVE_CHASERS_PER_TARGET` (10) mobs **se aproximando** por jogador-alvo; mobs já no alcance melee mantêm IA (virar / dançar).
+- **Pathfinding:** BFS cardinal `findCardinalPathFirstStep` quando greedy falha.
 
 ---
 
@@ -161,8 +183,8 @@ Prioridade sugerida. Implementar **na ordem**; cada item é independente o sufic
 
 | # | Item | Por quê | Onde |
 |---|------|---------|------|
-| B1 | **AOI (Area of Interest)** — broadcast só jogadores a ~15–25 tiles | 100 players no mapa ≠ 100 × movimento para todos | `GameRoom.broadcastToRoom` → filtro por distância |
-| B2 | **Cap de snapshots em `welcome`** — só jogadores no AOI | Join não lista o mapa inteiro | `GameRoom.handleJoin` |
+| B1 | **AOI (Area of Interest)** — broadcast só jogadores a ~15–25 tiles | 100 players no mapa ≠ 100 × movimento para todos | ✅ `creatureSpectatorRange.ts` + `broadcastToSpectators` |
+| B2 | **Cap de snapshots em `welcome`** — só jogadores no AOI | Join não lista o mapa inteiro | ✅ `joinHandlers` + `filterPlayerSnapshotsForViewer` |
 | B3 | **Rate limit** por socket (movimentos/seg) | Anti-flood | middleware WS ou `GameRoom` |
 | B4 | **Cache global de `HTMLImageElement` por `spriteSheetUrl`** | 50 knights = 1 PNG carregado | `remotePlayerSprites` ou `spriteCache.ts` |
 

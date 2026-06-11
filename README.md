@@ -37,6 +37,7 @@ MMORPG 2D no browser estilo Tibia — editor de mapas (Studio GM), engine Canvas
 | **Combate** | Ataque a mobs e PvP (servidor autoritativo), chase AI, dano/XP, anel de alvo, texto flutuante |
 | **Studio GM** | Pintura de mapas, auto-borda de grama, spawns, portais, zonas, sprites, outfits, presets |
 | **Persistência** | Mapas/sprites no volume Railway; posição de personagem no PostgreSQL via WS |
+| **Empacotamento** | Assets compactados em `.pak` com assinatura criptográfica ECDSA e integridade via Manifest |
 | **Multiplataforma** | Cliente Electron (Windows), shell Capacitor (Android), resync ao voltar de background |
 | **Segurança WS** | Ticket HMAC no join, reconexão proativa (~13 min), rate limit de movimento/resync |
 
@@ -90,6 +91,7 @@ O comando `npm run dev` sobe **dois processos**:
 | `npm run build` | Compila frontend (`dist/`) + servidor (`server/dist/`) |
 | `npm run start` | Produção local em `:8787` (requer `npm run build` antes) |
 | `npm run start:railway` | Build + start (usado pelo Railway) |
+| `npm run pack` | Empacota imagens e JSONs em `assets.pak` com assinatura ECDSA |
 | `npm run preview` | Preview do build Vite |
 | `npm test` | Vitest — protocolo WS, tile refs, políticas de sync |
 | `npm run electron:dev` | Dev + janela Electron apontando para `:5173/play.html` |
@@ -306,6 +308,17 @@ Auto-borda: [docs/auto-border.md](docs/auto-border.md)
 Mapas com `instanced: true` no registry recebem cópia em RAM com `instanceId` único ao entrar. Cada entrada = dungeon fresca; limite de 8 instâncias na RAM.
 
 Detalhes: [docs/instanced-maps-and-multiplayer.md](docs/instanced-maps-and-multiplayer.md)
+
+### Sistema de Empacotamento de Assets (PAK)
+
+Para garantir segurança e performance, os metadados do jogo (catálogos de itens, presets, etc) podem ser empacotados num arquivo assinado.
+
+1. **Camada 2 (Manifest):** Ao rodar `npm run pack`, o script gera um hash SHA-256 de todos os arquivos importantes da pasta `public/` e `tiles/`.
+2. **Camada 3 (Empacotamento):** Concatena tudo num grande arquivo binário **`assets.pak`**.
+3. **Camada 4 (Assinatura):** Usa uma chave privada (gerada na hora) para assinar o pacote via ECDSA (`assets.sig`).
+4. **Runtime (Frontend):** O `AssetLoader` baixa os 3 arquivos, checa a integridade localmente com Web Crypto API (`IEEE P1363`) e extrai tudo para a memória. 
+
+> O carregador local só será acionado caso `VITE_USE_LOOSE_ASSETS` não esteja ativado, ideal para ambientes de produção e anti-tampering em clientes Electron.
 
 ---
 

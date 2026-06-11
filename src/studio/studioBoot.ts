@@ -8,6 +8,8 @@ export interface StudioBootOptions {
     skipGameNet: boolean;
     /** Não desenha o sprite do jogador no canvas. */
     hidePlayerSprite: boolean;
+    /** Editor puro: câmera livre, sem IA/movimento/combate. */
+    editorOnly: boolean;
 }
 
 let studioBoot: StudioBootOptions | null = null;
@@ -22,4 +24,8 @@ export function getStudioBoot(): StudioBootOptions | null {
 
 export function isStudioMode(): boolean {
     return studioBoot !== null;
+}
+
+export function isEditorOnly(): boolean {
+    return studioBoot?.editorOnly === true;
 }

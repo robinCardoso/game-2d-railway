@@ -1,6 +1,7 @@
 import type { VocationConfig } from '../engine/character/calculateStats';
 import { VOCATIONS as BUNDLED_VOCATIONS } from './default/vocations';
 import { resolveApiUrl } from '../shared/apiUrl';
+import { assetLoader } from './assetLoader';
 
 const VOCATIONS_URL = '/vocations.json';
 
@@ -41,9 +42,18 @@ export function applyRuntimeVocations(vocations: Record<string, VocationConfig>)
 /** Carrega vocações de `/vocations.json` (volume ou repo); fallback = bundle estático. */
 export async function loadRuntimeVocations(): Promise<Record<string, VocationConfig>> {
     try {
-        const res = await fetch(resolveApiUrl(VOCATIONS_URL), { cache: 'no-store' });
-        if (res.ok) {
-            const normalized = normalizeVocationsMap(await res.json());
+        let raw;
+        if (assetLoader.isPackaged()) {
+            raw = await assetLoader.getJson<any>('vocations.json');
+        } else {
+            const res = await fetch(resolveApiUrl(VOCATIONS_URL), { cache: 'no-store' });
+            if (res.ok) {
+                raw = await res.json();
+            }
+        }
+        
+        if (raw) {
+            const normalized = normalizeVocationsMap(raw);
             if (normalized) {
                 runtimeVocations = normalized;
                 console.log(`[VocationRegistry] ${Object.keys(runtimeVocations).length} vocação(ões) carregada(s).`);

@@ -11,6 +11,7 @@
  */
 
 import type { CreatureSnapshot, PlayerSnapshot, ServerMessage } from '../../shared/protocol';
+import { applyPlayerSnapshotList } from '../../shared/snapshotSync';
 
 export interface ServerStateStore {
     playersById: Map<string, PlayerSnapshot>;
@@ -66,10 +67,7 @@ export function applyServerMessageToStore(msg: ServerMessage): void {
             break;
 
         case 'state_sync':
-            serverStateStore.playersById.clear();
-            for (const p of msg.players) {
-                serverStateStore.playersById.set(p.playerId, p);
-            }
+            applyPlayerSnapshotList(serverStateStore.playersById, msg.players);
             serverStateStore.lastStateSyncAtMs = now;
             break;
 

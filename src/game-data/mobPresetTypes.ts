@@ -2,6 +2,9 @@
 
 import {
     MONSTER_AGGRO_RADIUS,
+    MONSTER_STEP_MS,
+    WALK_STEP_MS_MAX,
+    WALK_STEP_MS_MIN,
     type ChaseMobConfig,
 } from '../../shared/creatureChase.js';
 
@@ -29,6 +32,8 @@ export interface MobLootEntry {
     itemId: string;
     /** Chance de drop em percentual (0–100). */
     chance: number;
+    /** Quantidade ao dropar (padrão 1). */
+    quantity?: number;
 }
 
 export interface CreaturePresetEntry {
@@ -51,6 +56,8 @@ export interface CreaturePresetEntry {
     /** Ranged: para de corrigir posição dentro desta faixa (padrão: attackRange ± 1). */
     minRange?: number;
     maxRange?: number;
+    /** Ms por tile cardinal — velocidade de caminhada (menor = mais rápido). */
+    walkStepMs?: number;
     /** Persistido para loot futuro; gameplay ainda não consome. */
     loot?: MobLootEntry[];
 }
@@ -104,7 +111,19 @@ function sanitizeLoot(raw: unknown): MobLootEntry[] | undefined {
         const chanceRaw = (row as { chance?: unknown }).chance;
         const chance = typeof chanceRaw === 'number' ? chanceRaw : Number(chanceRaw);
         if (!Number.isFinite(chance) || chance < 0 || chance > 100) continue;
-        entries.push({ itemId, chance: Math.round(chance * 100) / 100 });
+        const qtyRaw = (row as { quantity?: unknown }).quantity;
+        const quantity =
+            qtyRaw === undefined || qtyRaw === null
+                ? undefined
+                : (() => {
+                      const n = typeof qtyRaw === 'number' ? qtyRaw : Number(qtyRaw);
+                      return Number.isFinite(n) && n >= 1 ? Math.floor(n) : undefined;
+                  })();
+        entries.push({
+            itemId,
+            chance: Math.round(chance * 100) / 100,
+            ...(quantity !== undefined ? { quantity } : {}),
+        });
     }
     return entries.length > 0 ? entries : undefined;
 }
@@ -141,10 +160,26 @@ export function sanitizeCreaturePresetEntry(raw: unknown): CreaturePresetEntry |
         attackRange: coerceOptionalPositiveInt(row.attackRange),
         minRange: coerceOptionalPositiveInt(row.minRange),
         maxRange: coerceOptionalPositiveInt(row.maxRange),
+        walkStepMs: coerceOptionalPositiveInt(row.walkStepMs),
         loot: sanitizeLoot(row.loot),
     };
 
     return entry;
+}
+
+const WALK_STEP_MS_BY_SIZE: Record<CreatureVisualSize, number> = {
+    tiny: 220,
+    small: 280,
+    medium: 300,
+    large: 400,
+    boss: 500,
+};
+
+function resolveWalkStepMs(preset?: CreaturePresetEntry): number {
+    const size = preset?.visualSize ?? 'medium';
+    const fallback = WALK_STEP_MS_BY_SIZE[size] ?? MONSTER_STEP_MS;
+    const raw = preset?.walkStepMs ?? fallback;
+    return Math.max(WALK_STEP_MS_MIN, Math.min(WALK_STEP_MS_MAX, Math.floor(raw)));
 }
 
 /** Perseguição efetiva — defaults: melee/1 SQM, ranged/3 SQM com zona min/max. */
@@ -154,6 +189,7 @@ export function resolveMobChaseConfig(preset?: CreaturePresetEntry): ChaseMobCon
     const defaultRange = chaseBehavior === 'ranged' ? 3 : 1;
     let attackRange = preset?.attackRange ?? defaultRange;
     attackRange = Math.max(1, Math.min(MONSTER_AGGRO_RADIUS - 1, Math.floor(attackRange)));
+    const walkStepMs = resolveWalkStepMs(preset);
 
     if (chaseBehavior === 'melee') {
         return {
@@ -161,6 +197,7 @@ export function resolveMobChaseConfig(preset?: CreaturePresetEntry): ChaseMobCon
             attackRange: 1,
             minRange: 1,
             maxRange: 1,
+            walkStepMs,
         };
     }
 
@@ -173,7 +210,7 @@ export function resolveMobChaseConfig(preset?: CreaturePresetEntry): ChaseMobCon
         maxRange = attackRange + 1;
     }
 
-    return { chaseBehavior, attackRange, minRange, maxRange };
+    return { chaseBehavior, attackRange, minRange, maxRange, walkStepMs };
 }
 
 export interface ResolvedMobCombatStats {

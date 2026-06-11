@@ -7,9 +7,10 @@ import {
 } from './floatingCombatText';
 
 describe('floatingCombatText', () => {
-    it('formata dano como -N', () => {
+    it('formata dano como -N ou MISS', () => {
         expect(formatDamageLabel(10)).toBe('-10');
         expect(formatDamageLabel(50)).toBe('-50');
+        expect(formatDamageLabel(0)).toBe('MISS');
     });
 
     it('float de dano some antes de 1s (evita sensação de trava)', () => {

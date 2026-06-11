@@ -9,12 +9,17 @@
     "dev:web": "vite",
     "dev:server": "npm run dev --prefix server",
     "server": "npm run start --prefix server",
-    "build": "tsc && vite build && npm run build --prefix server",
+    "build:assets": "node scripts/write-pack-public-key.mjs && node scripts/pack-assets.mjs",
+    "build": "npm run build:assets && tsc && vite build && npm run build --prefix server",
     "start": "npm run start --prefix server",
     "start:railway": "npm run build && npm run start",
+    "pack": "npm run build:assets",
     "preview": "vite preview",
     "test": "vitest run && node scripts/check-calibrator-listeners.mjs",
     "migrate:character-calibration": "node scripts/migrate-character-calibration.mjs",
+    "generate:spell-cast-sprites": "node scripts/generate-spell-cast-sprites.mjs",
+    "generate:item-icons": "node scripts/generate-item-icon-sprites.mjs",
+    "generate:spell-icons": "node scripts/generate-spell-icon-sprites.mjs --update-catalog",
     "test:calibrator": "node scripts/check-calibrator-listeners.mjs",
     "electron:compile": "tsc -p desktop/electron/tsconfig.json && node scripts/write-electron-dist-package.mjs",
     "electron:check": "npm run build && npm run electron:compile",
@@ -32,6 +37,7 @@
     "cross-env": "^7.0.3",
     "electron": "^36.3.1",
     "electron-builder": "^26.0.12",
+    "pngjs": "^7.0.0",
     "typescript": "^5.2.2",
     "vite": "^5.0.0",
     "vitest": "^3.2.4",
@@ -53,7 +59,9 @@
       "dist/**/*",
       "desktop/electron/dist/**/*",
       "package.json",
-      "!desktop/electron/dist/**/*.ts"
+      "!desktop/electron/dist/**/*.ts",
+      "!private_key.pem",
+      "!public_key.pem"
     ],
     "win": {
       "target": [

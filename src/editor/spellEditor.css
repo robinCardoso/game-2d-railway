@@ -1,0 +1,143 @@
+.spell-editor__intro {
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--text-dim);
+}
+
+.spell-editor__filter-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.spell-editor__list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+    margin-bottom: 8px;
+}
+
+.spell-editor__list-item {
+    display: grid;
+    grid-template-columns: 32px 1fr;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: #15181e;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.spell-editor__list-item:hover {
+    border-color: rgba(99, 102, 241, 0.45);
+}
+
+.spell-editor__list-item.is-active {
+    border-color: #6366f1;
+    background: rgba(99, 102, 241, 0.12);
+}
+
+.spell-editor__list-item img {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    background: #0f1218;
+    object-fit: contain;
+}
+
+.spell-editor__list-item strong {
+    display: block;
+    font-size: 12px;
+    color: #f1f5f9;
+}
+
+.spell-editor__list-item small {
+    display: block;
+    margin-top: 2px;
+    font-size: 10px;
+    color: var(--text-dim);
+    line-height: 1.35;
+}
+
+.spell-editor__vocation-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.spell-editor__tag {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: #1e293b;
+    color: #cbd5e1;
+}
+
+.spell-editor__tag--shared {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fcd34d;
+}
+
+.spell-editor__chip-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.spell-editor__chip {
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: #15181e;
+    color: #cbd5e1;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.spell-editor__chip.is-on {
+    border-color: #6366f1;
+    background: rgba(99, 102, 241, 0.2);
+    color: #e0e7ff;
+}
+
+.spell-editor__form-section {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+}
+
+.spell-editor__form-title {
+    margin: 0 0 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #94a3b8;
+}
+
+.spell-editor__actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 12px;
+}

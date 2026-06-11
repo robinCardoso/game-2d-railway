@@ -1,4 +1,4 @@
-import { resolveApiUrl } from '../shared/apiUrl';
+import { assetLoader } from './assetLoader';
 import type { ItemSpriteCalibration } from './itemCatalogTypes';
 
 const iconCache = new Map<string, HTMLImageElement | null>();
@@ -6,7 +6,10 @@ const inflight = new Map<string, Promise<HTMLImageElement | null>>();
 
 function iconSrc(iconUrl: string): string {
     const path = iconUrl.startsWith('/') ? iconUrl : `/${iconUrl}`;
-    return `${resolveApiUrl(path)}?v=${encodeURIComponent(iconUrl)}`;
+    if (assetLoader.isPackaged()) {
+        return assetLoader.resolveAssetUrl(path);
+    }
+    return `${assetLoader.resolveAssetUrl(path)}?v=${encodeURIComponent(iconUrl)}`;
 }
 
 export function invalidateItemIconCache(iconUrl?: string): void {

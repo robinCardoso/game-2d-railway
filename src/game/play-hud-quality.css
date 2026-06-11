@@ -1,0 +1,109 @@
+/**
+ * Qualidade visual da HUD — alta (padrão), média ou leve.
+ * Ativado via data-play-hud-quality no <html> (playHudSettings).
+ */
+
+/* --- Média: menos blur e sombra --- */
+:root[data-play-hud-quality='medium'] .play-hud-character-card,
+:root[data-play-hud-quality='medium'] .play-hud-action-bar,
+:root[data-play-hud-quality='medium'] .play-hud-menu-dropdown,
+:root[data-play-hud-quality='medium'] .play-chat-dock__panel {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35) !important;
+}
+
+:root[data-play-hud-quality='medium'] .play-combat-hub__spell-ring,
+:root[data-play-hud-quality='medium'] .play-combat-hub__attack {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-play-hud-quality='medium'] .play-panel.is-open {
+    animation-duration: 0.12s;
+}
+
+/* --- Leve: mínimo efeito visual --- */
+:root[data-play-hud-quality='light'] .play-hud-character-card,
+:root[data-play-hud-quality='light'] .play-hud-action-bar,
+:root[data-play-hud-quality='light'] .play-hud-menu-dropdown,
+:root[data-play-hud-quality='light'] .play-chat-dock__panel,
+:root[data-play-hud-quality='light'] .play-chat-dock__collapse-btn,
+:root[data-play-hud-quality='light'] .play-panel.is-open {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: none !important;
+}
+
+:root[data-play-hud-quality='light'] .play-hud-character-card .hud-bar-fill,
+:root[data-play-hud-quality='light'] .play-hud-character-card .hud-bar-row--hp .hud-bar-fill,
+:root[data-play-hud-quality='light'] .play-hud-character-card .hud-bar-row--mp .hud-bar-fill,
+:root[data-play-hud-quality='light'] .play-hud-character-card .hud-bar-row--xp .hud-bar-fill {
+    box-shadow: none;
+}
+
+:root[data-play-hud-quality='light'] .play-combat-hub__spell-slot,
+:root[data-play-hud-quality='light'] .play-combat-hub__attack,
+:root[data-play-hud-quality='light'] .play-panel-close,
+:root[data-play-hud-quality='light'] .play-hud-action-btn {
+    transition: none;
+}
+
+:root[data-play-hud-quality='light'] .play-combat-hub__spell-ring,
+:root[data-play-hud-quality='light'] .play-combat-hub__attack {
+    box-shadow: none;
+    filter: none;
+}
+
+:root[data-play-hud-quality='light'] .play-combat-hub__spell-cooldown,
+:root[data-play-hud-quality='light'] .play-combat-hub__attack-cooldown {
+    background: rgba(0, 0, 0, 0.45);
+    mask: none;
+    -webkit-mask: none;
+}
+
+:root[data-play-hud-quality='light'] .play-chat-dock__log {
+    max-height: 120px;
+}
+
+:root[data-play-hud-quality='light'] .play-hud-minimap__frame,
+:root[data-play-hud-quality='light'] .play-hud-minimap__zoom button {
+    box-shadow: none;
+}
+
+:root[data-play-hud-quality='light'] .play-hud-minimap__player {
+    filter: none;
+}
+
+:root[data-play-hud-quality='light'] .play-panel.is-open {
+    animation: none;
+}
+
+:root[data-play-hud-quality='light'] .play-spell-modal__row:hover,
+:root[data-play-hud-quality='light'] .play-spell-modal__row.is-selected {
+    box-shadow: none;
+}
+
+:root[data-play-hud-quality='light'] .play-spell-modal__detail-panel {
+    box-shadow: none;
+}
+
+.play-perf-overlay {
+    position: fixed;
+    top: max(8px, env(safe-area-inset-top, 0px));
+    left: max(8px, env(safe-area-inset-left, 0px));
+    z-index: 99999;
+    pointer-events: none;
+    max-width: min(360px, calc(100vw - 16px));
+}
+
+.play-perf-overlay__text {
+    margin: 0;
+    padding: 8px 10px;
+    font: 11px/1.35 ui-monospace, 'Cascadia Code', Consolas, monospace;
+    color: #e2e8f0;
+    background: rgba(8, 10, 16, 0.88);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 6px;
+    white-space: pre-wrap;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}

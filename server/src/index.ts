@@ -5,15 +5,18 @@ import { GameRoom } from './GameRoom.js';
 import { MapCollisionStore } from './MapCollisionStore.js';
 import { MapInstanceStore } from './MapInstanceStore.js';
 import { CreaturePresetStore } from './game/CreaturePresetStore.js';
+import { SpellCatalogStore } from './game/SpellCatalogStore.js';
 import { VocationStore } from './game/VocationStore.js';
 import { runMigrations } from './db/migrate.js';
 import { env } from './config/env.js';
+import { getServerGameRates } from './config/gameRates.js';
 import { initServerMapRegistry } from './mapRegistry.js';
 
 await runMigrations();
 
 const mapEntries = initServerMapRegistry();
 console.log(`[game-2d-server] Mapas registrados: ${mapEntries.map((m) => m.id).join(', ')}`);
+console.log(`[game-2d-server] GAME_RATE_EXP = ${getServerGameRates().rateExp}`);
 
 if (env.isProduction && !env.requireWsTicket) {
     console.warn(
@@ -27,18 +30,20 @@ if (env.isProduction && env.jwtSecret.includes('change-in-production')) {
 const collision = new MapCollisionStore();
 const instances = new MapInstanceStore();
 const creaturePresets = new CreaturePresetStore();
+const spellCatalog = new SpellCatalogStore();
 const vocations = new VocationStore();
 
-await Promise.all([collision.loadAll(), creaturePresets.load(), vocations.load()]);
+await Promise.all([collision.loadAll(), creaturePresets.load(), spellCatalog.load(), vocations.load()]);
 
 const room = new GameRoom(collision, instances, {
     requireWsTicket: env.requireWsTicket,
     positionSaveIntervalMs: env.wsPositionSaveIntervalMs,
     creaturePresets,
+    spellCatalog,
     vocations,
 });
 
-const app = createApp(() => room.getStats().online, collision);
+const app = createApp(() => room.getStats().online, collision, () => room);
 const httpServer = createServer(app);
 
 const wss = new WebSocketServer({ server: httpServer });

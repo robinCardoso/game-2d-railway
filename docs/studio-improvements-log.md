@@ -2,7 +2,21 @@
 
 Documento de referência para humanos e agentes IA. **Atualizar este arquivo** quando mudar calibrador, registry, carregamento de mapas ou APIs de sprite.
 
-Última revisão: **2026-06-06**
+Última revisão: **2026-06-10**
+
+---
+
+## Studio editor-only (estilo RME) — 2026-06-10
+
+| Área | Antes | Depois |
+|------|-------|--------|
+| Navegação Studio | WASD movia avatar oculto + `PlayerMovement` | `editorCamera.ts` — pan (espaço/meio/WASD/setas), sem jogador |
+| Mobs no Studio | `NpcAI` + `respawnEntities` + sprites animados | Marcadores estáticos na aba Spawns |
+| Combate / teste | Menu Teste (buffs), atalhos attack/sit/dead | Removido — testar em `play.html` via **Testar no Play** |
+| Produção | `studio.html` + APIs write expostas | Studio local (`npm run dev`); prod: `STUDIO_ENABLED=false`, sem bundle `studio.html` |
+| Validação mapa | Simulação parcial no Studio | `play.html?mapId=` (dev) com spawn do JSON do mapa |
+
+**Anti-regressão:** `isEditorOnly()` → `update()` não chama `NpcAI` / `PlayerMovement`; `respawnEntities()` no-op no Studio.
 
 ---
 
@@ -43,7 +57,7 @@ Documento de referência para humanos e agentes IA. **Atualizar este arquivo** q
 | **Pulo ao mudar direção** | Sprite/rede mudavam de face antes do deslize terminar → `position_correction` | `activeStepFacing` trava sprite no passo; grid tick antes do sprite; rede adia sync só de direção durante deslize |
 | **Clamp stepDuration servidor** | Cliente podia mandar 16ms; GPT sugeriu 80ms mas conflita com speed 55ms | `MIN_SERVER_STEP_DURATION_MS` 55 em `shared/protocol.ts` |
 | **Input movimento global** | `chordHeldSinceMs` / facing em módulo — risco Play+Studio/reload | Estado no `GridMovementController`; `resetGridMovementInputState(ctrl)` |
-| **Rate limit movimento WS** | Cliente podia floodar `move` mesmo com clamp de duração | `GameRoom`: `lastMoveAcceptedAtMs` + intervalo `stepMs × 0.85`; código `MOVEMENT_TOO_FAST` |
+| **Rate limit movimento WS** | Cliente podia floodar `move` mesmo com clamp de duração | `GameRoom`: `lastMoveAcceptedAtMs` + intervalo `stepMs × 0.80`; código `MOVEMENT_TOO_FAST` |
 | **Rate limit falso positivo** | Sync mandava duração do *próximo* passo (terreno lento) ≠ ritmo real (~331ms vs 453ms) | `lastCompletedStepDurationMs` no cliente + `lastObservedMoveIntervalMs` no servidor |
 | **Spam rejeição movimento** | Cliente malicioso podia floodar `error` + `position_correction` + log | `rejectMove()` + `lastMoveRejectionSentAtMs`; throttle 400ms; silent drop no intervalo |
 | **Paleta spawns após salvar mob** | `#charRegisterInPalette` ausente no HTML → `creature_presets.json` nunca atualizava | Checkbox em `studio.html`; hint aba Spawns aponta para Criar Mobs/NPCs |
@@ -60,6 +74,13 @@ Documento de referência para humanos e agentes IA. **Atualizar este arquivo** q
 | **Padronização tiles/mapas** | IDs numéricos instáveis; layers sem resolve unificado; save sem validação | `shouldRegisterTilePath` sync+async; layers usam `resolveTilesByFloor`; `validateMapDocument`; `npm test` |
 | **Banner level up no login** | `progress_sync` pós-WS com ticket dev sem XP fazia `leveledUp: true` (1→3) | `playSessionLevel` + `shouldCelebrateSessionLevelUp`; sync servidor silencioso; ticket dev com level/exp |
 | **Pulo / Stutter de Mobs** | Snap do mob a cada 1s e catch-up lento fazendo o mob "pular frame" | Evitar snap de mobs ativos em `applySync` e corrigir cálculo de duração do catch-up |
+| **Rubber-band diagonal (prod)** | `MOVEMENT_TOO_FAST` enviava `position_correction` → jogador voltava em latência alta | `rejectMove(..., sendCorrection=false)` + `forceResyncPosition()` no cliente — ver [multiplayer-remote-players.md](./multiplayer-remote-players.md) |
+| **Sistema de magias** | Sem catálogo unificado, cast ou hotbar | [spell-system.md](./spell-system.md) — `spell_catalog.json`, WS cast, barra 1–3, modal |
+| **Ícones hotbar magias** | Ícones quebrados em prod (paths inexistentes) | PNG 32×32 em `tiles/effects/spells/icons/`; `npm run generate:spell-icons`; upload Studio |
+| **VFX conjuração magias** | Sem feedback visual ao castar | Strips em `tiles/effects/spells/cast/` + `spellCastEffectSprites.ts`; `npm run generate:spell-cast-sprites` |
+| **Rate global XP** | Sem multiplicador configurável em produção | `GAME_RATE_EXP` + `GET /api/game-rates` — [game-rates.md](./game-rates.md) |
+| **Velocidade caminhada mob** | Todos mobs com mesmo ritmo de passo | Campo `walkStepMs` em `creature_presets.json` + Mobs Stats — §51 |
+| **Índice features jun/2026** | Muitas mudanças sem doc central | [recent-features-jun-2026.md](./recent-features-jun-2026.md) |
 
 
 
@@ -1199,4 +1220,77 @@ Calibração de animação (fatiamento, âncoras, `animations`) misturada no JSO
 
 ### 50.3 Testes automatizados
 - Executados com sucesso via `npm test` (80/80 testes passando).
+
+---
+
+## 51. Velocidade de caminhada por mob (`walkStepMs`) (2026-06-09)
+
+### 51.1 Escopo
+- Cada preset de criatura pode definir quantos milissegundos leva para andar **um tile** (chase e movimento visual).
+
+### 51.2 Implementação
+- **Tipos:** `mobPresetTypes.ts` — `walkStepMs?: number`; default `MONSTER_STEP_MS` em `creatureChase.ts`
+- **Studio:** `mobStatsEditorModal.ts` — input **Velocidade de caminhada (ms/tile)**; preview no painel
+- **Servidor:** `RoomCreatureManager` — `stepDurationMs` no protocolo + gate em `tickMonsterChaseStep`
+- **Offline:** `npcAI.ts` — `moveSpeedPx` derivado do preset
+
+### 51.3 Testes
+- `shared/creatureChase.test.ts` — `walkStepMs` atrasa segundo passo; facing aggro com histerese
+
+---
+
+## 52. Sistema de magias — ícones e VFX (2026-06-09)
+
+Documentação completa: **[spell-system.md](./spell-system.md)**.
+
+### 52.1 Ícones hotbar (PNG 32×32)
+- Pasta: `tiles/effects/spells/icons/{spellId}.png`
+- Catálogo: campo `icon` em `public/spell_catalog.json` → `/tiles/effects/spells/icons/...`
+- Script: `npm run generate:spell-icons` (`scripts/generate-spell-icon-sprites.mjs`)
+- Studio: upload via editor de magias → `POST /api/save-spell-icon` (volume em produção)
+
+### 52.2 VFX de conjuração
+- Pasta: `tiles/effects/spells/cast/{spellId}.json` + strip PNG
+- Runtime: `spellCastEffectSprites.ts`, `spellCastEffects.ts`
+- Script: `npm run generate:spell-cast-sprites`
+
+### 52.3 Checklist manual
+- [ ] Magias do catálogo mostram ícone na hotbar (Play)
+- [ ] Cast exibe strip ou fallback canvas
+- [ ] Magia criada no Studio em prod: ícone aparece após upload (volume)
+
+---
+
+## 53. Rate global de experiência (2026-06-09)
+
+Ver **[game-rates.md](./game-rates.md)**.
+
+- Servidor: `GAME_RATE_EXP` (`.env` / Railway Variables)
+- Offline: `public/game_rates.json`
+- HUD: banner `EXP ×N` quando rate ≠ 1
+- Anti-cheat: `progressSyncPolicy.ts` valida ganho com rate conhecido
+
+---
+
+## 54. Correção rubber-band movimento diagonal (2026-06-09)
+
+### 54.1 Problema
+- Em produção (latência Railway), passos diagonais válidos às vezes recebiam `MOVEMENT_TOO_FAST` seguido de `position_correction` — jogador **ia e voltava**.
+
+### 54.2 Solução
+- `GameRoom.rejectMove(code, sendCorrection)` — `MOVEMENT_TOO_FAST` → `sendCorrection=false`
+- Cliente: `gameNetClient.ts` → `forceResyncPosition()` reenvia tile quando intervalo já passou
+- Tolerância rate limit: `stepDurationMs × 0.80` (antes 0.85)
+
+### 54.3 Doc
+- [multiplayer-remote-players.md](./multiplayer-remote-players.md) §2.2
+- [analise-chatgpt.md](./analise-chatgpt.md) — seção movimento WS
+
+---
+
+## 55. Build servidor — testes fora do `tsc` prod (2026-06-09)
+
+- `server/tsconfig.json`: `exclude` inclui `src/**/*.test.ts`
+- Evita falha de build Railway quando mocks de teste não batem com tipos de produção
+- `grantKillExperience.test.ts`: mock `ConnectedPlayer` completo
 

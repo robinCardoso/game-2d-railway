@@ -9,17 +9,20 @@ import {
     drawFloatingDamages,
     pruneFloatingDamages,
     type FloatingDamageEntry,
+    type FloatingDamageMotion,
 } from './floatingCombatText';
 
 export interface LocalPlayerFloatingText {
     spawnXp(xp: number, nowMs: number): void;
     spawnDamage(damage: number, nowMs: number): void;
     tick(nowMs: number): void;
+    getActiveCount(): number;
     draw(
         ctx: CanvasRenderingContext2D,
         anchorCenterX: number,
         anchorTopY: number,
-        nowMs: number
+        nowMs: number,
+        motion?: FloatingDamageMotion
     ): void;
 }
 
@@ -43,9 +46,13 @@ export function createLocalPlayerFloatingText(): LocalPlayerFloatingText {
             entries = pruneFloatingDamages(entries, nowMs);
         },
 
-        draw(ctx, anchorCenterX, anchorTopY, nowMs): void {
+        getActiveCount(): number {
+            return entries.length;
+        },
+
+        draw(ctx, anchorCenterX, anchorTopY, nowMs, motion = 'linear'): void {
             if (entries.length === 0) return;
-            drawFloatingDamages(ctx, entries, anchorCenterX, anchorTopY, nowMs);
+            drawFloatingDamages(ctx, entries, anchorCenterX, anchorTopY, nowMs, motion);
         },
     };
 }

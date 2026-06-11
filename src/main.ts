@@ -27,6 +27,7 @@ import {
 import { initAutoBorderUi, onMapEditorTileSelectionChanged, getActiveBorderSet } from './editor/autoBorderUi';
 import { initVocationEditor } from './editor/vocationEditorModal';
 import { initMobStatsEditor } from './editor/mobStatsEditorModal';
+import { initSpellEditor, refreshSpellEditorPanel } from './editor/spellEditor';
 import { initItemEditor } from './editor/itemEditorModal';
 import { CREATURE_PRESETS_UPDATED } from './game-data/creaturePresetUi';
 import { ITEM_CATALOG_UPDATED } from './game-data/itemCatalogUi';
@@ -36,6 +37,7 @@ import {
 } from './game-data/vocationRegistry';
 import { VOCATIONS_UPDATED_EVENT, type VocationsMap } from './game-data/vocationUi';
 import { loadItemCatalog } from './game-data/itemCatalog';
+import { assetLoader } from './game-data/assetLoader';
 import {
     collectBorderDrawTileIdsCached,
     buildBorderMaskTileIndex,
@@ -101,7 +103,15 @@ import {
 import { PlayerMovement } from './movement/playerMovement';
 import { DEFAULT_WS_PORT } from '../shared/protocol';
 import { GameNetClient } from './net/gameNetClient';
-import { getStudioBoot, isStudioMode } from './studio/studioBoot';
+import {
+    createEditorCamera,
+    focusEditorCameraOnTile,
+    syncEditorCameraToRenderCamera,
+    tickEditorCameraPan,
+    updateEditorCameraStatus,
+    type EditorCameraState,
+} from './editor/editorCamera';
+import { getStudioBoot, isEditorOnly, isStudioMode } from './studio/studioBoot';
 import {
     resolveStudioMapIdToLoad,
     writeStudioLastMapId,
@@ -150,11 +160,6 @@ let mapSpawn = { x: 50, y: 50, z: 0 };
 let floorSelector: FloorSelectorController;
 
 function createCollisionContext(): CollisionQueryContext {
-    const permissions = getRolePermissions(currentRole);
-    const noclip =
-        permissions.canToggleCollision &&
-        collisionToggle &&
-        !collisionToggle.checked;
     return {
         worldMap,
         tileRegistry: TILE_TYPES,
@@ -162,8 +167,8 @@ function createCollisionContext(): CollisionQueryContext {
         tileSize: TILE_SIZE_SCREEN,
         minFloorZ: ENGINE_CONFIG.MIN_FLOOR_Z,
         maxFloorZ: ENGINE_CONFIG.MAX_FLOOR_Z,
-        collisionEnabled: !noclip,
-        hasBoatEquipped: !!(boatToggle && boatToggle.checked),
+        collisionEnabled: true,
+        hasBoatEquipped: false,
         grassOverlay: grassOverlayMap,
         itemsOverlay: itemsOverlayMap,
     };
@@ -308,7 +313,9 @@ if (roleSelector) {
     roleSelector.onchange = () => {
         currentRole = roleSelector.value as AccountType;
         updateRoleUI();
-        refreshPlayerMovementSpeed();
+        if (!isEditorOnly()) {
+            refreshPlayerMovementSpeed();
+        }
     };
 }
 
@@ -385,6 +392,12 @@ const player = {
 };
 
 const camera = { x: 0, y: 0, offsetX: 0, offsetY: 0, zoom: 1.0 };
+const editorCam: EditorCameraState = createEditorCamera({
+    viewTileX: player.tileX,
+    viewTileY: player.tileY,
+    viewZ: player.worldZ,
+});
+let lastEditorCameraTickMs = performance.now();
 let isSpacePressed = false;
 let isMiddleDragging = false;
 let isDraggingMap = false;
@@ -427,13 +440,18 @@ function setActiveMapSize(size: number): void {
         Math.max(8, Math.floor(size))
     );
     const maxCoord = activeMapSize - 1;
-    if (player.tileX > maxCoord) player.tileX = maxCoord;
-    if (player.tileY > maxCoord) player.tileY = maxCoord;
-    if (player.tileX < 0) player.tileX = 0;
-    if (player.tileY < 0) player.tileY = 0;
-    player.worldX = player.tileX * TILE_SIZE_SCREEN;
-    player.worldY = player.tileY * TILE_SIZE_SCREEN;
-    syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
+    if (isEditorOnly()) {
+        editorCam.viewTileX = Math.max(0, Math.min(maxCoord, editorCam.viewTileX));
+        editorCam.viewTileY = Math.max(0, Math.min(maxCoord, editorCam.viewTileY));
+    } else {
+        if (player.tileX > maxCoord) player.tileX = maxCoord;
+        if (player.tileY > maxCoord) player.tileY = maxCoord;
+        if (player.tileX < 0) player.tileX = 0;
+        if (player.tileY < 0) player.tileY = 0;
+        player.worldX = player.tileX * TILE_SIZE_SCREEN;
+        player.worldY = player.tileY * TILE_SIZE_SCREEN;
+        syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
+    }
     markMinimapDirty();
 }
 
@@ -509,8 +527,9 @@ if (gameNet) {
 // Instanciação de NPCs de teste para validar o sistema de Outfits/Multi-entidades
 export const npcs: GameEntity[] = [];
 
-// Reconstrói as entidades ativas no jogo com base nos spawns pintados
+// Reconstrói entidades ativas (desativado no editor-only — spawns são marcadores estáticos)
 export function respawnEntities() {
+    if (isEditorOnly()) return;
     respawnEntitiesFromSpawns({
         spawns: worldSpawns,
         npcs,
@@ -706,22 +725,29 @@ function parseSpriteProfile(value: string | undefined): SpriteProfileId {
 
 editorShell = initEditorShell();
 editorShell.setPanelOpenHook((id, trigger) => {
+    if (id === 'spells') {
+        refreshSpellEditorPanel();
+        return;
+    }
     if (id !== 'character') return;
     const profile = parseSpriteProfile(trigger?.dataset.spriteProfile);
     setSpriteEditorProfile(profile);
     const titleEl = document.getElementById('flyoutTitle');
     if (titleEl) titleEl.textContent = getSpriteEditorFlyoutTitle(profile);
 });
-initGridPlayerPosition(player, TILE_SIZE_SCREEN);
+if (!isEditorOnly()) {
+    initGridPlayerPosition(player, TILE_SIZE_SCREEN);
+    syncEquipmentToStats();
+    refreshPlayerMovementSpeed();
+    setupMovementDevControls();
+}
 initFloorControls();
-syncEquipmentToStats();
-refreshPlayerMovementSpeed();
-setupMovementDevControls();
 updateRoleUI();
 initCharacterEditor({ onCatalogChanged: refreshCreatureCatalog });
 initMapSpriteEditor();
 initVocationEditor();
 initMobStatsEditor();
+initSpellEditor();
 initItemEditor();
 initAutoBorderUi({ onRecalcFloor: () => recalcAutoBorderForEditingFloor() });
 
@@ -738,9 +764,12 @@ const tZInput = document.getElementById('teleportZ') as HTMLInputElement;
 
 openTeleportBtn?.addEventListener('click', () => {
     if (teleportModal) {
-        if (tXInput) tXInput.value = player.tileX.toString();
-        if (tYInput) tYInput.value = player.tileY.toString();
-        if (tZInput) tZInput.value = player.worldZ.toString();
+        const refX = isEditorOnly() ? editorCam.viewTileX : player.tileX;
+        const refY = isEditorOnly() ? editorCam.viewTileY : player.tileY;
+        const refZ = isEditorOnly() ? editorCam.viewZ : player.worldZ;
+        if (tXInput) tXInput.value = refX.toString();
+        if (tYInput) tYInput.value = refY.toString();
+        if (tZInput) tZInput.value = refZ.toString();
         teleportModal.style.display = 'flex';
         // Needs a small delay to allow display: flex to apply before transitioning opacity
         requestAnimationFrame(() => {
@@ -782,28 +811,49 @@ teleportConfirmBtn?.addEventListener('click', () => {
         return;
     }
 
-    saveState(); // Salva o histórico de alteração do mapa antes de viajar
+    if (isEditorOnly()) {
+        focusEditorCameraOnTile(
+            editorCam,
+            tx,
+            ty,
+            tz,
+            activeMapSize,
+            ENGINE_CONFIG.MIN_FLOOR_Z,
+            ENGINE_CONFIG.MAX_FLOOR_Z
+        );
+        editingFloor = editorCam.viewZ;
+        syncEditorCameraToRenderCamera(editorCam, camera, canvas, TILE_SIZE_SCREEN);
+        updateEditorCameraStatus(editorCam, {
+            posX: posXEl,
+            posY: posYEl,
+            posZ: posZEl,
+            statusPos: statusPosEl,
+            statusZ: statusZEl,
+        });
+        updateFloorButtons();
+    } else {
+        saveState();
+        const result = PlayerMovement.teleportPlayer({
+            player,
+            gridMovement,
+            camera,
+            canvas,
+            x: tx,
+            y: ty,
+            z: tz,
+            TILE_SIZE_SCREEN,
+            MAP_SIZE: activeMapSize,
+            ENGINE_CONFIG,
+            updateFloorButtons: () => updateFloorButtons(),
+            posXEl: posXEl as HTMLElement,
+            posYEl: posYEl as HTMLElement,
+            posZEl: posZEl as HTMLElement,
+        });
+        editingFloor = result.editingFloor;
+    }
 
-    const result = PlayerMovement.teleportPlayer({
-        player,
-        gridMovement,
-        camera,
-        canvas,
-        x: tx,
-        y: ty,
-        z: tz,
-        TILE_SIZE_SCREEN,
-        MAP_SIZE: activeMapSize,
-        ENGINE_CONFIG,
-        updateFloorButtons: () => updateFloorButtons(),
-        posXEl: posXEl as HTMLElement,
-        posYEl: posYEl as HTMLElement,
-        posZEl: posZEl as HTMLElement
-    });
-
-    editingFloor = result.editingFloor;
     closeTeleportModal();
-    toast.success(`Teletransportado para X:${tx} Y:${ty} Z:${tz} com sucesso!`);
+    toast.success(`Câmera em X:${tx} Y:${ty} Z:${tz}`);
 });
 
 // Inicializa os spinners customizados para campos numéricos
@@ -1391,6 +1441,28 @@ spawnEditorController = initSpawnEditor({
 });
 
 function focusEditorOnTile(tileX: number, tileY: number, tileZ: number): void {
+    if (isEditorOnly()) {
+        focusEditorCameraOnTile(
+            editorCam,
+            tileX,
+            tileY,
+            tileZ,
+            activeMapSize,
+            ENGINE_CONFIG.MIN_FLOOR_Z,
+            ENGINE_CONFIG.MAX_FLOOR_Z
+        );
+        editingFloor = editorCam.viewZ;
+        syncEditorCameraToRenderCamera(editorCam, camera, canvas, TILE_SIZE_SCREEN);
+        updateEditorCameraStatus(editorCam, {
+            posX: posXEl,
+            posY: posYEl,
+            posZ: posZEl,
+            statusPos: statusPosEl,
+            statusZ: statusZEl,
+        });
+        updateFloorButtons();
+        return;
+    }
     const result = PlayerMovement.teleportPlayer({
         player,
         gridMovement,
@@ -1676,8 +1748,8 @@ canvas.addEventListener('mousedown', e => {
         }
         dragStartX = e.clientX;
         dragStartY = e.clientY;
-        initialCameraOffsetX = camera.offsetX;
-        initialCameraOffsetY = camera.offsetY;
+        initialCameraOffsetX = isEditorOnly() ? editorCam.offsetX : camera.offsetX;
+        initialCameraOffsetY = isEditorOnly() ? editorCam.offsetY : camera.offsetY;
         updateCursor();
 
         const onDragMove = (me: MouseEvent) => {
@@ -1685,8 +1757,13 @@ canvas.addEventListener('mousedown', e => {
             markStudioActivity();
             const dx = me.clientX - dragStartX;
             const dy = me.clientY - dragStartY;
-            camera.offsetX = initialCameraOffsetX - dx;
-            camera.offsetY = initialCameraOffsetY - dy;
+            if (isEditorOnly()) {
+                editorCam.offsetX = initialCameraOffsetX - dx;
+                editorCam.offsetY = initialCameraOffsetY - dy;
+            } else {
+                camera.offsetX = initialCameraOffsetX - dx;
+                camera.offsetY = initialCameraOffsetY - dy;
+            }
         };
 
         const onDragUp = (me: MouseEvent) => {
@@ -1930,7 +2007,7 @@ window.addEventListener('keydown', e => {
         e.preventDefault();
         const activePanel = editorShell?.getActivePanel();
         const isMapEditPanelActive = activePanel === 'map_editor';
-        if (isMapEditPanelActive) {
+        if (isMapEditPanelActive || isEditorOnly()) {
             if (!isSpacePressed) {
                 isSpacePressed = true;
                 updateCursor();
@@ -1939,30 +2016,31 @@ window.addEventListener('keydown', e => {
             triggerPlayerAttack();
         }
     }
-    
-    // Novos atalhos para os novos estados de animação
-    if (key === 'x') {
-        e.preventDefault();
-        if (activeCharacterController.currentState === 'sit') {
-            activeCharacterController.setState('idle');
-        } else {
-            activeCharacterController.setState('sit');
+
+    if (!isEditorOnly()) {
+        if (key === 'x') {
+            e.preventDefault();
+            if (activeCharacterController.currentState === 'sit') {
+                activeCharacterController.setState('idle');
+            } else {
+                activeCharacterController.setState('sit');
+            }
         }
-    }
-    if (key === 'h') {
-        e.preventDefault();
-        if (activeCharacterController.currentState === 'dead') {
-            activeCharacterController.setState('idle');
-        } else {
-            activeCharacterController.setState('dead');
+        if (key === 'h') {
+            e.preventDefault();
+            if (activeCharacterController.currentState === 'dead') {
+                activeCharacterController.setState('idle');
+            } else {
+                activeCharacterController.setState('dead');
+            }
         }
-    }
-    if (key === 'c') {
-        e.preventDefault();
-        activeCharacterController.setState('cast');
-        activeCharacterController.onAnimationEndCallback = () => {
-            activeCharacterController.setState('idle');
-        };
+        if (key === 'c') {
+            e.preventDefault();
+            activeCharacterController.setState('cast');
+            activeCharacterController.onAnimationEndCallback = () => {
+                activeCharacterController.setState('idle');
+            };
+        }
     }
     
     // Atalhos de Histórico (Desfazer/Refazer)
@@ -1989,16 +2067,40 @@ window.addEventListener('keydown', e => {
     }
     
     if (key === 'pageup') {
-        player.worldZ = clampFloorZ(player.worldZ + 1);
-        editingFloor = player.worldZ;
-        syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
+        if (isEditorOnly()) {
+            editorCam.viewZ = clampFloorZ(editorCam.viewZ + 1);
+            editingFloor = editorCam.viewZ;
+        } else {
+            player.worldZ = clampFloorZ(player.worldZ + 1);
+            editingFloor = player.worldZ;
+            syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
+        }
         updateFloorButtons();
+        updateEditorCameraStatus(editorCam, {
+            posX: posXEl,
+            posY: posYEl,
+            posZ: posZEl,
+            statusPos: statusPosEl,
+            statusZ: statusZEl,
+        });
     }
     if (key === 'pagedown') {
-        player.worldZ = clampFloorZ(player.worldZ - 1);
-        editingFloor = player.worldZ;
-        syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
+        if (isEditorOnly()) {
+            editorCam.viewZ = clampFloorZ(editorCam.viewZ - 1);
+            editingFloor = editorCam.viewZ;
+        } else {
+            player.worldZ = clampFloorZ(player.worldZ - 1);
+            editingFloor = player.worldZ;
+            syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
+        }
         updateFloorButtons();
+        updateEditorCameraStatus(editorCam, {
+            posX: posXEl,
+            posY: posYEl,
+            posZ: posZEl,
+            statusPos: statusPosEl,
+            statusZ: statusZEl,
+        });
     }
     
     if (key === 'p') mapEditorController.setTool('pencil');
@@ -2027,8 +2129,19 @@ function updateFloorButtons(): void {
 function initFloorControls(): void {
     floorSelector = initFloorSelector('floorSelector', editingFloor, (z) => {
         editingFloor = z;
-        player.worldZ = z;
-        syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
+        if (isEditorOnly()) {
+            editorCam.viewZ = z;
+            updateEditorCameraStatus(editorCam, {
+                posX: posXEl,
+                posY: posYEl,
+                posZ: posZEl,
+                statusPos: statusPosEl,
+                statusZ: statusZEl,
+            });
+        } else {
+            player.worldZ = z;
+            syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
+        }
         updateFloorButtons();
     });
 }
@@ -2039,11 +2152,7 @@ function buildCurrentMapDocument() {
         name: entry?.name ?? currentMapId ?? 'mapa',
         mapId: currentMapId,
         size: activeMapSize,
-        spawn: {
-            x: player.tileX,
-            y: player.tileY,
-            z: player.worldZ,
-        },
+        spawn: mapSpawn,
         metadata: worldMetadata,
         houses: worldHouses,
         spawns: worldSpawns,
@@ -2175,6 +2284,37 @@ saveMapDevBtn?.addEventListener('click', () => {
     void saveCurrentMapToPublicDev();
 });
 
+const testInPlayBtn = document.getElementById('testInPlayBtn');
+testInPlayBtn?.addEventListener('click', () => {
+    void (async () => {
+        if (!import.meta.env.DEV) {
+            toast.error('Testar no Play só está disponível em npm run dev.');
+            return;
+        }
+        if (!currentMapId) {
+            toast.error('Carregue ou salve um mapa antes de testar no Play.');
+            return;
+        }
+        try {
+            await saveCurrentMapToPublicDev();
+        } catch (err) {
+            console.warn('[Studio] Falha ao salvar mapa antes do teste:', err);
+        }
+        let characterId: string | null = null;
+        try {
+            characterId = localStorage.getItem('game2d_last_character_id');
+        } catch {
+            /* ignore */
+        }
+        if (!characterId) {
+            toast.error('Entre no jogo uma vez (characters.html) para guardar o personagem de teste.');
+            return;
+        }
+        const url = `play.html?characterId=${encodeURIComponent(characterId)}&mapId=${encodeURIComponent(currentMapId)}`;
+        window.open(url, '_blank', 'noopener,noreferrer');
+    })();
+});
+
 const importMapInput = document.getElementById('importMapInput') as HTMLInputElement | null;
 document.getElementById('importMapBtn')?.addEventListener('click', () => {
     importMapInput?.click();
@@ -2231,14 +2371,35 @@ function applyLoadedMap(loaded: ReturnType<typeof loadMapFromJson>) {
         ...loaded.spawn,
         z: clampFloorZ(loaded.spawn.z),
     };
-    player.tileX = loaded.spawn.x;
-    player.tileY = loaded.spawn.y;
-    player.worldZ = mapSpawn.z;
-    syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
-    editingFloor = player.worldZ;
+    if (isEditorOnly()) {
+        focusEditorCameraOnTile(
+            editorCam,
+            mapSpawn.x,
+            mapSpawn.y,
+            mapSpawn.z,
+            activeMapSize,
+            ENGINE_CONFIG.MIN_FLOOR_Z,
+            ENGINE_CONFIG.MAX_FLOOR_Z
+        );
+        editingFloor = editorCam.viewZ;
+        syncEditorCameraToRenderCamera(editorCam, camera, canvas, TILE_SIZE_SCREEN);
+        updateEditorCameraStatus(editorCam, {
+            posX: posXEl,
+            posY: posYEl,
+            posZ: posZEl,
+            statusPos: statusPosEl,
+            statusZ: statusZEl,
+        });
+    } else {
+        player.tileX = loaded.spawn.x;
+        player.tileY = loaded.spawn.y;
+        player.worldZ = mapSpawn.z;
+        syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
+        editingFloor = player.worldZ;
+        refreshPlayerMovementSpeed();
+        respawnEntities();
+    }
     updateFloorButtons();
-    refreshPlayerMovementSpeed();
-    respawnEntities();
     portalEditorController?.refresh();
     spawnEditorController?.refresh();
     history.clear();
@@ -2486,8 +2647,22 @@ function isStairHoleAtTile(tx: number, ty: number, z: number): boolean {
 
 function update() {
     const nowMs = performance.now();
-    
-    // Atualização de Inteligência Artificial de NPCs e monstros modularizada
+
+    if (isEditorOnly()) {
+        const deltaMs = nowMs - lastEditorCameraTickMs;
+        lastEditorCameraTickMs = nowMs;
+        tickEditorCameraPan(editorCam, keys, deltaMs);
+        syncEditorCameraToRenderCamera(editorCam, camera, canvas, TILE_SIZE_SCREEN);
+        updateEditorCameraStatus(editorCam, {
+            posX: posXEl,
+            posY: posYEl,
+            posZ: posZEl,
+            statusPos: statusPosEl,
+            statusZ: statusZEl,
+        });
+        return;
+    }
+
     NpcAI.tickNpcAI({
         nowMs,
         npcs,
@@ -2496,12 +2671,11 @@ function update() {
         MAP_SIZE: activeMapSize,
         isEntityAtTile: (tx, ty, z, excludeId) => isEntityAtTile(tx, ty, z, excludeId),
         queryWalkable: (context, px, py, z) => queryWalkable(context, px, py, z),
-        createCollisionContext: () => createCollisionContext()
+        createCollisionContext: () => createCollisionContext(),
     });
 
     speedBuffs.tick(nowMs);
 
-    // Delegação da movimentação física, animação de passos e câmera para o módulo modular PlayerMovement
     const result = PlayerMovement.updateMovement({
         keys,
         player,
@@ -2521,12 +2695,11 @@ function update() {
         refreshPlayerMovementSpeed: (timeMs) => refreshPlayerMovementSpeed(timeMs),
         posXEl: posXEl as HTMLElement,
         posYEl: posYEl as HTMLElement,
-        posZEl: posZEl as HTMLElement
+        posZEl: posZEl as HTMLElement,
     });
 
     editingFloor = result.editingFloor;
 
-    // Portal: só dispara ao ENTRAR no tile (não enquanto parado em cima dele)
     const currentTileKey = getPlayerTileKey();
     const enteredNewTile = currentTileKey !== previousPlayerTileKey;
     if (enteredNewTile) {
@@ -2617,16 +2790,20 @@ function draw() {
     const tilesPerFloor = Math.max(0, endX - startX + 1) * Math.max(0, endY - startY + 1);
     let floorsDrawn = 0;
 
+    const viewZ = isEditorOnly() ? editingFloor : player.worldZ;
+    const viewTileX = isEditorOnly() ? editorCam.viewTileX : player.tileX;
+    const viewTileY = isEditorOnly() ? editorCam.viewTileY : player.tileY;
+
     getAllFloorZs().forEach(z => {
         if (!floorHasVisibleContentInView(z, startX, endX, startY, endY)) return;
         floorsDrawn++;
 
-        const isAbove = z > player.worldZ;
-        let playerUnder = false;
+        const isAbove = z > viewZ;
+        let viewUnder = false;
         if (isAbove) {
-            if (worldMap[z][player.tileY] && worldMap[z][player.tileY][player.tileX] !== -1) playerUnder = true;
+            if (worldMap[z][viewTileY] && worldMap[z][viewTileY][viewTileX] !== -1) viewUnder = true;
         }
-        ctx.globalAlpha = (isAbove && playerUnder) ? 0.3 : 1.0;
+        ctx.globalAlpha = (isAbove && viewUnder) ? 0.3 : 1.0;
 
         const drawTileLayer = (
             tid: number,
@@ -2683,12 +2860,14 @@ function draw() {
                 edgeFadePx: DEFAULT_ITEM_EDGE_FADE_PX,
                 shouldIncludeTile: (tid) => tid !== -1 && !isVariantBrush(tid),
             }),
-            ...collectNpcDepthDrawables(npcs, z, { x: camX, y: camY, zoom }, TILE_SIZE_SCREEN, {
-                drawNames: true,
-            }),
+            ...(isEditorOnly()
+                ? []
+                : collectNpcDepthDrawables(npcs, z, { x: camX, y: camY, zoom }, TILE_SIZE_SCREEN, {
+                      drawNames: true,
+                  })),
         ];
 
-        if (currentMapId && gameNet) {
+        if (!isEditorOnly() && currentMapId && gameNet) {
             const remoteEntries = gameNet
                 .getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId())
                 .map((remote) => ({
@@ -2713,7 +2892,7 @@ function draw() {
             );
         }
 
-        const hidePlayer = getStudioBoot()?.hidePlayerSprite === true;
+        const hidePlayer = isEditorOnly() || getStudioBoot()?.hidePlayerSprite === true;
         if (!hidePlayer) {
             const localDrawable = collectLocalPlayerDepthDrawable({
                 worldX: player.worldX,
@@ -2871,9 +3050,9 @@ function draw() {
 }
 
 function drawMinimap() {
-    const floor = player.worldZ;
-    const px = player.tileX;
-    const py = player.tileY;
+    const floor = isEditorOnly() ? editingFloor : player.worldZ;
+    const px = isEditorOnly() ? editorCam.viewTileX : player.tileX;
+    const py = isEditorOnly() ? editorCam.viewTileY : player.tileY;
     const step = 150 / activeMapSize;
 
     if (minimapBackgroundDirty || minimapLastFloor !== floor) {
@@ -2978,8 +3157,14 @@ function studioNeedsContinuousAnimation(): boolean {
     if (activeMapEditorTab === 'portals' || activeMapEditorTab === 'spawns') return true;
     if (isDraggingMap || isMiddleDragging || isSpacePressed) return true;
     if (previewOverlay !== null) return true;
-    if (gridMovement.stepping) return true;
     if (editingTileKey) return true;
+    if (isEditorOnly()) {
+        for (const key of Object.keys(keys)) {
+            if (keys[key]) return true;
+        }
+        return false;
+    }
+    if (gridMovement.stepping) return true;
     if (activeCharacterController.currentState !== 'idle') return true;
     for (const key of Object.keys(keys)) {
         if (keys[key]) return true;
@@ -3136,9 +3321,15 @@ function initBlankStudioWorld(): void {
     worldHouses = {};
     worldSpawns.length = 0;
     worldPortals.length = 0;
-    mapSpawn = { x: player.tileX, y: player.tileY, z: player.worldZ };
-    respawnEntities();
-    resetPortalTriggerState();
+    mapSpawn = {
+        x: editorCam.viewTileX,
+        y: editorCam.viewTileY,
+        z: editorCam.viewZ,
+    };
+    if (!isEditorOnly()) {
+        respawnEntities();
+        resetPortalTriggerState();
+    }
     updateActiveMapHud();
     updateFloorButtons();
     history.clear();
@@ -3160,6 +3351,7 @@ async function tryRestoreStudioSession(): Promise<boolean> {
 
 async function bootstrapApp(): Promise<void> {
     try {
+        await assetLoader.initialize();
         await tileRegistryReady;
         await loadPlayBorderConfig();
         invalidateBorderDrawCache();

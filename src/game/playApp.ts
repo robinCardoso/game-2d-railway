@@ -37,8 +37,10 @@ import {
     collectNpcDepthDrawables,
     collectRemoteDepthDrawables,
     drawDepthSorted,
-    sortDepthDrawables,
+    type DepthDrawable,
 } from '../engine/depthSortDraw';
+import { DepthSortFingerprintCache } from '../engine/depthSortCache';
+import { floorHasVisibleContentInView } from '../engine/floorViewportVisibility';
 import { drawRegistryTile, isMapBorderTile } from '../engine/tileDraw';
 import { SpriteAnimationController } from '../character/spriteAnimation';
 import type { CharacterSpriteConfig } from '../character/spriteAnimation';
@@ -50,17 +52,32 @@ import {
     setGridStepDuration,
     syncGridPlayerVisual,
 } from '../movement/gridMovement';
+import {
+    beginPositionCorrectionSlide,
+    createPositionCorrectionSlide,
+    tickPositionCorrectionSlide,
+} from '../movement/positionCorrectionSlide';
+import {
+    createClientMovementPrediction,
+    getPendingPredictionCount,
+    reconcileMovementPrediction,
+    recordPredictedMove,
+    resetClientMovementPrediction,
+    type ClientMovementPrediction,
+} from '../movement/clientMovementPrediction';
+import type { RemotePlayerDepthEntry } from '../engine/depthSortDraw';
 import { PlayerMovement } from '../movement/playerMovement';
 import { NpcAI } from '../character/npcAI';
 import { GameEntity } from '../character/entity';
 import { respawnEntitiesFromSpawns } from '../character/respawnEntities';
 import { loadCreaturePresets } from '../editor/creaturePresets';
 import { loadItemCatalog } from '../game-data/itemCatalog';
+import { assetLoader } from '../game-data/assetLoader';
 import { createDefaultCharacterSpeed, type CharacterSpeedState } from '../character/movementSpeed';
 import { SpeedBuffManager } from '../character/speedBuffs';
 import { resolveFullStepDuration } from '../character/characterMovement';
 import { createEmptyLayerMap, getLayerCell, type LayerMap } from '../engine/mapPaintLayers';
-import { collectBorderDrawTileIdsCached, buildBorderMaskTileIndex, invalidateBorderDrawCache } from '../engine/autoBorderEngine';
+import { collectBorderDrawTileIdsCached, getBorderMaskTileIndexCached, invalidateBorderDrawCache } from '../engine/autoBorderEngine';
 import { DEFAULT_GAME_DATA } from '../game-data/default';
 import { getMapEntry, MAP_REGISTRY, type MapEntry } from '../engine/mapRegistry';
 import { resolveEffectiveSpawn } from '../world/spawnResolver';
@@ -74,6 +91,7 @@ import {
     isInsideMapInstance,
 } from '../engine/mapInstance';
 import { DEFAULT_WS_PORT } from '../../shared/protocol';
+import { canAdjacentStep, type TilePos } from '../../shared/tileWalkable';
 import { MONSTER_STEP_MS } from '../../shared/creatureChase';
 import { GameNetClient } from '../net/gameNetClient';
 import { RemotePlayerSpriteManager } from '../net/remotePlayerSprites';
@@ -84,21 +102,74 @@ import type { CharacterRow } from '../shared/types';
 import { updateCharacterLocation, updateCharacterProgress } from '../shared/characterStore';
 import { fetchWsTicket, isServerWsTicketEnabled } from '../shared/wsTicketClient';
 import { updateCharacterStatsUi } from './ui/characterStatsUi';
-import { updatePlayHudPing, updatePlayHudStatus } from './ui/playHudStatusUi';
-import { initPlayHudInventory } from './ui/playHudInventory';
-import { getPlayDefaultZoom, getPlayRenderOptions } from './ui/playHudSettings';
+import { updatePlayHudCharacterPortrait } from './ui/playHudCharacterCard';
+import {
+    markPlayMinimapDirty,
+    setPlayMinimapFrameProvider,
+    tickPlayHudMinimap,
+} from './ui/playHudMinimap';
+import { updatePlayHudPing, updatePlayHudStatus, resetPlayHudStatusCache } from './ui/playHudStatusUi';
+import { calculateEquipmentSpeedBonus } from '../character/equipment/equipment';
+import type { CharacterInventoryDocument } from '../../shared/inventory';
+import { applyPlayInventorySnapshot, initPlayHudInventory } from './ui/playHudInventory';
+import { bindPlayChatNetwork, createPlayChatNetHandlers } from './chat/playChatController';
+import { getPlayDefaultZoom, getPlayHudQuality, getNetworkRenderDelayMs, getPlayRenderOptions } from './ui/playHudSettings';
 import {
     PLAY_DEFAULT_ZOOM_CHANGED_EVENT,
     PLAY_ZOOM_SESSION_KEY,
     PLAY_ZOOM_STEPS,
     snapPlayZoom,
 } from './playZoom';
+import { loadClientGameRates, resetPlayExpRateState, setPlayExpRateFromServer } from '../game-data/gameRates';
 import { getExpProgress, normalizeCharacterProgress } from './experience';
+import { updatePlayHudExpRateBanner } from './playExpRateUi';
 import { serverStateStore } from '../net/serverStateStore';
 import { shouldCelebrateSessionLevelUp } from './playProgress';
 import { getPlayBorderConfig, loadPlayBorderConfig } from './playBorderConfig';
-import { resetPlayCombatInput, tickPlayCombat, getPlayCombatHoverId, getPlayCombatTargetId, updatePlayCombatHover, handlePlayCombatTargetClick, clearPlayCombatTarget, type PlayCombatServerBridge } from './playCombat';
+import {
+    resetPlayCombatInput,
+    tickPlayCombat,
+    getPlayCombatHoverId,
+    getPlayCombatTargetId,
+    getPlayCombatTarget,
+    updatePlayCombatHover,
+    handlePlayCombatTargetClick,
+    clearPlayCombatTarget,
+    requestPlayBasicAttack,
+    type PlayCombatServerBridge,
+} from './playCombat';
+import { loadSpellCatalog } from '../game-data/spellCatalog';
+import { getPlaySpellBarState, initPlaySpellBar, loadPlaySpellBarFromServer, setPlaySpellBarSyncHandler } from './ui/playSpellBar';
+import {
+    initPlayLearnedSpells,
+    loadPlayLearnedSpellsFromServer,
+} from './playLearnedSpells';
+import {
+    setPlayCombatHubBridge,
+    tickPlayCombatHub,
+    refreshPlayCombatHubSpells,
+    resetPlayCombatHubCooldownTracking,
+} from './ui/playCombatHub';
+import { bindPlaySpellModalCharacter, refreshPlaySpellModal } from './ui/playSpellModal';
+import { resetPlaySpellCooldowns, tryCastSpellFromSlot } from './playSpellCast';
+import type { SpellBarSlot } from './ui/playSpellBar';
+import { toast } from '../utils/popup';
 import { ensureCombatTargetRingLoaded } from './combatTargetRing';
+import { ensureSpellCastSpritesLoaded } from './spellCastEffectSprites';
+import { drawSpellCastEffects, resetSpellCastEffects } from './spellCastEffects';
+import {
+    setPlayPerfMonitorContext,
+    tickPlayPerformanceMonitorFrame,
+} from './debug/playPerformanceMonitor';
+import { appendPlayStressDepthDrawables, getPlayStressLevel } from './debug/playStressTest';
+import {
+    applyPlayCameraFollow,
+    computePlayCameraTarget,
+    createPlayCameraJuiceState,
+    snapPlayCamera,
+    tickPlayScreenShake,
+    triggerPlayScreenShake,
+} from './playCameraJuice';
 import { tickOfflineMonsterDeathAndRespawn } from './creatureDeathLifecycle';
 import { loadRuntimeVocations, getVocationById } from '../game-data/vocationRegistry';
 import { calculateStatsForLevel } from '../engine/character/calculateStats';
@@ -116,8 +187,8 @@ import { ResyncController } from '../net/resyncController';
 import type { ClientDiagnosticsController } from './debug/clientDiagnostics';
 import { createClientDiagnostics } from './debug/clientDiagnostics';
 import { createLocalPlayerFloatingText } from './localPlayerFloatingText';
-import { toast } from '../utils/popup';
 import { getSpriteTilePlacement } from '../character/spriteDraw';
+import type { PlayMinimapEntity } from './ui/playHudMinimap';
 
 const TILE_SIZE_SCREEN = ENGINE_CONFIG.TILE_SIZE;
 let TILE_TYPES = buildTileRegistry();
@@ -152,6 +223,10 @@ const npcs: GameEntity[] = [];
 const speedBuffs = new SpeedBuffManager();
 const characterSpeed: CharacterSpeedState = createDefaultCharacterSpeed();
 
+function syncPlayEquipmentSpeedBonus(inventory: CharacterInventoryDocument): void {
+    characterSpeed.equipmentBonus = calculateEquipmentSpeedBonus(inventory.equipment);
+}
+
 let activeCharacterController: SpriteAnimationController;
 let gameNet: GameNetClient | null = null;
 const remoteSprites = new RemotePlayerSpriteManager();
@@ -166,6 +241,22 @@ let teardownPageVisibility: (() => void) | null = null;
 let appLifecycleController: AppLifecycleController | null = null;
 let resyncController: ResyncController | null = null;
 let clientDiagnostics: ClientDiagnosticsController | null = null;
+
+/** Buffer reutilizado no Y-sort do draw — evita alocar arrays a cada andar/frame. */
+const playDepthDrawBuffer: DepthDrawable[] = [];
+const playRemoteDepthBuffer: RemotePlayerDepthEntry[] = [];
+const playDepthSortCache = new DepthSortFingerprintCache();
+const positionCorrectionSlide = createPositionCorrectionSlide();
+let movementPrediction: ClientMovementPrediction = createClientMovementPrediction({
+    tileX: player.tileX,
+    tileY: player.tileY,
+    z: player.worldZ,
+});
+const playCameraJuice = createPlayCameraJuiceState();
+let lastLoopMs = 0;
+let frameDepthDrawables = 0;
+let frameSortHits = 0;
+let frameSortMisses = 0;
 
 
 import { getClientRuntimeConfig } from './runtime/runtimeEnv';
@@ -433,12 +524,18 @@ function applyLoadedMap(loaded: ReturnType<typeof loadMapFromJson>): void {
     player.tileY = loaded.spawn.y;
     player.worldZ = clampFloorZ(loaded.spawn.z);
     syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
+    const zoom = camera.zoom || 1;
+    const target = computePlayCameraTarget(player.worldX, player.worldY, canvas, zoom);
+    snapPlayCamera(camera, target.x, target.y);
+    resetClientMovementPrediction(movementPrediction, player.tileX, player.tileY, player.worldZ);
     editingFloor = player.worldZ;
     refreshPlayerMovementSpeed();
     respawnEntities();
+    markPlayMinimapDirty();
     resetPortalTriggerState();
     updateActiveMapHud();
     invalidateBorderDrawCache();
+    playDepthSortCache.clear();
 }
 
 function getMapById(mapId: string): MapEntry | undefined {
@@ -536,6 +633,78 @@ function triggerPlayAttackAnimation(): void {
             activeCharacterController.setState('idle');
         }
     };
+}
+
+function triggerPlayCastAnimation(): void {
+    const facing = resolveSpriteDirectionForState(
+        activeCharacterController.config,
+        'cast',
+        activeCharacterController.currentDirection
+    );
+    activeCharacterController.setDirection(facing);
+    activeCharacterController.setState('cast', { force: true });
+    activeCharacterController.onAnimationEndCallback = () => {
+        if (gridMovement.stepping) {
+            activeCharacterController.setState('walk');
+        } else {
+            activeCharacterController.setState('idle');
+        }
+    };
+}
+
+function buildPlayCombatCallbacks(nowMs: number) {
+    return {
+        faceToward: faceTowardEntity,
+        onAttackSwing: triggerPlayAttackAnimation,
+        onCastSwing: triggerPlayCastAnimation,
+        onDamage: (target: GameEntity, damage: number) => {
+            target.spawnFloatingDamage(damage, nowMs);
+        },
+        onMonsterKilled: (_target: GameEntity, xpReward: number) => {
+            localPlayerFloats.spawnXp(xpReward, nowMs);
+        },
+        onProgressUpdated: ({ experience, level }: { experience: number; level: number }) => {
+            applyPlayProgressUpdate(level, experience);
+        },
+    };
+}
+
+function tryPlaySpellSlot(slot: SpellBarSlot): void {
+    if (!activeCharacter) return;
+    const nowMs = performance.now();
+    tryCastSpellFromSlot(slot, {
+        nowMs,
+        player,
+        character: activeCharacter,
+        characterSpeed,
+        npcs: getPlayEntities(),
+        playerMana: player,
+        callbacks: buildPlayCombatCallbacks(nowMs),
+        server: buildPlayCombatServerBridge(),
+    });
+    syncPlayHudVitals();
+}
+
+function tryPlayBasicAttack(): void {
+    if (!activeCharacter) return;
+    if (!getPlayCombatTarget()) {
+        toast.info('Selecione um alvo (clique direito no monstro).');
+        return;
+    }
+    const nowMs = performance.now();
+    const ok = requestPlayBasicAttack({
+        nowMs,
+        npcs: getPlayEntities(),
+        player,
+        character: activeCharacter,
+        characterSpeed,
+        callbacks: buildPlayCombatCallbacks(nowMs),
+        server: buildPlayCombatServerBridge(),
+        remotes: getRemoteTargetables(),
+    });
+    if (!ok && getPlayCombatTarget()) {
+        toast.info('Aguarde o cooldown ou aproxime-se do alvo.');
+    }
 }
 
 function getRemoteTargetables(): import('./playCombat').PlayCombatTargetable[] {
@@ -681,6 +850,14 @@ function applyPlayProgressUpdate(
     updateCharacterStatsUi(activeCharacter, { flashLevel: leveledUp });
     if (leveledUp) {
         refreshPlayerMovementSpeed(performance.now());
+        refreshPlaySpellModal();
+        if (activeCharacter) {
+            void loadPlayLearnedSpellsFromServer(
+                activeCharacter.id,
+                activeCharacter.vocation,
+                level
+            ).then(() => refreshPlaySpellModal());
+        }
     }
     scheduleProgressSave(leveledUp);
 }
@@ -842,6 +1019,45 @@ function canCommitPlayerStepToTile(destTileX: number, destTileY: number, z: numb
     return isWalkable(wx, wy, z).walkable;
 }
 
+function isTerrainWalkableAtTile(tx: number, ty: number, z: number): boolean {
+    return isTerrainWalkable(tx * TILE_SIZE_SCREEN, ty * TILE_SIZE_SCREEN, z).walkable;
+}
+
+/** Alinha validação de `move` WS com o servidor (terreno + canto) e criaturas no destino. */
+function validateOutgoingNetworkMove(from: TilePos, to: TilePos): boolean {
+    if (!canAdjacentStep(from, to, isTerrainWalkableAtTile)) {
+        return false;
+    }
+    const wx = to.tileX * TILE_SIZE_SCREEN;
+    const wy = to.tileY * TILE_SIZE_SCREEN;
+    return isWalkable(wx, wy, to.z).walkable;
+}
+
+function validateSteppingDestForNetwork(tileX: number, tileY: number, z: number): boolean {
+    const wx = tileX * TILE_SIZE_SCREEN;
+    const wy = tileY * TILE_SIZE_SCREEN;
+    return isWalkable(wx, wy, z).walkable;
+}
+
+/** Rollback sem slide quando o servidor rejeita passo (INVALID_STEP / NOT_WALKABLE). */
+function rollbackLocalMovementToServer(): void {
+    const { serverTileX, serverTileY, serverZ } = movementPrediction;
+    movementPrediction.pending.length = 0;
+    positionCorrectionSlide.active = false;
+    gridMovement.stepping = false;
+    gridMovement.activeStepFacing = null;
+    resetGridMovementInputState(gridMovement);
+
+    if (
+        player.tileX !== serverTileX ||
+        player.tileY !== serverTileY ||
+        player.worldZ !== serverZ
+    ) {
+        player.worldZ = clampFloorZ(serverZ);
+        syncGridPlayerVisual(player, TILE_SIZE_SCREEN, serverTileX, serverTileY);
+    }
+}
+
 function isEntityAtTile(tx: number, ty: number, z: number, excludeId?: string): boolean {
     if (excludeId !== 'player' && isPlayerOccupyingTile(tx, ty, z)) {
         return true;
@@ -855,7 +1071,22 @@ function isEntityAtTile(tx: number, ty: number, z: number, excludeId?: string): 
     return false;
 }
 
-function update(): void {
+function updatePlayCameraFollow(dtMs: number): void {
+    const zoom = camera.zoom || 1;
+    const manualOffsetX = (camera as { offsetX?: number }).offsetX || 0;
+    const manualOffsetY = (camera as { offsetY?: number }).offsetY || 0;
+    const target = computePlayCameraTarget(
+        player.worldX,
+        player.worldY,
+        canvas,
+        zoom,
+        manualOffsetX,
+        manualOffsetY
+    );
+    applyPlayCameraFollow(camera, target.x, target.y, getPlayHudQuality(), dtMs);
+}
+
+function update(dtMs: number): void {
     const nowMs = performance.now();
     const playEntities = getPlayEntities();
     const aiEntities = usesServerCreatures() ? npcs.filter((n) => n.type === 'npc') : npcs;
@@ -874,37 +1105,63 @@ function update(): void {
     }
 
     if (usesServerCreatures()) {
-        serverCreatures.tick(nowMs);
+        serverCreatures.tick(nowMs, getNetworkRenderDelayMs());
     } else {
         tickOfflineMonsterDeathAndRespawn(npcs, nowMs, TILE_SIZE_SCREEN);
     }
     speedBuffs.tick(nowMs);
-    const result = PlayerMovement.updateMovement({
-        keys,
-        player,
-        gridMovement,
-        activeCharacterController,
-        camera,
-        canvas,
-        TILE_SIZE_SCREEN,
-        MAP_SIZE: activeMapSize,
-        ENGINE_CONFIG,
-        editingFloor,
-        isWalkable: (x, y, z) => isWalkable(x, y, z),
-        isTerrainWalkable: (x, y, z) => isTerrainWalkable(x, y, z),
-        canCommitStepToTile: canCommitPlayerStepToTile,
-        isStairHoleAtTile,
-        getStepDurationForTile,
-        updateFloorButtons: () => {},
-        refreshPlayerMovementSpeed,
-        posXEl: document.getElementById('posX') as HTMLElement,
-        posYEl: document.getElementById('posY') as HTMLElement,
-        posZEl: document.getElementById('posZ') as HTMLElement,
-    });
-    editingFloor = result.editingFloor;
+
+    const correctionSliding = tickPositionCorrectionSlide(positionCorrectionSlide, player, nowMs);
+    let editingFloorResult = editingFloor;
+    if (!correctionSliding) {
+        const result = PlayerMovement.updateMovement({
+            keys,
+            player,
+            gridMovement,
+            activeCharacterController,
+            camera,
+            canvas,
+            TILE_SIZE_SCREEN,
+            MAP_SIZE: activeMapSize,
+            ENGINE_CONFIG,
+            editingFloor,
+            isWalkable: (x, y, z) => isWalkable(x, y, z),
+            isTerrainWalkable: (x, y, z) => isTerrainWalkable(x, y, z),
+            canCommitStepToTile: canCommitPlayerStepToTile,
+            isStairHoleAtTile,
+            getStepDurationForTile,
+            updateFloorButtons: () => {},
+            refreshPlayerMovementSpeed,
+            posXEl: document.getElementById('posX') as HTMLElement,
+            posYEl: document.getElementById('posY') as HTMLElement,
+            posZEl: document.getElementById('posZ') as HTMLElement,
+            skipCameraUpdate: true,
+        });
+        editingFloorResult = result.editingFloor;
+    } else {
+        activeCharacterController.setState('idle');
+        activeCharacterController.update(nowMs, gridMovement.stepDurationMs);
+    }
+    updatePlayCameraFollow(dtMs);
+    editingFloor = editingFloorResult;
 
     const currentTileKey = getPlayerTileKey();
     const enteredNewTile = currentTileKey !== previousPlayerTileKey;
+    if (
+        enteredNewTile &&
+        gameNet?.isConnected() &&
+        isServerAuthoritativePosition() &&
+        previousPlayerTileKey
+    ) {
+        const parts = previousPlayerTileKey.split('_').map(Number);
+        const fromZ = parts[2] ?? player.worldZ;
+        recordPredictedMove(
+            movementPrediction,
+            { tileX: parts[0]!, tileY: parts[1]!, z: fromZ },
+            { tileX: player.tileX, tileY: player.tileY, z: player.worldZ },
+            nowMs
+        );
+    }
     if (enteredNewTile) previousPlayerTileKey = currentTileKey;
 
     if (
@@ -933,7 +1190,7 @@ function update(): void {
         remoteSprites.sync(
             gameNet.getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId())
         );
-        remoteSprites.tick(nowMs);
+        remoteSprites.tick(nowMs, getNetworkRenderDelayMs());
     }
     gameNet?.syncPositionIfChanged();
 
@@ -948,24 +1205,14 @@ function update(): void {
             characterSpeed,
             server: buildPlayCombatServerBridge(),
             remotes: getRemoteTargetables(),
-            callbacks: {
-                faceToward: faceTowardEntity,
-                onAttackSwing: triggerPlayAttackAnimation,
-                onDamage: (target, damage) => {
-                    target.spawnFloatingDamage(damage, nowMs);
-                },
-                onMonsterKilled: (_target, xpReward) => {
-                    localPlayerFloats.spawnXp(xpReward, nowMs);
-                },
-                onProgressUpdated: ({ experience, level }) => {
-                    applyPlayProgressUpdate(level, experience);
-                },
-            },
+            callbacks: buildPlayCombatCallbacks(nowMs),
         });
     }
 
     localPlayerFloats.tick(nowMs);
     syncPlayHudVitals();
+    tickPlayHudMinimap();
+    tickPlayCombatHub();
 }
 
 function getPlayBorderDrawContext() {
@@ -1049,14 +1296,14 @@ function setupPlayZoomControls(): void {
     document.getElementById('playZoomOut')?.addEventListener('click', () => stepPlayZoom(-1));
 
     window.addEventListener(PLAY_DEFAULT_ZOOM_CHANGED_EVENT, (event) => {
-        const detail = (event as CustomEvent<number>).detail;
+        const { detail } = event as CustomEvent<number>;
         if (typeof detail === 'number' && detail > 0) {
             setPlayZoom(detail);
         }
     });
 }
 
-function draw(): void {
+function draw(dtMs: number): void {
     const zoom = camera.zoom || 1;
     const nowMs = performance.now();
 
@@ -1069,12 +1316,13 @@ function draw(): void {
     ctx.scale(zoom, zoom);
     ctx.imageSmoothingEnabled = false;
 
-    const camX = Math.round(camera.x * zoom) / zoom;
-    const camY = Math.round(camera.y * zoom) / zoom;
+    const shake = tickPlayScreenShake(playCameraJuice, dtMs);
+    const camX = Math.round((camera.x + shake.x) * zoom) / zoom;
+    const camY = Math.round((camera.y + shake.y) * zoom) / zoom;
     const camState = { x: camX, y: camY, zoom };
 
     const borderDrawCtx = getPlayBorderDrawContext();
-    const borderMaskIndex = buildBorderMaskTileIndex(
+    const borderMaskIndex = getBorderMaskTileIndexCached(
         borderDrawCtx.registry,
         borderDrawCtx.borderSetId
     );
@@ -1083,7 +1331,46 @@ function draw(): void {
     const viewW = canvas.width / zoom;
     const viewH = canvas.height / zoom;
 
+    const remotePlayers =
+        currentMapId && gameNet
+            ? gameNet.getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId())
+            : [];
+    const remoteEntries = remotePlayers.length
+        ? remoteSprites.buildRemoteDepthEntries(remotePlayers, playRemoteDepthBuffer)
+        : playRemoteDepthBuffer;
+    if (remotePlayers.length === 0) {
+        playRemoteDepthBuffer.length = 0;
+    }
+
+    const occupiedFloorZs = new Set<number>();
+    for (const entity of getPlayEntities()) {
+        occupiedFloorZs.add(entity.worldZ);
+    }
+    for (const remote of remotePlayers) {
+        occupiedFloorZs.add(remote.z);
+    }
+
+    const renderOpts = getPlayRenderOptions();
+    const playEntities = getPlayEntities();
+    const viewport = { startX, endX, startY, endY };
+
     getAllFloorZs().forEach((z) => {
+        if (
+            !floorHasVisibleContentInView({
+                z,
+                startX,
+                endX,
+                startY,
+                endY,
+                playerWorldZ: player.worldZ,
+                worldMap,
+                grassOverlay: grassOverlayMap,
+                itemsOverlay: itemsOverlayMap,
+                occupiedFloorZs,
+            })
+        ) {
+            return;
+        }
         const isAbove = z > player.worldZ;
         let playerUnder = false;
         if (isAbove && worldMap[z]?.[player.tileY]?.[player.tileX] !== -1) {
@@ -1132,16 +1419,12 @@ function draw(): void {
         }
 
         // Pass 2: Y-sort — itens, NPCs, remotos e jogador local por profundidade (pé)
-        const remoteEntries = (currentMapId && gameNet)
-            ? remoteSprites.buildRemoteDepthEntries(gameNet.getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId()))
-            : [];
+        playDepthDrawBuffer.length = 0;
 
-        const renderOpts = getPlayRenderOptions();
-
-        const depthDrawables = [
-            ...collectItemDepthDrawables({
+        collectItemDepthDrawables(
+            {
                 z,
-                viewport: { startX, endX, startY, endY },
+                viewport,
                 itemsOverlay: itemsOverlayMap,
                 registry: TILE_TYPES,
                 camera: camState,
@@ -1150,35 +1433,49 @@ function draw(): void {
                 viewHeight: viewH,
                 mapSize: activeMapSize,
                 edgeFadePx: DEFAULT_ITEM_EDGE_FADE_PX,
-            }),
-            ...collectCombatTargetRingDrawable(
-                getPlayEntities(),
-                remoteEntries,
-                getPlayCombatTargetId(),
-                z,
-                camState,
-                TILE_SIZE_SCREEN,
-                nowMs
-            ),
-            ...collectNpcDepthDrawables(getPlayEntities(), z, camState, TILE_SIZE_SCREEN, {
+                out: playDepthDrawBuffer,
+            }
+        );
+
+        collectCombatTargetRingDrawable(
+            playEntities,
+            remoteEntries,
+            getPlayCombatTargetId(),
+            z,
+            camState,
+            TILE_SIZE_SCREEN,
+            nowMs,
+            playDepthDrawBuffer
+        );
+
+        collectNpcDepthDrawables(
+            playEntities,
+            z,
+            camState,
+            TILE_SIZE_SCREEN,
+            {
                 showMonsterNames: renderOpts.showMonsterNames,
                 showHealthBars: renderOpts.showHealthBars,
                 showFloatingDamage: renderOpts.showFloatingDamage,
                 highlightEntityId: getPlayCombatHoverId(),
                 nowMs,
-            }),
-        ];
+                viewport,
+            },
+            playDepthDrawBuffer
+        );
 
         if (remoteEntries.length > 0) {
-            depthDrawables.push(
-                ...collectRemoteDepthDrawables(
-                    remoteEntries,
-                    z,
-                    camState,
-                    TILE_SIZE_SCREEN,
-                    nowMs,
-                    renderOpts
-                )
+            collectRemoteDepthDrawables(
+                remoteEntries,
+                z,
+                camState,
+                TILE_SIZE_SCREEN,
+                nowMs,
+                {
+                    ...renderOpts,
+                    viewport,
+                },
+                playDepthDrawBuffer
             );
         }
 
@@ -1201,11 +1498,30 @@ function draw(): void {
             showPlayerNames: renderOpts.showPlayerNames,
             showHealthBars: renderOpts.showHealthBars,
         });
-        if (localDrawable) depthDrawables.push(localDrawable);
+        if (localDrawable) playDepthDrawBuffer.push(localDrawable);
 
-        sortDepthDrawables(depthDrawables);
+        appendPlayStressDepthDrawables(
+            playDepthDrawBuffer,
+            getPlayStressLevel(),
+            z,
+            player.worldZ,
+            player.worldX,
+            player.worldY,
+            TILE_SIZE_SCREEN
+        );
+
+        playDepthSortCache.sortIfDirty(z, playDepthDrawBuffer);
+        frameDepthDrawables += playDepthDrawBuffer.length;
         ctx.globalAlpha = 1;
-        drawDepthSorted(ctx, depthDrawables);
+        drawDepthSorted(ctx, playDepthDrawBuffer);
+
+        drawSpellCastEffects(ctx, {
+            z,
+            cameraX: camX,
+            cameraY: camY,
+            tileSize: TILE_SIZE_SCREEN,
+            nowMs,
+        });
 
         if (
             renderOpts.showFloatingDamage &&
@@ -1229,7 +1545,8 @@ function draw(): void {
                 ctx,
                 placement.drawX + placement.drawW / 2,
                 placement.drawY,
-                nowMs
+                nowMs,
+                getPlayHudQuality() === 'high' ? 'easeOut' : 'linear'
             );
         }
 
@@ -1252,6 +1569,10 @@ function draw(): void {
         }
     });
 
+    const sortStats = playDepthSortCache.consumeSortStats();
+    frameSortHits += sortStats.hits;
+    frameSortMisses += sortStats.misses;
+
     ctx.restore();
 }
 
@@ -1268,16 +1589,44 @@ function handlePlayPageHidden(): void {
         gameNet.syncPositionIfChanged();
     }
     clearPlayMovementInput();
+    positionCorrectionSlide.active = false;
     syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
 }
 
 function handlePlayPageVisible(): void {
+    resetClientMovementPrediction(movementPrediction, player.tileX, player.tileY, player.worldZ);
     resyncController?.requestResync();
 }
 
 function loop(): void {
-    update();
-    draw();
+    const frameStart = performance.now();
+    const dtMs = lastLoopMs > 0 ? frameStart - lastLoopMs : 16;
+    lastLoopMs = frameStart;
+    frameDepthDrawables = 0;
+    frameSortHits = 0;
+    frameSortMisses = 0;
+
+    update(dtMs);
+    draw(dtMs);
+    tickPlayPerformanceMonitorFrame(performance.now() - frameStart);
+
+    const remoteCount =
+        currentMapId && gameNet
+            ? gameNet.getRemotePlayers(currentMapId, gameNet.getNetworkInstanceId()).length
+            : 0;
+    setPlayPerfMonitorContext({
+        pingMs: serverStateStore.lastPingMs,
+        visiblePlayers: remoteCount + (activeCharacter ? 1 : 0),
+        visibleCreatures: getPlayEntities().filter((entity) => entity.type === 'monster').length,
+        floatingDamages: localPlayerFloats.getActiveCount(),
+        depthDrawables: frameDepthDrawables,
+        sortCacheHits: frameSortHits,
+        sortCacheMisses: frameSortMisses,
+        stressLevel: getPlayStressLevel(),
+        pendingPredictions: getPendingPredictionCount(movementPrediction),
+        renderDelayMs: getNetworkRenderDelayMs(),
+    });
+
     requestAnimationFrame(loop);
 }
 
@@ -1304,6 +1653,12 @@ function buildPlayCombatServerBridge(): PlayCombatServerBridge | undefined {
         sendAttack: (creatureId) => {
             if (gameNet?.isConnected() && currentMapId) {
                 gameNet.sendAttack(creatureId, currentMapId, gameNet.getNetworkInstanceId());
+            }
+        },
+        getCreatureAuthoritativeTile: (creatureId) => serverCreatures.getAuthoritativeTile(creatureId),
+        sendCastSpell: (spellId, creatureId) => {
+            if (gameNet?.isConnected() && currentMapId) {
+                gameNet.sendCastSpell(spellId, creatureId, currentMapId, gameNet.getNetworkInstanceId());
             }
         },
     };
@@ -1341,6 +1696,12 @@ function setupNetwork(
         }
     };
 
+    const chatHandlers = createPlayChatNetHandlers();
+
+    setPlaySpellBarSyncHandler(() => {
+        gameNet?.sendSpellBarSync(getPlaySpellBarState());
+    });
+
     gameNet = new GameNetClient({
         url,
         getEnterTicket: () => ticket,
@@ -1360,17 +1721,46 @@ function setupNetwork(
             steppingDestTileY: gridMovement.stepping ? gridMovement.destTileY : undefined,
             level: activeCharacter?.level,
             experience: activeCharacter?.experience,
+            spellBar: getPlaySpellBarState(),
         }),
         isMovementStepping: () => gridMovement.stepping,
+        getServerAuthoritativeTile: () => ({
+            tileX: movementPrediction.serverTileX,
+            tileY: movementPrediction.serverTileY,
+            z: movementPrediction.serverZ,
+        }),
+        validateOutgoingMove: validateOutgoingNetworkMove,
+        validateSteppingDest: validateSteppingDestForNetwork,
+        onMovementRejected: rollbackLocalMovementToServer,
         onPositionCorrection: (pos) => {
             if (pos.mapId !== (currentMapId ?? char.spawnMapId)) return;
-            player.tileX = pos.tileX;
-            player.tileY = pos.tileY;
+            const reconcile = reconcileMovementPrediction(
+                movementPrediction,
+                pos.tileX,
+                pos.tileY,
+                pos.z,
+                player.tileX,
+                player.tileY,
+                player.worldZ
+            );
+            if (reconcile.droppedPending > 0) {
+                console.debug(
+                    `[Play] position_correction → rollback ${reconcile.clientAheadTiles} tile(s), ` +
+                        `dropped ${reconcile.droppedPending} predicted step(s)`
+                );
+            }
             player.worldZ = clampFloorZ(pos.z);
             gridMovement.stepping = false;
             gridMovement.activeStepFacing = null;
             resetGridMovementInputState(gridMovement);
-            syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
+            beginPositionCorrectionSlide(
+                positionCorrectionSlide,
+                player,
+                TILE_SIZE_SCREEN,
+                pos.tileX,
+                pos.tileY,
+                performance.now()
+            );
         },
         onStatusChange: (status) => {
             if (status === 'connected') {
@@ -1383,7 +1773,9 @@ function setupNetwork(
                 respawnEntities();
             }
         },
-        onWelcome: ({ health, maxHealth }) => {
+        onWelcome: ({ health, maxHealth, rateExp }) => {
+            setPlayExpRateFromServer(rateExp);
+            updatePlayHudExpRateBanner(rateExp);
             logPlayJoinTimeline('welcome received');
             player.health = health;
             player.maxHealth = maxHealth;
@@ -1392,10 +1784,30 @@ function setupNetwork(
             }
             syncProgressToServer();
         },
-        onServerError: ({ code, message }) => {
+        onServerError: ({ code, message, retryAfterMs }) => {
+            chatHandlers.onServerError({ code, message, retryAfterMs });
             if (code === 'NO_PVP_MAP') {
                 toast.info(message);
+                return;
             }
+            if (
+                code === 'SPELL_NOT_EQUIPPED' ||
+                code === 'SPELL_NOT_ALLOWED_FOR_VOCATION' ||
+                code === 'SPELL_LEVEL_TOO_LOW' ||
+                code === 'NOT_ENOUGH_MANA' ||
+                code === 'SPELL_COOLDOWN' ||
+                code === 'GROUP_COOLDOWN' ||
+                code === 'OUT_OF_RANGE' ||
+                code === 'SPELL_CAST_FAILED' ||
+                code === 'SPELL_NOT_FOUND'
+            ) {
+                toast.info(message);
+            }
+        },
+        onChatMessage: chatHandlers.onChatMessage,
+        onInventoryUpdated: ({ inventory }) => {
+            applyPlayInventorySnapshot(inventory);
+            syncPlayEquipmentSpeedBonus(inventory);
         },
         onCreatureSync: ({ mapId, instanceId, creatures }) => {
             if (!currentMapId || mapId !== currentMapId) return;
@@ -1425,16 +1837,16 @@ function setupNetwork(
         },
         onCreatureDamaged: (msg) => {
             if (!currentMapId || msg.mapId !== currentMapId) return;
-            const isLocalAttacker =
-                Boolean(msg.attackerPlayerId) &&
-                msg.attackerPlayerId === gameNet?.getLocalPlayerId();
             serverCreatures.applyDamaged(
                 msg.creatureId,
                 msg.health,
                 msg.maxHealth,
-                msg.damage,
-                { showFloatingDamage: !isLocalAttacker }
+                msg.damage
             );
+        },
+        onAttackMiss: (msg) => {
+            if (!currentMapId || msg.mapId !== currentMapId) return;
+            serverCreatures.applyAttackMiss(msg.creatureId, performance.now());
         },
         onCreatureDied: (msg) => {
             if (!currentMapId || msg.mapId !== currentMapId) return;
@@ -1461,6 +1873,17 @@ function setupNetwork(
                 leveledUp: msg.leveledUp,
             });
         },
+        onPlayerResources: (msg) => {
+            if (msg.playerId !== gameNet?.getLocalPlayerId()) return;
+            player.health = msg.health;
+            player.maxHealth = msg.maxHealth;
+            player.mana = msg.mana;
+            player.maxMana = msg.maxMana;
+            syncPlayHudVitals();
+            if (activeCharacter) {
+                updateCharacterStatsUi(activeCharacter, { flashLevel: false });
+            }
+        },
         onPlayerDamaged: (msg) => {
             const now = performance.now();
             const myPlayerId = gameNet?.getLocalPlayerId();
@@ -1469,6 +1892,12 @@ function setupNetwork(
                 player.maxHealth = msg.maxHealth;
                 updateCharacterStatsUi(activeCharacter!, { flashLevel: false });
                 localPlayerFloats.spawnDamage(msg.damage, now);
+                if (getPlayHudQuality() === 'high' && msg.damage > 0) {
+                    triggerPlayScreenShake(
+                        playCameraJuice,
+                        Math.min(8, 3 + msg.damage * 0.15)
+                    );
+                }
             } else {
                 remoteSprites.spawnFloatingDamage(msg.playerId, msg.damage, now);
             }
@@ -1489,6 +1918,9 @@ function setupNetwork(
             if (msg.playerId === myPlayerId) {
                 player.health = msg.health;
                 player.maxHealth = msg.maxHealth;
+                player.mana = msg.mana ?? player.mana;
+                player.maxMana = msg.maxMana ?? player.maxMana;
+                syncPlayHudVitals();
                 if (activeCharacter) {
                     updateCharacterStatsUi(activeCharacter, { flashLevel: false });
                 }
@@ -1507,6 +1939,8 @@ function setupNetwork(
         },
     });
 
+    bindPlayChatNetwork(gameNet);
+
     if (ticket !== undefined) {
         logPlayJoinTimeline('connect (prefetched ticket)');
         gameNet.connect();
@@ -1518,10 +1952,25 @@ function setupNetwork(
     }
 }
 
-export async function startPlay(character: CharacterRow, accountId: string): Promise<void> {
+export interface PlayBootOptions {
+    /** Dev/GM: carrega mapa específico em vez do mapa do personagem. */
+    overrideMapId?: string;
+}
+
+export async function startPlay(
+    character: CharacterRow,
+    accountId: string,
+    options?: PlayBootOptions
+): Promise<void> {
     activeCharacter = character;
     resetPlayCombatInput();
+    resetPlaySpellCooldowns();
+    resetSpellCastEffects();
+    resetPlayExpRateState();
+    resetPlayHudStatusCache();
+    resetPlayCombatHubCooldownTracking();
     ensureCombatTargetRingLoaded();
+    ensureSpellCastSpritesLoaded();
 
     if (isWorldEntryPending()) {
         showWorldEntryOverlay(`Carregando ${character.name}...`, {
@@ -1538,7 +1987,11 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
         setWorldEntryStage('character', 'active', 'Carregando personagem...');
     }
 
+    await assetLoader.initialize();
     await loadRuntimeVocations();
+    await loadSpellCatalog();
+    await loadClientGameRates();
+    updatePlayHudExpRateBanner();
 
     const progress = normalizeCharacterProgress(character.experience, character.level);
     character.experience = progress.experience;
@@ -1546,13 +1999,25 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
     characterSpeed.level = progress.level;
     playSessionLevel = progress.level;
 
+    initPlaySpellBar(character.id, character.vocation);
+    initPlayLearnedSpells(character.vocation, progress.level);
+    await Promise.all([
+        loadPlaySpellBarFromServer(character.id, character.vocation),
+        loadPlayLearnedSpellsFromServer(character.id, character.vocation, progress.level),
+    ]);
+    refreshPlayCombatHubSpells();
+    bindPlaySpellModalCharacter(character);
+
     if (playCharNameEl) playCharNameEl.textContent = character.name;
     const mobileName = document.getElementById('playCharNameMobile');
     if (mobileName) mobileName.textContent = character.name;
     const panelName = document.getElementById('characterPanelName');
     if (panelName) panelName.textContent = character.name;
     updateCharacterStatsUi(character);
-    initPlayHudInventory(character.id);
+    void updatePlayHudCharacterPortrait(character);
+    initPlayHudInventory(character.id, {
+        onInventoryChange: syncPlayEquipmentSpeedBonus,
+    });
     syncPlayHudVitals();
 
     const vocationId = (character.vocation as VocationId) || 'knight';
@@ -1581,20 +2046,27 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
 
     await prepareMapRegistry();
 
+    const overrideMapId =
+        import.meta.env.DEV && options?.overrideMapId?.trim()
+            ? options.overrideMapId.trim()
+            : undefined;
+
     const entry =
+        (overrideMapId ? getMapById(overrideMapId) : undefined) ??
         getMapById(character.mapId) ??
         getMapById(character.spawnMapId) ??
         getMapById('rookgaard') ??
         MAP_REGISTRY[0];
     if (!entry) throw new Error('Mapa inicial não encontrado.');
 
-    const savedSpawn = character.position
-        ? {
-              x: character.position.x,
-              y: character.position.y,
-              z: character.position.z,
-          }
-        : undefined;
+    const savedSpawn =
+        overrideMapId || !character.position
+            ? undefined
+            : {
+                  x: character.position.x,
+                  y: character.position.y,
+                  z: character.position.z,
+              };
 
     setWorldEntryStage('map', 'active', 'Carregando mapa inicial...');
     showLoading('Carregando mundo…');
@@ -1624,13 +2096,62 @@ export async function startPlay(character: CharacterRow, accountId: string): Pro
         mapId: entry.id,
         spawn,
     });
+    setPlayMinimapFrameProvider(() => {
+        const entities: PlayMinimapEntity[] = getPlayEntities().flatMap((entity) => {
+            if (entity.type !== 'monster' && entity.type !== 'npc') return [];
+            const foot = entity.getFootTile(TILE_SIZE_SCREEN);
+            return [
+                {
+                    tileX: foot.tileX,
+                    tileY: foot.tileY,
+                    kind: entity.type as 'monster' | 'npc',
+                },
+            ];
+        });
+        if (currentMapId && gameNet) {
+            for (const remote of gameNet.getRemotePlayers(
+                currentMapId,
+                gameNet.getNetworkInstanceId()
+            )) {
+                if (remote.z !== player.worldZ) continue;
+                entities.push({
+                    tileX: remote.tileX,
+                    tileY: remote.tileY,
+                    kind: 'remote',
+                });
+            }
+        }
+        return {
+            worldMap,
+            grassOverlay: grassOverlayMap,
+            mapSize: activeMapSize,
+            playerTileX: player.tileX,
+            playerTileY: player.tileY,
+            playerFloor: player.worldZ,
+            entities,
+        };
+    });
     invalidateBorderDrawCache();
+    playDepthSortCache.clear();
     setWorldEntryStage('map', 'done');
+
+    setPlayCombatHubBridge({
+        nowMs: () => performance.now(),
+        onBasicAttack: () => tryPlayBasicAttack(),
+        onSpellSlot: (slot) => tryPlaySpellSlot(slot),
+    });
 
     window.addEventListener('keydown', (e) => {
         keys[e.key.toLowerCase()] = true;
         if (e.key === 'Escape') {
             clearPlayCombatTarget();
+            return;
+        }
+        if (e.key === '1' || e.key === '2' || e.key === '3') {
+            const tag = (e.target as HTMLElement | null)?.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+            e.preventDefault();
+            tryPlaySpellSlot(Number(e.key) as SpellBarSlot);
         }
     });
     window.addEventListener('keyup', (e) => {

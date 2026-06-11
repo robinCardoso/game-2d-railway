@@ -1,4 +1,6 @@
+import type { ChatPlayerChannel } from '../../shared/chatConfig';
 import type {
+    ChatBroadcastMessage,
     ClientMessage,
     CreatureSnapshot,
     PlayerAppearance,
@@ -6,8 +8,11 @@ import type {
     ServerMessage,
 } from '../../shared/protocol';
 import { PROTOCOL_VERSION } from '../../shared/protocol';
+import { applyPlayerSnapshotList } from '../../shared/snapshotSync';
+import type { TilePos } from '../../shared/tileWalkable';
 import { sameRoom } from '../../shared/roomKey';
 import { getMapEntry } from '../engine/mapRegistry';
+import { recordPlayWsMessage } from '../game/debug/playPerformanceMonitor';
 import { applyServerMessageToStore, recordPingSent, resetServerStateStore } from './serverStateStore';
 import { detectRuntimePlatform } from '../game/runtime/platform';
 import { getClientRuntimeConfig } from '../game/runtime/runtimeEnv';
@@ -37,12 +42,21 @@ export interface GameNetClientOptions {
         steppingDestTileY?: number;
         level?: number;
         experience?: number;
+        spellBar?: { slot1?: string; slot2?: string; slot3?: string };
     };
     onStatusChange?: (status: NetStatus) => void;
     /** Servidor atribuiu instanceId (dungeon instanciada). */
     onServerInstanceId?: (instanceId: string | undefined) => void;
     /** Deslize em andamento — adia sync só de direção (tile ainda não mudou). */
     isMovementStepping?: () => boolean;
+    /** Tile autoritativo conhecido (predição) — valida passos antes de enviar `move`. */
+    getServerAuthoritativeTile?: () => TilePos;
+    /** Valida passo adjacente antes de enviar (terreno + criaturas no cliente). */
+    validateOutgoingMove?: (from: TilePos, to: TilePos) => boolean;
+    /** Reserva de deslize (`steppingDest`) — destino bloqueado não envia ao servidor. */
+    validateSteppingDest?: (tileX: number, tileY: number, z: number) => boolean;
+    /** Passo rejeitado sem `position_correction` — cliente faz rollback suave. */
+    onMovementRejected?: (code: string) => void;
     /** Servidor corrigiu posição após movimento inválido. */
     onPositionCorrection?: (pos: {
         mapId: string;
@@ -77,6 +91,12 @@ export interface GameNetClientOptions {
         damage: number;
         attackerPlayerId?: string;
     }) => void;
+    onAttackMiss?: (payload: {
+        creatureId: string;
+        mapId: string;
+        instanceId?: string;
+        code?: string;
+    }) => void;
     onCreatureDied?: (payload: {
         creatureId: string;
         mapId: string;
@@ -105,6 +125,13 @@ export interface GameNetClientOptions {
         health?: number;
         maxHealth?: number;
     }) => void;
+    onPlayerResources?: (payload: {
+        playerId: string;
+        health: number;
+        maxHealth: number;
+        mana: number;
+        maxMana: number;
+    }) => void;
     onPlayerDamaged?: (payload: {
         playerId: string;
         health: number;
@@ -128,9 +155,14 @@ export interface GameNetClientOptions {
         mana?: number;
         maxMana?: number;
     }) => void;
-    onServerError?: (payload: { code: string; message: string }) => void;
+    onServerError?: (payload: { code: string; message: string; retryAfterMs?: number }) => void;
+    onInventoryUpdated?: (payload: {
+        playerId: string;
+        inventory: import('../../shared/inventory').CharacterInventoryDocument;
+    }) => void;
+    onChatMessage?: (msg: ChatBroadcastMessage) => void;
     /** Após `welcome` — sincronizar XP local com o servidor (dev/mock). */
-    onWelcome?: (payload: { health: number; maxHealth: number }) => void;
+    onWelcome?: (payload: { health: number; maxHealth: number; rateExp?: number }) => void;
 }
 
 /**
@@ -204,6 +236,24 @@ export class GameNetClient {
         });
     }
 
+    /** Conjura magia em criatura — combate autoritativo (spell system). */
+    sendCastSpell(
+        spellId: string,
+        creatureId: string,
+        mapId: string,
+        instanceId?: string | null
+    ): void {
+        if (!this.isConnected()) return;
+        this.send({
+            type: 'cast_spell',
+            v: PROTOCOL_VERSION,
+            spellId,
+            creatureId,
+            mapId,
+            instanceId: instanceId ?? this.networkInstanceId ?? undefined,
+        });
+    }
+
     sendProgressSync(level: number, experience: number): void {
         if (!this.isConnected()) return;
         this.send({
@@ -214,10 +264,37 @@ export class GameNetClient {
         });
     }
 
+    sendSpellBarSync(spellBar: {
+        slot1?: string;
+        slot2?: string;
+        slot3?: string;
+    }): void {
+        if (!this.isConnected()) return;
+        this.send({
+            type: 'spell_bar_sync',
+            v: PROTOCOL_VERSION,
+            slot1: spellBar.slot1,
+            slot2: spellBar.slot2,
+            slot3: spellBar.slot3,
+        });
+    }
+
     /** Pede snapshot da sala após aba voltar ao foco (creature_sync + state_sync). */
     requestRoomResync(): void {
         if (!this.isConnected()) return;
         this.send({ type: 'resync_request', v: PROTOCOL_VERSION });
+    }
+
+    sendChat(channel: ChatPlayerChannel, text: string): void {
+        if (!this.isConnected()) return;
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        this.send({
+            type: 'chat_send',
+            v: PROTOCOL_VERSION,
+            channel,
+            text: trimmed,
+        });
     }
 
     connect(): void {
@@ -287,6 +364,19 @@ export class GameNetClient {
     }
 
     /** Chamar após movimento ou troca de mapa no loop do jogo. */
+    /**
+     * Reenvia o tile atual após `MOVEMENT_TOO_FAST` (servidor não manda `position_correction`).
+     */
+    forceResyncPosition(): void {
+        if (!this.isConnected()) return;
+        this.lastSynced = {
+            ...this.lastSynced,
+            tileX: -1,
+            tileY: -1,
+            z: -999,
+        };
+    }
+
     syncPositionIfChanged(): void {
         if (!this.isConnected()) return;
 
@@ -310,6 +400,8 @@ export class GameNetClient {
         const steppingDestChanged =
             last.steppingDestTileX !== steppingDestTileX ||
             last.steppingDestTileY !== steppingDestTileY;
+        const mapChanged =
+            last.mapId !== '' && (last.mapId !== mapId || last.instanceId !== instanceId);
 
         if (
             last.mapId === mapId &&
@@ -330,7 +422,38 @@ export class GameNetClient {
             return;
         }
 
-        const mapChanged = last.mapId !== '' && (last.mapId !== mapId || last.instanceId !== instanceId);
+        const validateMove = this.options.validateOutgoingMove;
+        if (tileChanged && !mapChanged && validateMove) {
+            const to: TilePos = { tileX, tileY, z };
+            if (last.tileX >= 0 && last.mapId === mapId) {
+                const fromLast: TilePos = {
+                    tileX: last.tileX,
+                    tileY: last.tileY,
+                    z: last.z,
+                };
+                if (!validateMove(fromLast, to)) {
+                    return;
+                }
+            }
+            const serverTile = this.options.getServerAuthoritativeTile?.();
+            if (serverTile && !validateMove(serverTile, to)) {
+                return;
+            }
+        }
+
+        const isSteppingReserve =
+            steppingDestTileX !== undefined &&
+            steppingDestTileY !== undefined &&
+            tileX === last.tileX &&
+            tileY === last.tileY &&
+            z === last.z;
+        const validateDest = this.options.validateSteppingDest;
+        if (isSteppingReserve && validateDest) {
+            if (!validateDest(steppingDestTileX, steppingDestTileY, z)) {
+                return;
+            }
+        }
+
         if (mapChanged && !getMapEntry(mapId)?.instanced) {
             this.networkInstanceId = undefined;
         }
@@ -448,6 +571,7 @@ export class GameNetClient {
             experience: state.experience,
             platform: detectRuntimePlatform(),
             clientBuildVersion: getClientRuntimeConfig().buildVersion,
+            spellBar: state.spellBar,
         });
     }
 
@@ -468,6 +592,7 @@ export class GameNetClient {
         // Aplica estado autoritativo ANTES dos callbacks — garante consistência
         // mesmo se o render loop estiver pausado (Electron minimizado, browser throttlado).
         applyServerMessageToStore(msg);
+        recordPlayWsMessage(msg.type);
 
         switch (msg.type) {
             case 'welcome':
@@ -511,6 +636,7 @@ export class GameNetClient {
                 this.options.onWelcome?.({
                     health: msg.health,
                     maxHealth: msg.maxHealth,
+                    rateExp: msg.rateExp,
                 });
                 break;
             case 'instance_assigned':
@@ -555,12 +681,7 @@ export class GameNetClient {
                 break;
             }
             case 'state_sync':
-                this.remotePlayers.clear();
-                for (const p of msg.players) {
-                    if (p.playerId !== this.localPlayerId) {
-                        this.remotePlayers.set(p.playerId, p);
-                    }
-                }
+                applyPlayerSnapshotList(this.remotePlayers, msg.players, this.localPlayerId ?? undefined);
                 break;
             case 'position_correction':
                 this.lastSynced = {
@@ -583,7 +704,29 @@ export class GameNetClient {
                 break;
             case 'error':
                 console.warn(`[GameNet] ${msg.code}: ${msg.message}`);
-                this.options.onServerError?.({ code: msg.code, message: msg.message });
+                if (
+                    msg.code === 'MOVEMENT_TOO_FAST' ||
+                    msg.code === 'INVALID_STEP' ||
+                    msg.code === 'NOT_WALKABLE' ||
+                    msg.code === 'INVALID_TILE'
+                ) {
+                    this.forceResyncPosition();
+                }
+                if (
+                    msg.code === 'INVALID_STEP' ||
+                    msg.code === 'NOT_WALKABLE' ||
+                    msg.code === 'INVALID_TILE'
+                ) {
+                    this.options.onMovementRejected?.(msg.code);
+                }
+                this.options.onServerError?.({
+                    code: msg.code,
+                    message: msg.message,
+                    retryAfterMs: msg.retryAfterMs,
+                });
+                break;
+            case 'chat_message':
+                this.options.onChatMessage?.(msg);
                 break;
             case 'pong':
                 break;
@@ -616,6 +759,14 @@ export class GameNetClient {
                     maxHealth: msg.maxHealth,
                     damage: msg.damage,
                     attackerPlayerId: msg.attackerPlayerId,
+                });
+                break;
+            case 'attack_miss':
+                this.options.onAttackMiss?.({
+                    creatureId: msg.creatureId,
+                    mapId: msg.mapId,
+                    instanceId: msg.instanceId,
+                    code: msg.code,
                 });
                 break;
             case 'creature_died':
@@ -654,6 +805,17 @@ export class GameNetClient {
                     });
                 }
                 break;
+            case 'player_resources':
+                if (msg.playerId === this.localPlayerId) {
+                    this.options.onPlayerResources?.({
+                        playerId: msg.playerId,
+                        health: msg.health,
+                        maxHealth: msg.maxHealth,
+                        mana: msg.mana,
+                        maxMana: msg.maxMana,
+                    });
+                }
+                break;
             case 'player_damaged': {
                 const existing = this.remotePlayers.get(msg.playerId);
                 if (existing) {
@@ -669,6 +831,14 @@ export class GameNetClient {
                 });
                 break;
             }
+            case 'inventory_updated':
+                if (msg.playerId === this.localPlayerId) {
+                    this.options.onInventoryUpdated?.({
+                        playerId: msg.playerId,
+                        inventory: msg.inventory,
+                    });
+                }
+                break;
             case 'player_died': {
                 const existing = this.remotePlayers.get(msg.playerId);
                 if (existing) {

@@ -5,6 +5,8 @@ import {
 } from './itemCatalogTypes';
 import { resolveApiUrl } from '../shared/apiUrl';
 
+import { assetLoader } from './assetLoader';
+
 const CATALOG_URL = '/item_catalog.json';
 
 let catalog: ItemCatalogDocument = { items: [] };
@@ -37,13 +39,19 @@ export function itemExistsInCatalog(itemId: string): boolean {
 /** Carrega `public/item_catalog.json`. */
 export async function loadItemCatalog(): Promise<ItemCatalogDocument> {
     try {
-        const res = await fetch(resolveApiUrl(CATALOG_URL), { cache: 'no-store' });
-        if (!res.ok) {
-            console.warn('[ItemCatalog] item_catalog.json ausente — catálogo vazio.');
-            rebuildIndex({ items: [] });
-            return catalog;
+        let raw;
+        if (assetLoader.isPackaged()) {
+            raw = await assetLoader.getJson<ItemCatalogDocument>('item_catalog.json');
+            if (!raw) throw new Error('item_catalog.json não encontrado no pacote assets.pak');
+        } else {
+            const res = await fetch(resolveApiUrl(CATALOG_URL), { cache: 'no-store' });
+            if (!res.ok) {
+                console.warn('[ItemCatalog] item_catalog.json ausente — catálogo vazio.');
+                rebuildIndex({ items: [] });
+                return catalog;
+            }
+            raw = await res.json();
         }
-        const raw = await res.json();
         rebuildIndex(sanitizeItemCatalogDocument(raw));
         console.log(`[ItemCatalog] ${catalog.items.length} item(ns) carregado(s).`);
         return catalog;

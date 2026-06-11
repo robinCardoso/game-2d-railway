@@ -47,6 +47,7 @@
                   </div>
                 </div>
                 <button type="button" class="menu-dropdown-item" id="saveMapDevBtn" title="Grava em public/maps/ — só npm run dev">💾 Salvar em public/maps</button>
+                <button type="button" class="menu-dropdown-item" id="testInPlayBtn" title="Abre play.html com o mapa atual — só npm run dev">▶ Testar no Play</button>
               </div>
             </div>
 
@@ -64,7 +65,7 @@
               <div class="menu-dropdown">
                 <button type="button" class="menu-dropdown-item" id="undoBtn" disabled>↩ Desfazer</button>
                 <button type="button" class="menu-dropdown-item" id="redoBtn" disabled>↪ Refazer</button>
-                <button type="button" class="menu-dropdown-item" id="openTeleportBtn">📍 Ir para Posição</button>
+                <button type="button" class="menu-dropdown-item" id="openTeleportBtn">📍 Ir para coordenadas</button>
                 <button type="button" class="menu-dropdown-item" id="openHouseManagerBtn">🏠 Gerenciar Casas</button>
                 <button type="button" class="menu-dropdown-item" data-open-panel="map_editor" style="border-top: 1px solid var(--border-color); margin-top: 4px; padding-top: 8px;">🗺️ Mapa</button>
               </div>
@@ -83,18 +84,17 @@
             </div>
 
             <div class="menu-item">
-              <button type="button" class="menu-trigger">Ver</button>
+              <button type="button" class="menu-trigger">Dados</button>
               <div class="menu-dropdown menu-dropdown--wide">
-                <button type="button" class="menu-dropdown-item" data-open-panel="mechanics">Mecânicas de jogo</button>
-                <button type="button" class="menu-dropdown-item" data-open-panel="stats">Dados técnicos</button>
-                <button type="button" class="menu-dropdown-item" data-open-panel="minimap">Minimap</button>
+                <button type="button" class="menu-dropdown-item" data-open-panel="spells">✨ Magias</button>
               </div>
             </div>
 
-            <div class="menu-item" data-requires-edit="true">
-              <button type="button" class="menu-trigger">Teste</button>
-              <div class="menu-dropdown">
-                <button type="button" class="menu-dropdown-item" data-open-panel="dev">Buffs e equipamento</button>
+            <div class="menu-item">
+              <button type="button" class="menu-trigger">Ver</button>
+              <div class="menu-dropdown menu-dropdown--wide">
+                <button type="button" class="menu-dropdown-item" data-open-panel="stats">Dados técnicos</button>
+                <button type="button" class="menu-dropdown-item" data-open-panel="minimap">Minimap</button>
               </div>
             </div>
 
@@ -116,7 +116,7 @@
             <canvas id="gameCanvas"></canvas>
             <div class="hint">
               <span class="accent">Espaço + Arrasto</span> (ou <span class="accent">Botão Meio</span>) mover mapa ·
-              <span class="accent">WASD</span> mover player ·
+              <span class="accent">WASD / Setas</span> pan da câmera ·
               <span class="accent">P/B/E</span> ferramentas ·
               <span class="accent">Esc</span> fechar painel
             </div>
@@ -288,26 +288,109 @@
                 <p class="flyout-hint" id="posStepDelta">—</p>
               </section>
 
-              <!-- Mecânicas -->
-              <section class="flyout-section" data-panel="mechanics">
-                <label class="check-row">
-                  <span>Colisão ativa</span>
-                  <input type="checkbox" id="collisionToggle" checked />
-                </label>
-                <label class="check-row">
-                  <span>Equipar barco</span>
-                  <input type="checkbox" id="boatToggle" />
-                </label>
-              </section>
+              <!-- Magias -->
+              <section class="flyout-section" data-panel="spells">
+                <div class="spell-editor">
+                  <p class="spell-editor__intro">
+                    <strong>1 magia = 1 entrada no catálogo.</strong> Para compartilhar entre vocações, marque
+                    vários chips em &quot;Quem pode usar&quot; — não crie IDs duplicados.
+                  </p>
 
-              <!-- Dev -->
-              <section class="flyout-section" data-panel="dev">
-                <button type="button" id="devEquipHasteBoots" class="menu-dropdown-item block-btn">Botas da Pressa</button>
-                <button type="button" id="devEquipLeatherBoots" class="menu-dropdown-item block-btn">Botas de Couro</button>
-                <button type="button" id="devBuffHaste" class="menu-dropdown-item block-btn">Haste (30s)</button>
-                <button type="button" id="devBuffSlow" class="menu-dropdown-item block-btn">Slow (15s)</button>
-                <button type="button" id="devClearBuffs" class="menu-dropdown-item block-btn">Limpar buffs</button>
-                <p class="flyout-hint">Console (F12) mostra comparação ao clicar.</p>
+                  <div class="spell-editor__filter-row">
+                    <label class="flyout-label" for="spellVocationFilter">Filtrar por vocação</label>
+                    <select id="spellVocationFilter" class="select-full">
+                      <option value="all">Todas as vocações</option>
+                      <option value="knight">Knight</option>
+                      <option value="mage">Mage</option>
+                      <option value="archer">Archer</option>
+                      <option value="paladin">Paladin</option>
+                      <option value="sorcerer">Sorcerer</option>
+                    </select>
+                  </div>
+
+                  <label class="flyout-label">Catálogo</label>
+                  <div id="spellEditorList" class="spell-editor__list"></div>
+                  <button type="button" id="spellNewBtn" class="menu-dropdown-item block-btn">+ Nova magia</button>
+
+                  <div class="spell-editor__form-section">
+                    <h3 class="spell-editor__form-title">Editar magia</h3>
+                    <label class="flyout-label">ID (único, slug)</label>
+                    <input type="text" id="spellIdInput" class="select-full" placeholder="knight_brutal_strike" />
+                    <label class="flyout-label" style="margin-top:8px;">Nome</label>
+                    <input type="text" id="spellNameInput" class="select-full" />
+                    <label class="flyout-label" style="margin-top:8px;">Descrição</label>
+                    <textarea id="spellDescInput" rows="2" class="select-full"></textarea>
+
+                    <label class="flyout-label" style="margin-top:10px;">Quem pode usar</label>
+                    <div id="spellVocationChips" class="spell-editor__chip-grid"></div>
+                    <p id="spellSharedHint" class="flyout-hint" style="margin-top:6px;"></p>
+                    <button type="button" id="spellAddVocationBtn" class="menu-dropdown-item block-btn" style="margin-top:6px;">
+                      + Incluir vocação do filtro
+                    </button>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px;">
+                      <div>
+                        <label class="flyout-label">Grupo</label>
+                        <select id="spellGroupInput" class="select-full">
+                          <option value="attack">Ataque</option>
+                          <option value="healing">Cura</option>
+                          <option value="support">Suporte</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label class="flyout-label">Tipo de dano</label>
+                        <select id="spellDamageTypeInput" class="select-full">
+                          <option value="magic">Magia</option>
+                          <option value="melee">Melee</option>
+                          <option value="distance">Distância</option>
+                          <option value="healing">Cura</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px;">
+                      <div>
+                        <label class="flyout-label">Alcance (tiles)</label>
+                        <input type="number" id="spellRangeInput" class="select-full" min="1" max="15" value="1" />
+                      </div>
+                      <div>
+                        <label class="flyout-label">Level mín.</label>
+                        <input type="number" id="spellMinLevelInput" class="select-full" min="1" value="1" />
+                      </div>
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:8px;">
+                      <div>
+                        <label class="flyout-label">Mana</label>
+                        <input type="number" id="spellManaInput" class="select-full" min="0" />
+                      </div>
+                      <div>
+                        <label class="flyout-label">CD (ms)</label>
+                        <input type="number" id="spellCdInput" class="select-full" min="0" />
+                      </div>
+                      <div>
+                        <label class="flyout-label">CD grupo</label>
+                        <input type="number" id="spellGroupCdInput" class="select-full" min="0" />
+                      </div>
+                    </div>
+                    <label class="flyout-label" style="margin-top:8px;">Mult. dano</label>
+                    <input type="number" id="spellDamageMultInput" class="select-full" min="0" step="0.1" value="1" />
+                    <label class="flyout-label" style="margin-top:8px;">Ícone (URL)</label>
+                    <input type="text" id="spellIconInput" class="select-full" />
+                    <input type="file" id="spellIconFileInput" accept="image/png" hidden />
+                    <button type="button" id="spellUploadIconBtn" class="menu-dropdown-item block-btn" style="margin-top:8px;">Upload ícone 32×32 PNG</button>
+                    <label class="check-row" style="margin-top:10px;">
+                      <span>Requer alvo</span>
+                      <input type="checkbox" id="spellRequiresTargetInput" checked />
+                    </label>
+                    <label class="check-row">
+                      <span>Implementada (gameplay)</span>
+                      <input type="checkbox" id="spellImplementedInput" />
+                    </label>
+                    <div class="spell-editor__actions">
+                      <button type="button" id="spellSaveBtn" class="menu-dropdown-item block-btn" style="border-color:#6366f1;color:#6366f1;">Salvar catálogo</button>
+                    </div>
+                    <p class="flyout-hint">Ícones PNG 32×32 em <code>tiles/effects/spells/icons/{id}.png</code> — use <strong>Upload ícone</strong> ou versione no git (<code>npm run generate:spell-icons</code>). VFX de conjuração: <code>tiles/effects/spells/cast/</code> (<code>castEffect</code>).</p>
+                  </div>
+                </div>
               </section>
 
               <!-- Conta -->
@@ -1319,7 +1402,7 @@
             <fieldset id="mobChaseFieldset" style="border: 1px solid #2d3139; border-radius: 6px; padding: 8px 10px; margin: 0;">
               <legend style="font-size: 10px; color: var(--accent-color); font-weight: bold; text-transform: uppercase; padding: 0 4px;">Perseguição / Combate</legend>
               <p style="margin: 0 0 8px; font-size: 9px; color: var(--text-dim); line-height: 1.35;">
-                Define como o mob se move ao perseguir o jogador. Ataque do mob ao player ainda virá em fase futura.
+                Define como o mob se move ao perseguir o jogador. Menor ms/tile = mais rápido. Não confundir com Attack Speed. Ataque do mob ao player ainda virá em fase futura.
               </p>
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                 <div>
@@ -1332,6 +1415,10 @@
                 <div>
                   <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Distância ideal (SQM)</label>
                   <input type="number" id="mobAttackRangeInput" min="1" max="6" value="1" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
+                </div>
+                <div>
+                  <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Velocidade de caminhada (ms/tile)</label>
+                  <input type="number" id="mobWalkStepMsInput" min="150" max="2000" value="300" style="width: 100%; background: #15181e; color: #fff; border: 1px solid #2d3139; border-radius: 4px; padding: 4px; font-size: 10px; outline: none; box-sizing: border-box;" />
                 </div>
                 <div id="mobMinRangeWrap">
                   <label style="font-size: 8px; color: var(--text-dim); text-transform: uppercase;">Zona mín. (SQM)</label>
@@ -1370,6 +1457,7 @@
                 <div>Raça: <strong id="mobPreviewRace" style="color:#fff;">-</strong></div>
                 <div>Perseguição: <strong id="mobPreviewChase" style="color:#fff;">-</strong></div>
                 <div>Range: <strong id="mobPreviewRange" style="color:#fff;">-</strong> SQM</div>
+                <div>Walk: <strong id="mobPreviewWalk" style="color:#fff;">-</strong></div>
               </div>
               <p style="margin: 0; font-size: 8px; opacity: 0.65;">Valores vazios no JSON usam defaults por <code>visualSize</code>.</p>
             </div>

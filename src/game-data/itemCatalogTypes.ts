@@ -14,7 +14,9 @@ export type EquipmentSlot =
     | 'legs'
     | 'feet'
     | 'ring'
-    | 'amulet';
+    | 'amulet'
+    | 'weapon'
+    | 'shield';
 
 export const EQUIPMENT_SLOTS: EquipmentSlot[] = [
     'head',
@@ -23,6 +25,8 @@ export const EQUIPMENT_SLOTS: EquipmentSlot[] = [
     'feet',
     'ring',
     'amulet',
+    'weapon',
+    'shield',
 ];
 
 export type ItemCategory = 'equipment' | 'loot';

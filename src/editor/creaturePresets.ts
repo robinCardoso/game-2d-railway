@@ -8,6 +8,7 @@ import {
 } from '../game-data/mobPresetTypes';
 import { invalidateCreatureThumbnailCache } from './creaturePresetThumbnail';
 import { resolveApiUrl } from '../shared/apiUrl';
+import { assetLoader } from '../game-data/assetLoader';
 
 export type { CreatureVisualSize, MobLootEntry, MobRace };
 export type CreaturePreset = CreaturePresetEntry;
@@ -68,19 +69,26 @@ export async function loadCreaturePresets(): Promise<void> {
     configBySpawnName.clear();
 
     try {
-        const res = await fetch(resolveApiUrl(PRESETS_URL), { cache: 'no-store' });
-        if (!res.ok) {
-            console.warn('[CreaturePresets] creature_presets.json ausente — nenhuma criatura na paleta.');
-            return;
+        let rawArray: any[];
+        if (assetLoader.isPackaged()) {
+            const raw = await assetLoader.getJson<any[]>('creature_presets.json');
+            if (!raw) throw new Error('creature_presets.json não encontrado no pacote assets.pak');
+            rawArray = raw;
+        } else {
+            const res = await fetch(resolveApiUrl(PRESETS_URL), { cache: 'no-store' });
+            if (!res.ok) {
+                console.warn('[CreaturePresets] creature_presets.json ausente — nenhuma criatura na paleta.');
+                return;
+            }
+            rawArray = await res.json();
         }
 
-        const raw = await res.json();
-        if (!Array.isArray(raw)) {
+        if (!Array.isArray(rawArray)) {
             console.warn('[CreaturePresets] creature_presets.json deve ser um array JSON.');
             return;
         }
 
-        for (const item of raw) {
+        for (const item of rawArray) {
             const preset = sanitizeCreaturePresetEntry(item);
             if (!preset) {
                 console.warn('[CreaturePresets] Entrada inválida ignorada:', item);
