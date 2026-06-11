@@ -9,7 +9,10 @@ import {
 } from '../db/repositories/inventory.repo.js';
 import { getCharacterForAccount } from '../db/repositories/characters.repo.js';
 import { loadServerItemCatalog } from '../game/itemCatalogStore.js';
-import { validateCharacterInventory } from '../../../shared/inventory.js';
+import {
+    sanitizeInventoryStackRules,
+    validateCharacterInventory,
+} from '../../../shared/inventory.js';
 import {
     getDevCharacterInventory,
     getDevCharacterUnlockedBagSlots,
@@ -22,6 +25,28 @@ import type { CharacterInventoryDocument } from '../../../shared/inventory.js';
 type CharacterInventoryParams = {
     characterId: string;
 };
+
+function bagsChanged(
+    before: CharacterInventoryDocument,
+    after: CharacterInventoryDocument
+): boolean {
+    return JSON.stringify(before.bags) !== JSON.stringify(after.bags);
+}
+
+async function loadInventoryWithStackMigration(
+    characterId: string,
+    accountId: string,
+    loadRaw: () => Promise<CharacterInventoryDocument>
+): Promise<CharacterInventoryDocument> {
+    const raw = await loadRaw();
+    const catalog = loadServerItemCatalog();
+    const { inventory: sanitized } = sanitizeInventoryStackRules(raw, catalog);
+    if (bagsChanged(raw, sanitized)) {
+        const saved = await replaceCharacterInventory(characterId, accountId, sanitized);
+        return saved ?? sanitized;
+    }
+    return sanitized;
+}
 
 function notifyOnlineInventorySync(
     getRoom: (() => GameRoom | undefined) | undefined,
@@ -53,8 +78,13 @@ export function createCharacterInventoryRouter(
             const { characterId } = req.params as CharacterInventoryParams;
 
             if (!isDatabaseConfigured()) {
-                const inventory = getDevCharacterInventory(characterId);
-                res.json({ inventory });
+                const raw = getDevCharacterInventory(characterId);
+                const catalog = loadServerItemCatalog();
+                const { inventory: sanitized } = sanitizeInventoryStackRules(raw, catalog);
+                if (bagsChanged(raw, sanitized)) {
+                    setDevCharacterInventory(characterId, sanitized);
+                }
+                res.json({ inventory: sanitized });
                 return;
             }
 
@@ -65,9 +95,13 @@ export function createCharacterInventoryRouter(
                 return;
             }
 
-            const inventory =
-                (await getCharacterInventoryOrEmpty(characterId, authReq.auth!.sub)) ??
-                emptyInventoryDocument();
+            const inventory = await loadInventoryWithStackMigration(
+                characterId,
+                authReq.auth!.sub,
+                async () =>
+                    (await getCharacterInventoryOrEmpty(characterId, authReq.auth!.sub)) ??
+                    emptyInventoryDocument()
+            );
 
             res.json({ inventory });
         } catch (err) {

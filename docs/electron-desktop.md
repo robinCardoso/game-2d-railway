@@ -185,6 +185,8 @@ VITE_USE_LOOSE_ASSETS=true
 
 **Simular produção em dev:** Postgres local + `DATABASE_URL` + `VITE_USE_SERVER_WS_TICKET=true`.
 
+**Dados locais (Windows):** `%APPDATA%\tibia-web-engine` — nome interno do `package.json` (`tibia-web-engine`), não o título “Elarion Online”.
+
 ### Comandos
 
 ```bash

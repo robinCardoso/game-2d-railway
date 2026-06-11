@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { ItemCatalogDocument } from '../src/game-data/itemCatalogTypes';
 import {
+    BACKPACK_SLOT_COUNT,
     createEmptyInventory,
     DEFAULT_UNLOCKED_BAG_SLOTS,
     INVENTORY_BAG_COUNT,
     normalizeInventoryDocument,
+    sanitizeInventoryStackRules,
     validateCharacterInventory,
 } from './inventory';
 
@@ -34,6 +36,13 @@ const catalog: ItemCatalogDocument = {
             implemented: true,
             stackable: false,
             maxStack: 1,
+        },
+        {
+            id: 'leather_armor',
+            name: 'Leather Armor',
+            category: 'equipment',
+            slot: 'body',
+            implemented: true,
         },
         {
             id: 'dev_boots',
@@ -198,7 +207,7 @@ describe('validateCharacterInventory', () => {
         expect(result.ok).toBe(false);
     });
 
-    it('rejeita equipamento com quantity > 1 no mesmo slot', () => {
+    it('sanitiza equipamento legado com quantity > 1 em slots separados', () => {
         const bags = createEmptyInventory().bags;
         bags[0] = [{ slotIndex: 0, itemId: 'iron_helmet', quantity: 2 }];
         const result = validateCharacterInventory(
@@ -209,9 +218,11 @@ describe('validateCharacterInventory', () => {
             },
             catalog
         );
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-            expect(result.errors.some((e) => e.includes('iron_helmet'))).toBe(true);
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            const helmets = result.value.bags.flat().filter((r) => r.itemId === 'iron_helmet');
+            expect(helmets).toHaveLength(2);
+            expect(helmets.every((r) => r.quantity === 1)).toBe(true);
         }
     });
 
@@ -232,6 +243,25 @@ describe('validateCharacterInventory', () => {
         expect(result.ok).toBe(true);
     });
 
+    it('sanitiza pilha de loot acima do maxStack', () => {
+        const bags = createEmptyInventory().bags;
+        bags[0] = [{ slotIndex: 0, itemId: 'gold_coin', quantity: 150 }];
+        const result = validateCharacterInventory(
+            {
+                equipment: createEmptyInventory().equipment,
+                bags,
+                unlockedBagSlots: 3,
+            },
+            catalog
+        );
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            const coins = result.value.bags.flat().filter((r) => r.itemId === 'gold_coin');
+            expect(coins.reduce((sum, r) => sum + r.quantity, 0)).toBe(150);
+            expect(coins.every((r) => r.quantity <= 100)).toBe(true);
+        }
+    });
+
     it('rejeita equipar item não implementado', () => {
         const result = validateCharacterInventory(
             {
@@ -245,5 +275,49 @@ describe('validateCharacterInventory', () => {
             catalog
         );
         expect(result.ok).toBe(false);
+    });
+});
+
+function fillBagSlots(
+    bag: { slotIndex: number; itemId: string; quantity: number }[],
+    count: number,
+    itemId = 'gold_coin'
+): void {
+    for (let i = 0; i < count; i++) {
+        bag.push({ slotIndex: i, itemId, quantity: 1 });
+    }
+}
+
+describe('sanitizeInventoryStackRules', () => {
+    it('divide leather_armor qty 24 em 24 slots com qty 1', () => {
+        const inventory = createEmptyInventory();
+        inventory.bags[0] = [{ slotIndex: 0, itemId: 'leather_armor', quantity: 24 }];
+        const { inventory: sanitized, overflow } = sanitizeInventoryStackRules(inventory, catalog);
+        const armors = sanitized.bags.flat().filter((r) => r.itemId === 'leather_armor');
+        expect(armors).toHaveLength(24);
+        expect(armors.every((r) => r.quantity === 1)).toBe(true);
+        expect(overflow.size).toBe(0);
+    });
+
+    it('com bolsa quase cheia mantém 1 + slots livres e descarta o resto', () => {
+        const inventory = createEmptyInventory();
+        inventory.unlockedBagSlots = 1;
+        fillBagSlots(inventory.bags[0], BACKPACK_SLOT_COUNT - 6);
+        inventory.bags[0].push({ slotIndex: BACKPACK_SLOT_COUNT - 6, itemId: 'leather_armor', quantity: 24 });
+        const { inventory: sanitized, overflow } = sanitizeInventoryStackRules(inventory, catalog);
+        const armors = sanitized.bags[0].filter((r) => r.itemId === 'leather_armor');
+        expect(armors).toHaveLength(6);
+        expect(armors.every((r) => r.quantity === 1)).toBe(true);
+        expect(overflow.get('leather_armor')).toBe(18);
+    });
+
+    it('divide gold_coin qty 150 em pilhas de até 100', () => {
+        const inventory = createEmptyInventory();
+        inventory.bags[0] = [{ slotIndex: 0, itemId: 'gold_coin', quantity: 150 }];
+        const { inventory: sanitized, overflow } = sanitizeInventoryStackRules(inventory, catalog);
+        const coins = sanitized.bags.flat().filter((r) => r.itemId === 'gold_coin');
+        expect(coins.reduce((sum, r) => sum + r.quantity, 0)).toBe(150);
+        expect(coins.every((r) => r.quantity <= 100)).toBe(true);
+        expect(overflow.size).toBe(0);
     });
 });

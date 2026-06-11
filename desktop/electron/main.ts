@@ -19,6 +19,22 @@ let powerSaveBlockerId: number | null = null;
 // Impede Chromium de reduzir prioridade de renderers em background
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+    app.quit();
+}
+
+function focusMainWindow(): void {
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+    }
+    if (!mainWindow.isVisible()) {
+        mainWindow.show();
+    }
+    mainWindow.focus();
+}
+
 function createWindow(): void {
     mainWindow = new BrowserWindow({
         width: 1280,
@@ -80,32 +96,38 @@ function createWindow(): void {
     });
 }
 
-app.whenReady().then(() => {
-    registerUpdaterIpcHandlers();
-    // Mantém o processo ativo mesmo minimizado — evita suspend do SO
-    powerSaveBlockerId = powerSaveBlocker.start('prevent-app-suspension');
-    createWindow();
+if (gotTheLock) {
+    app.on('second-instance', () => {
+        focusMainWindow();
+    });
 
-    app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) {
-            createWindow();
+    app.whenReady().then(() => {
+        registerUpdaterIpcHandlers();
+        // Mantém o processo ativo mesmo minimizado — evita suspend do SO
+        powerSaveBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+        createWindow();
+
+        app.on('activate', () => {
+            if (BrowserWindow.getAllWindows().length === 0) {
+                createWindow();
+            }
+        });
+    });
+
+    app.on('before-quit', () => {
+        if (powerSaveBlockerId !== null) {
+            powerSaveBlocker.stop(powerSaveBlockerId);
+            powerSaveBlockerId = null;
         }
     });
-});
 
-app.on('before-quit', () => {
-    if (powerSaveBlockerId !== null) {
-        powerSaveBlocker.stop(powerSaveBlockerId);
-        powerSaveBlockerId = null;
-    }
-});
-
-app.on('window-all-closed', () => {
-    // No macOS é convenção manter o app aberto mesmo sem janelas
-    if (process.platform !== 'darwin') {
-        app.quit();
-    }
-});
+    app.on('window-all-closed', () => {
+        // No macOS é convenção manter o app aberto mesmo sem janelas
+        if (process.platform !== 'darwin') {
+            app.quit();
+        }
+    });
+}
 
 // Expõe versão do app via IPC (usada pelo preload)
 ipcMain.handle('get-app-version', () => app.getVersion());
