@@ -52,6 +52,8 @@ export interface GameNetClientOptions {
     onServerInstanceId?: (instanceId: string | undefined) => void;
     /** Deslize em andamento — adia sync só de direção (tile ainda não mudou). */
     isMovementStepping?: () => boolean;
+    /** Movimento autoritativo (seq + direction8) — bloqueia sync legado por tile absoluto. */
+    authoritativeMovement?: () => boolean;
     /** Valida passo adjacente antes de enviar (terreno + criaturas no cliente). */
     validateOutgoingMove?: (from: TilePos, to: TilePos) => boolean;
     /** `move` / `map_change` enviado ao servidor — atualiza predição otimista. */
@@ -382,6 +384,21 @@ export class GameNetClient {
         };
     }
 
+    /** Alinha `lastSynced` ao estado local após rollback — evita reenvio de sync legado. */
+    alignLastSyncedFromLocalState(): void {
+        const state = this.options.getLocalState();
+        this.lastSynced = {
+            mapId: state.mapId,
+            instanceId: state.instanceId ?? undefined,
+            tileX: state.tileX,
+            tileY: state.tileY,
+            z: state.z,
+            direction: state.direction,
+            steppingDestTileX: undefined,
+            steppingDestTileY: undefined,
+        };
+    }
+
     syncPositionIfChanged(): void {
         if (!this.isConnected()) return;
 
@@ -424,6 +441,22 @@ export class GameNetClient {
             !steppingDestChanged
         ) {
             return;
+        }
+
+        const authoritative = this.options.authoritativeMovement?.() ?? false;
+        const hasMoveIntent = direction8 !== undefined && seq !== undefined;
+
+        if (!mapChanged && !tileChanged && !isSteppingReserve) {
+            if (directionChanged) {
+                this.lastSynced = { ...this.lastSynced, direction };
+            }
+            return;
+        }
+
+        if (authoritative && !mapChanged) {
+            if (!isSteppingReserve && !hasMoveIntent) {
+                return;
+            }
         }
 
         // Durante deslize: só reserva steppingDest — não commit de tile novo nem só direção
@@ -743,7 +776,8 @@ export class GameNetClient {
                     msg.code === 'MOVEMENT_TOO_FAST' ||
                     msg.code === 'INVALID_STEP' ||
                     msg.code === 'NOT_WALKABLE' ||
-                    msg.code === 'INVALID_TILE'
+                    msg.code === 'INVALID_TILE' ||
+                    msg.code === 'TILE_OCCUPIED'
                 ) {
                     this.options.onMovementRejected?.(msg.code, msg.seq);
                 }

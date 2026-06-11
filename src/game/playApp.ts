@@ -63,7 +63,11 @@ import {
     setAutoWalkGoal,
     tickAutoWalkDirection,
 } from '../movement/autoWalk';
-import { toProtocolDirection8 } from '../../shared/movement/direction8';
+import {
+    direction8FromTiles,
+    toProtocolDirection8,
+    type Direction8,
+} from '../../shared/movement/direction8';
 import {
     beginPositionCorrectionSlide,
     createPositionCorrectionSlide,
@@ -248,6 +252,10 @@ function syncPlayEquipmentSpeedBonus(inventory: CharacterInventoryDocument): voi
 
 let activeCharacterController: SpriteAnimationController;
 let gameNet: GameNetClient | null = null;
+
+function isPlayWsAuthoritative(): boolean {
+    return isServerAuthoritativePosition(gameNet?.isConnected() ?? false);
+}
 const remoteSprites = new RemotePlayerSpriteManager();
 const serverCreatures = new ServerCreatureSync();
 const localPlayerFloats = createLocalPlayerFloatingText();
@@ -612,7 +620,7 @@ async function resolveEnterTicket(char: CharacterRow, accountId: string): Promis
 }
 
 async function saveCurrentCharacterLocation(): Promise<void> {
-    if (isServerAuthoritativePosition()) return;
+    if (isPlayWsAuthoritative()) return;
     if (!activeCharacter || !currentMapId) return;
     const entry = getMapById(currentMapId);
     if (!entry || entry.instanced) {
@@ -1001,7 +1009,7 @@ async function flushProgressSave(): Promise<void> {
 }
 
 function setupLocationAutosave(): void {
-    if (isServerAuthoritativePosition()) return;
+    if (isPlayWsAuthoritative()) return;
     if (locationAutosaveStarted) return;
     locationAutosaveStarted = true;
 
@@ -1198,6 +1206,28 @@ function rollbackLocalPlayerToLastServerAck(): void {
     previousPlayerTileKey = getPlayerTileKey();
 }
 
+/** direction8 do passo pendente — fallback se grid ainda não commitou facing. */
+function resolveOutboundDirection8(): Direction8 | undefined {
+    if (!isPlayWsAuthoritative() || pendingOutboundMoveSeq === undefined) {
+        return undefined;
+    }
+    const gridDir =
+        gridMovement.lastCompletedStepDirection ?? gridMovement.activeStepDirection;
+    if (gridDir) {
+        return toProtocolDirection8(gridDir);
+    }
+    const pending = movementPrediction.pending.find(
+        (step) => step.seq === pendingOutboundMoveSeq
+    );
+    if (!pending) return undefined;
+    return (
+        direction8FromTiles(
+            { tileX: pending.fromTileX, tileY: pending.fromTileY, z: pending.z },
+            { tileX: pending.toTileX, tileY: pending.toTileY, z: pending.z }
+        ) ?? undefined
+    );
+}
+
 function handleMovementRejected(code: string, rejectedSeq?: number): void {
     if (rejectedSeq !== undefined) {
         clearPendingFromSeq(movementPrediction, rejectedSeq);
@@ -1209,7 +1239,11 @@ function handleMovementRejected(code: string, rejectedSeq?: number): void {
     gridMovement.stepping = false;
     gridMovement.activeStepFacing = null;
     gridMovement.activeStepDirection = null;
-    resetGridMovementInputState(gridMovement);
+
+    const preserveHeldInput = code === 'TILE_OCCUPIED';
+    if (!preserveHeldInput) {
+        resetGridMovementInputState(gridMovement);
+    }
 
     if (code === 'MOVEMENT_TOO_FAST') {
         clearMovementInputBuffer(movementInputBuffer);
@@ -1220,10 +1254,11 @@ function handleMovementRejected(code: string, rejectedSeq?: number): void {
     }
 
     rollbackLocalPlayerToLastServerAck();
+    gameNet?.alignLastSyncedFromLocalState();
 }
 
 function shouldBlockLocalNewSteps(): boolean {
-    if (!isServerAuthoritativePosition()) return false;
+    if (!isPlayWsAuthoritative()) return false;
     if (!gameNet?.isConnected()) return false;
     if (positionCorrectionSlide.active) return true;
     if (performance.now() < movementTooFastThrottleUntilMs) return true;
@@ -1231,7 +1266,7 @@ function shouldBlockLocalNewSteps(): boolean {
 }
 
 function clearStalePendingMovement(nowMs: number): void {
-    if (!isServerAuthoritativePosition()) return;
+    if (!isPlayWsAuthoritative()) return;
     const head = movementPrediction.pending[0];
     if (!head) return;
     if (nowMs - head.committedAtMs < 1000) return;
@@ -1384,7 +1419,7 @@ function update(dtMs: number): void {
     const currentTileKey = getPlayerTileKey();
     const enteredNewTile = currentTileKey !== previousPlayerTileKey;
     if (enteredNewTile && gameNet?.isConnected() && previousPlayerTileKey) {
-        if (isServerAuthoritativePosition()) {
+        if (isPlayWsAuthoritative()) {
             const parts = previousPlayerTileKey.split('_').map(Number);
             const fromZ = parts[2] ?? player.worldZ;
             pendingOutboundMoveSeq = recordPredictedMove(
@@ -1999,15 +2034,8 @@ function setupNetwork(
             direction: getPlayerDirection(),
             appearance: localAppearance,
             stepDurationMs: getNetworkStepDurationMs(gridMovement),
-            direction8:
-                isServerAuthoritativePosition() &&
-                pendingOutboundMoveSeq !== undefined &&
-                gridMovement.lastCompletedStepDirection
-                    ? toProtocolDirection8(gridMovement.lastCompletedStepDirection)
-                    : undefined,
-            seq: isServerAuthoritativePosition()
-                ? pendingOutboundMoveSeq
-                : undefined,
+            direction8: resolveOutboundDirection8(),
+            seq: isPlayWsAuthoritative() ? pendingOutboundMoveSeq : undefined,
             steppingDestTileX: gridMovement.stepping ? gridMovement.destTileX : undefined,
             steppingDestTileY: gridMovement.stepping ? gridMovement.destTileY : undefined,
             level: activeCharacter?.level,
@@ -2015,8 +2043,9 @@ function setupNetwork(
             spellBar: getPlaySpellBarState(),
         }),
         isMovementStepping: () => gridMovement.stepping,
+        authoritativeMovement: () => isPlayWsAuthoritative(),
         onPositionSynced: (pos) => {
-            if (!isServerAuthoritativePosition()) {
+            if (!isPlayWsAuthoritative()) {
                 confirmServerTile(movementPrediction, pos.tileX, pos.tileY, pos.z);
                 updateLastServerAck(pos.tileX, pos.tileY, pos.z);
             }

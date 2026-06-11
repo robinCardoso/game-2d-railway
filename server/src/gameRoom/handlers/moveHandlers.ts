@@ -74,6 +74,48 @@ function resolveMoveDirection8(
     return msg.direction8;
 }
 
+/** Jogador com ticket/personagem — movimento só via seq + direction8. */
+export function playerUsesAuthoritativeMovement(
+    player: Pick<ConnectedPlayer, 'characterId'>
+): boolean {
+    return typeof player.characterId === 'string' && player.characterId.length > 0;
+}
+
+function isSteppingReserveMove(msg: Extract<ClientMessage, { type: 'move' }>): boolean {
+    return msg.steppingDestTileX !== undefined && msg.steppingDestTileY !== undefined;
+}
+
+function isMissingMoveIntent(msg: Extract<ClientMessage, { type: 'move' }>): boolean {
+    return msg.seq === undefined || msg.direction8 === undefined;
+}
+
+/**
+ * Ignora pacotes legados (tile absoluto sem seq/direction8).
+ * - Autoritativo (ticket): ignora qualquer move sem intent, exceto reserva steppingDest.
+ * - Dev legado: ignora só sync no mesmo tile.
+ */
+export function shouldIgnoreLegacyMove(
+    msg: Extract<ClientMessage, { type: 'move' }>,
+    player: Pick<ConnectedPlayer, 'tileX' | 'tileY' | 'z' | 'characterId'>
+): boolean {
+    if (!isMissingMoveIntent(msg) || isSteppingReserveMove(msg)) {
+        return false;
+    }
+
+    if (playerUsesAuthoritativeMovement(player)) {
+        return true;
+    }
+
+    const sameTile =
+        msg.tileX === player.tileX &&
+        msg.tileY === player.tileY &&
+        msg.z === player.z;
+    return sameTile;
+}
+
+/** @deprecated Use `shouldIgnoreLegacyMove`. */
+export const shouldIgnoreLegacySameTileMove = shouldIgnoreLegacyMove;
+
 function resolveVisualDirection(
     direction8: Direction8 | undefined,
     cardinal?: ConnectedPlayer['direction']
@@ -146,6 +188,10 @@ export function handleMove(
         tileY: player.tileY,
         z: player.z,
     };
+
+    if (!isMapChange && msg.type === 'move' && shouldIgnoreLegacyMove(msg, player)) {
+        return;
+    }
 
     let destTileX = msg.tileX;
     let destTileY = msg.tileY;
@@ -311,7 +357,7 @@ export function handleMove(
 
     if (!isMapChange) {
         const sameMap = player.mapId === msg.mapId && player.instanceId === instanceId;
-        if (sameMap && !moveDirection8) {
+        if (sameMap && !moveDirection8 && !playerUsesAuthoritativeMovement(player)) {
             const stepCheck = validatePlayerStepToTile(
                 from,
                 to,
