@@ -58,6 +58,7 @@ import {
     tickPositionCorrectionSlide,
 } from '../movement/positionCorrectionSlide';
 import {
+    confirmServerTile,
     createClientMovementPrediction,
     getPendingPredictionCount,
     reconcileMovementPrediction,
@@ -1147,20 +1148,25 @@ function update(dtMs: number): void {
 
     const currentTileKey = getPlayerTileKey();
     const enteredNewTile = currentTileKey !== previousPlayerTileKey;
-    if (
-        enteredNewTile &&
-        gameNet?.isConnected() &&
-        isServerAuthoritativePosition() &&
-        previousPlayerTileKey
-    ) {
-        const parts = previousPlayerTileKey.split('_').map(Number);
-        const fromZ = parts[2] ?? player.worldZ;
-        recordPredictedMove(
-            movementPrediction,
-            { tileX: parts[0]!, tileY: parts[1]!, z: fromZ },
-            { tileX: player.tileX, tileY: player.tileY, z: player.worldZ },
-            nowMs
-        );
+    if (enteredNewTile && gameNet?.isConnected() && previousPlayerTileKey) {
+        if (isServerAuthoritativePosition()) {
+            const parts = previousPlayerTileKey.split('_').map(Number);
+            const fromZ = parts[2] ?? player.worldZ;
+            recordPredictedMove(
+                movementPrediction,
+                { tileX: parts[0]!, tileY: parts[1]!, z: fromZ },
+                { tileX: player.tileX, tileY: player.tileY, z: player.worldZ },
+                nowMs
+            );
+        } else {
+            // Dev sem ticket: servidor aceita moves mas não há fila de predição — manter serverTile alinhado.
+            confirmServerTile(
+                movementPrediction,
+                player.tileX,
+                player.tileY,
+                player.worldZ
+            );
+        }
     }
     if (enteredNewTile) previousPlayerTileKey = currentTileKey;
 
@@ -1584,23 +1590,90 @@ function clearPlayMovementInput(): void {
     resetGridMovementInputState(gridMovement);
 }
 
+function snapPlayCameraToLocalPlayer(): void {
+    const zoom = camera.zoom || 1;
+    const manualOffsetX = (camera as { offsetX?: number }).offsetX || 0;
+    const manualOffsetY = (camera as { offsetY?: number }).offsetY || 0;
+    const target = computePlayCameraTarget(
+        player.worldX,
+        player.worldY,
+        canvas,
+        zoom,
+        manualOffsetX,
+        manualOffsetY
+    );
+    snapPlayCamera(camera, target.x, target.y);
+}
+
+/** Alinha jogador local + câmera ao tile autoritativo do servidor (evita drift ao minimizar/restaurar). */
+function snapLocalPlayerToServerAuthoritativeTile(): void {
+    const tx = movementPrediction.serverTileX;
+    const ty = movementPrediction.serverTileY;
+    const tz = movementPrediction.serverZ;
+    movementPrediction.pending.length = 0;
+    positionCorrectionSlide.active = false;
+    gridMovement.stepping = false;
+    gridMovement.activeStepFacing = null;
+    resetGridMovementInputState(gridMovement);
+    player.worldZ = clampFloorZ(tz);
+    syncGridPlayerVisual(player, TILE_SIZE_SCREEN, tx, ty);
+    resetClientMovementPrediction(movementPrediction, tx, ty, tz);
+    snapPlayCameraToLocalPlayer();
+}
+
+/** Snap autoritativo só com ticket WS (predição ativa). Sem ticket, serverTile pode ficar no spawn. */
+function shouldSnapLocalPlayerToServerOnLifecycle(): boolean {
+    return (gameNet?.isConnected() ?? false) && isServerAuthoritativePosition();
+}
+
+function stabilizeLocalPlayerOnLifecyclePause(): void {
+    positionCorrectionSlide.active = false;
+    gridMovement.stepping = false;
+    gridMovement.activeStepFacing = null;
+    resetGridMovementInputState(gridMovement);
+    resetClientMovementPrediction(movementPrediction, player.tileX, player.tileY, player.worldZ);
+    syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
+    snapPlayCameraToLocalPlayer();
+}
+
+/** Perda de foco (blur / alt-tab) — só solta teclas; não realinha posição nem câmera. */
+function handlePlayFocusLost(): void {
+    clearPlayMovementInput();
+}
+
+function handlePlayFocusGained(): void {
+    lastLoopMs = performance.now();
+    snapPlayCameraToLocalPlayer();
+}
+
 function handlePlayPageHidden(): void {
+    clearPlayMovementInput();
     if (gameNet?.isConnected()) {
         gameNet.syncPositionIfChanged();
     }
-    clearPlayMovementInput();
-    positionCorrectionSlide.active = false;
-    syncGridPlayerVisual(player, TILE_SIZE_SCREEN);
+    if (shouldSnapLocalPlayerToServerOnLifecycle()) {
+        snapLocalPlayerToServerAuthoritativeTile();
+    } else {
+        stabilizeLocalPlayerOnLifecyclePause();
+    }
 }
 
 function handlePlayPageVisible(): void {
-    resetClientMovementPrediction(movementPrediction, player.tileX, player.tileY, player.worldZ);
+    if (shouldSnapLocalPlayerToServerOnLifecycle()) {
+        snapLocalPlayerToServerAuthoritativeTile();
+    } else {
+        stabilizeLocalPlayerOnLifecyclePause();
+    }
+    lastLoopMs = performance.now();
     resyncController?.requestResync();
 }
 
+const MAX_PLAY_FRAME_DT_MS = 100;
+
 function loop(): void {
     const frameStart = performance.now();
-    const dtMs = lastLoopMs > 0 ? frameStart - lastLoopMs : 16;
+    const rawDtMs = lastLoopMs > 0 ? frameStart - lastLoopMs : 16;
+    const dtMs = Math.min(rawDtMs, MAX_PLAY_FRAME_DT_MS);
     lastLoopMs = frameStart;
     frameDepthDrawables = 0;
     frameSortHits = 0;
@@ -1734,6 +1807,18 @@ function setupNetwork(
         onMovementRejected: rollbackLocalMovementToServer,
         onPositionCorrection: (pos) => {
             if (pos.mapId !== (currentMapId ?? char.spawnMapId)) return;
+            const targetX = pos.tileX * TILE_SIZE_SCREEN;
+            const targetY = pos.tileY * TILE_SIZE_SCREEN;
+            const alreadyAligned =
+                player.tileX === pos.tileX &&
+                player.tileY === pos.tileY &&
+                player.worldZ === pos.z &&
+                Math.abs(player.worldX - targetX) < 0.5 &&
+                Math.abs(player.worldY - targetY) < 0.5;
+            if (alreadyAligned) {
+                confirmServerTile(movementPrediction, pos.tileX, pos.tileY, pos.z);
+                return;
+            }
             const reconcile = reconcileMovementPrediction(
                 movementPrediction,
                 pos.tileX,
@@ -1761,6 +1846,7 @@ function setupNetwork(
                 pos.tileY,
                 performance.now()
             );
+            snapPlayCameraToLocalPlayer();
         },
         onStatusChange: (status) => {
             if (status === 'connected') {
@@ -2205,11 +2291,14 @@ export async function startPlay(
     clientDiagnostics.mount();
 
     const onPlayBackground = coalesceLifecycleHandler(handlePlayPageHidden);
+    const onPlayForeground = coalesceLifecycleHandler(handlePlayPageVisible);
+    const onPlayFocusLost = coalesceLifecycleHandler(handlePlayFocusLost);
+    const onPlayFocusGained = coalesceLifecycleHandler(handlePlayFocusGained);
     const lifecycleHandlers = {
         onBackground: onPlayBackground,
-        onForeground: handlePlayPageVisible,
-        onFocusLost: onPlayBackground,
-        onFocusGained: () => { /* sem ação extra ao ganhar foco */ },
+        onForeground: onPlayForeground,
+        onFocusLost: onPlayFocusLost,
+        onFocusGained: onPlayFocusGained,
     };
 
     const platform = detectRuntimePlatform();

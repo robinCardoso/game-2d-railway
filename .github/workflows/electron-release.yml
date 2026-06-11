@@ -1,0 +1,90 @@
+name: Electron Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.env.production'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  detect-bump:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+      should_release: ${{ steps.bump.outputs.should_release }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detectar bump de VITE_BUILD_VERSION
+        id: bump
+        run: |
+          if node scripts/detect-env-production-version-bump.mjs; then
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            VERSION=$(node -e "import('./scripts/sync-desktop-version.mjs').then((m) => console.log(m.readBuildVersionFromEnvProduction()))")
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "Release Electron: v$VERSION"
+          else
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "Sem bump de versão — release Electron ignorado"
+          fi
+
+  release:
+    needs: detect-bump
+    if: needs.detect-bump.outputs.should_release == 'true'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Verificar se Release já existe
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $version = "${{ needs.detect-bump.outputs.version }}"
+          $tag = "v$version"
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Error "Release $tag já existe no GitHub — incremente VITE_BUILD_VERSION em .env.production"
+          }
+          Write-Host "Tag $tag disponível para publicação"
+
+      - name: Instalar dependências
+        run: |
+          npm ci
+          npm ci --prefix server
+
+      - name: Sincronizar package.json com .env.production
+        run: node scripts/sync-desktop-version.mjs
+
+      - name: Preparar chave pública (assets.pak)
+        env:
+          ASSET_PACK_PUBLIC_KEY: ${{ secrets.ASSET_PACK_PUBLIC_KEY }}
+        run: node scripts/write-pack-public-key.mjs
+
+      - name: Build Electron + publicar Release
+        env:
+          ASSET_PACK_PRIVATE_KEY: ${{ secrets.ASSET_PACK_PRIVATE_KEY }}
+          ASSET_PACK_PUBLIC_KEY: ${{ secrets.ASSET_PACK_PUBLIC_KEY }}
+          VITE_USE_LOOSE_ASSETS: 'false'
+          ELECTRON_PUBLISH: 'true'
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/prepare-electron-release.mjs
+          npm run build
+          node scripts/check-electron-asset-bundle.mjs
+          npm run electron:compile
+          node scripts/run-electron-builder.mjs

@@ -167,6 +167,7 @@ Railway (painel web ou valores base64 para colar):
 | Assinatura válida | `node scripts/smoke-asset-pack.mjs` |
 | Build completo | `npm run build` e `npm run electron:check` |
 | CI `main` verde | GitHub Actions com secrets |
+| Versão desktop alinhada | `npm test` inclui `check-desktop-version-sync.mjs` |
 | Dev Studio | `.env` com `VITE_USE_LOOSE_ASSETS=true` (não definir em Railway) |
 
 **Auditoria externa:** visualizar arquivos via GitHub *raw* pode colapsar quebras de linha em comentários/strings e parecer “sintaxe quebrada” em `.gitignore`, `pack-assets.mjs` ou `assetLoader.ts`. Valide sempre com clone local ou `npm test` / `npm run build`.
@@ -360,20 +361,31 @@ Conta GM: registre `gm@gm.dev`. Em dev local: `STUDIO_MOCK_GM=true` bypassa o gu
 ### Electron (Windows)
 
 ```bash
-npm run electron:dev    # Vite + API + janela Electron (localhost:5173)
-npm run electron:build  # dist/ + NSIS installer
+npm run electron:dev       # Vite + API + janela Electron (localhost:5173)
+npm run electron:build     # dist/ + NSIS installer (local)
+npm run electron:publish   # build + publica Release no GitHub (local)
+npm run sync:desktop-version  # .env.production → package.json
 ```
 
-**Variáveis no build** (Railway Variables ou `.env` local antes de `npm run build`):
+**Release automático no GitHub** — workflow [`.github/workflows/electron-release.yml`](../.github/workflows/electron-release.yml):
+
+1. Edite `VITE_BUILD_VERSION` em [`.env.production`](../.env.production) (fonte única da versão desktop)
+2. Rode `npm run sync:desktop-version` e commite `.env.production` + `package.json`
+3. Push na `main` → Actions builda no Windows e publica `Elarion Online-X.Y.Z-Setup.exe` + `latest.yml`
+4. Só dispara release se a **versão** mudou (trocar só URLs não publica de novo)
+
+Secrets: `ASSET_PACK_PRIVATE_KEY`, `ASSET_PACK_PUBLIC_KEY` (mesmos do CI). `GITHUB_TOKEN` é automático.
+
+**Variáveis no build** ([`.env.production`](../.env.production) — Vite carrega em `vite build`):
 
 | Variável | Uso |
 |----------|-----|
-| `VITE_BUILD_VERSION` | Versão no join WS e painel F3 |
+| `VITE_BUILD_VERSION` | Versão desktop (join WS, F3, NSIS, auto-update) — **fonte única** |
 | `VITE_API_BASE_URL` | HTTP da API quando não há same-origin |
 | `VITE_WS_BASE_URL` | WebSocket fixo (ex.: `wss://api.seujogo.com`) |
 | `VITE_GAME_SERVER_WS` | Alternativa legada; preferir `VITE_WS_BASE_URL` em app instalado |
 
-> Use **domínio próprio** antes de distribuir. URL gerada pelo Railway que muda quebra instaladores antigos.
+> **Não** definir `VITE_USE_LOOSE_ASSETS` em produção/Electron — sprites vêm do `assets.pak`. Use **domínio próprio** antes de distribuir em escala.
 
 ### Capacitor (Android)
 

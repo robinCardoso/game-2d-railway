@@ -16,9 +16,22 @@ function readOutputDir() {
     return outputDir;
 }
 
+function shouldPublish() {
+    if (process.env.ELECTRON_PUBLISH === 'true') return true;
+    return process.argv.includes('--publish');
+}
+
 function runBuilder(outputDir) {
     const args = [`--config.directories.output=${outputDir}`];
-    execSync(`npx electron-builder ${args.join(' ')}`, { stdio: 'inherit', shell: true });
+    if (shouldPublish()) {
+        args.push('--publish', 'always');
+        console.log('[electron:build] Publicando Release no GitHub (electron-builder --publish always)');
+    }
+    execSync(`npx electron-builder ${args.join(' ')}`, {
+        stdio: 'inherit',
+        shell: true,
+        env: process.env,
+    });
 }
 
 function copyArtifactsToRelease(outputDir) {
