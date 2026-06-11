@@ -6,6 +6,7 @@ import {
     DEFAULT_UNLOCKED_BAG_SLOTS,
     INVENTORY_BAG_COUNT,
     normalizeInventoryDocument,
+    repairInventoryState,
     sanitizeInventoryStackRules,
     validateCharacterInventory,
 } from './inventory';
@@ -287,6 +288,42 @@ function fillBagSlots(
         bag.push({ slotIndex: i, itemId, quantity: 1 });
     }
 }
+
+describe('repairInventoryState', () => {
+    it('remove da bolsa itens já equipados', () => {
+        const inventory = createEmptyInventory();
+        inventory.equipment.body = 'leather_armor';
+        inventory.bags[0] = [{ slotIndex: 0, itemId: 'leather_armor', quantity: 1 }];
+        const { inventory: repaired, repaired: changed } = repairInventoryState(inventory);
+        expect(changed).toBe(true);
+        expect(repaired.equipment.body).toBe('leather_armor');
+        expect(repaired.bags[0]).toHaveLength(0);
+    });
+
+    it('esvazia bolsas espelhando a bolsa 1', () => {
+        const inventory = createEmptyInventory();
+        inventory.bags[0] = [
+            { slotIndex: 0, itemId: 'gold_coin', quantity: 5 },
+            { slotIndex: 1, itemId: 'iron_helmet', quantity: 1 },
+        ];
+        inventory.bags[1] = [...inventory.bags[0].map((row) => ({ ...row }))];
+        inventory.bags[2] = [...inventory.bags[0].map((row) => ({ ...row }))];
+        const { inventory: repaired, repaired: changed } = repairInventoryState(inventory);
+        expect(changed).toBe(true);
+        expect(repaired.bags[0]).toHaveLength(2);
+        expect(repaired.bags[1]).toEqual([]);
+        expect(repaired.bags[2]).toEqual([]);
+    });
+
+    it('permite equipar após reparar estado fantasma', () => {
+        const ghost = createEmptyInventory();
+        ghost.equipment.body = 'leather_armor';
+        ghost.bags[0] = [{ slotIndex: 0, itemId: 'leather_armor', quantity: 1 }];
+        const { inventory: repaired } = repairInventoryState(ghost);
+        const result = validateCharacterInventory(repaired, catalog);
+        expect(result.ok).toBe(true);
+    });
+});
 
 describe('sanitizeInventoryStackRules', () => {
     it('divide leather_armor qty 24 em 24 slots com qty 1', () => {

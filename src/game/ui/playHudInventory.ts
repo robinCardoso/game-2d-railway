@@ -1,6 +1,7 @@
 import {
     BACKPACK_SLOT_COUNT,
     INVENTORY_BAG_COUNT,
+    repairInventoryState,
     validateCharacterInventory,
 } from '../../../shared/inventory';
 import type { CharacterInventoryDocument } from '../../../shared/inventory';
@@ -276,7 +277,9 @@ function renderEquipment(equipment: CharacterInventoryDocument['equipment']): vo
     document.querySelectorAll<HTMLButtonElement>('.equipment-slot').forEach((slot) => {
         const key = slot.dataset.slot as EquipmentSlot | undefined;
         if (!key) return;
-        const itemId = equipment[key];
+        const itemId = equipment[key] ?? '';
+        const currentItemId = slot.dataset.equippedItemId ?? '';
+
         const label = slot.querySelector('.equipment-slot__label');
         if (!label) {
             const span = document.createElement('span');
@@ -284,6 +287,13 @@ function renderEquipment(equipment: CharacterInventoryDocument['equipment']): vo
             span.textContent = SLOT_LABELS[key];
             slot.prepend(span);
         }
+
+        if (currentItemId === itemId) {
+            return;
+        }
+
+        slot.dataset.equippedItemId = itemId;
+
         if (itemId) {
             slot.classList.add('has-item');
             void paintItemInSlot(slot, itemId, 'equipment-slot__item');
@@ -308,15 +318,18 @@ function renderBackpack(
         const index = Number(slot.dataset.slotIndex);
         const row = locked ? undefined : byIndex.get(index);
 
+        const currentBagIndex = slot.dataset.renderedBagIndex ?? '';
         const currentItemId = slot.dataset.itemId || '';
         const currentQty = slot.dataset.qty || '';
         const currentLocked = slot.dataset.locked || 'false';
-        
+
+        const targetBagIndex = String(activeBagIndex);
         const targetItemId = row ? row.itemId : '';
         const targetQty = row ? String(row.quantity) : '';
         const targetLocked = locked ? 'true' : 'false';
 
         if (
+            currentBagIndex === targetBagIndex &&
             currentItemId === targetItemId &&
             currentQty === targetQty &&
             currentLocked === targetLocked
@@ -324,6 +337,7 @@ function renderBackpack(
             return;
         }
 
+        slot.dataset.renderedBagIndex = targetBagIndex;
         slot.dataset.itemId = targetItemId;
         slot.dataset.qty = targetQty;
         slot.dataset.locked = targetLocked;
@@ -375,13 +389,13 @@ function renderBackpack(
 }
 
 function applyInventoryToHud(inventory: CharacterInventoryDocument): void {
-    lastInventory = inventory;
-    if (!isBagUnlocked(activeBagIndex, inventory.unlockedBagSlots)) {
+    lastInventory = repairInventoryState(inventory).inventory;
+    if (!isBagUnlocked(activeBagIndex, lastInventory.unlockedBagSlots)) {
         activeBagIndex = 0;
     }
     syncBagTabs();
-    renderEquipment(inventory.equipment);
-    renderBackpack(inventory.bags[activeBagIndex] ?? [], inventory);
+    renderEquipment(lastInventory.equipment);
+    renderBackpack(lastInventory.bags[activeBagIndex] ?? [], lastInventory);
     updateSelectionHighlight();
     renderItemDetail();
     markHudUpdate('inventory');
@@ -409,7 +423,9 @@ async function persistInventory(next: CharacterInventoryDocument): Promise<boole
     if (!activeCharacterId || !lastInventory) return false;
 
     const catalog = getItemCatalog();
-    const parsed = validateCharacterInventory(next, catalog, { previous: lastInventory });
+    const repairedNext = repairInventoryState(next).inventory;
+    const repairedPrevious = repairInventoryState(lastInventory).inventory;
+    const parsed = validateCharacterInventory(repairedNext, catalog, { previous: repairedPrevious });
     if (!parsed.ok) {
         toast.show(parsed.errors[0] ?? 'Inventário inválido.', 'error');
         return false;

@@ -109,8 +109,9 @@ export function equipFromBackpack(
     const next = cloneInventory(inventory);
     const targetSlot = check.slot;
     const displaced = next.equipment[targetSlot];
+    const equippingSameItem = displaced === row.itemId;
 
-    if (displaced) {
+    if (displaced && !equippingSameItem) {
         const displacedEntry = catalogEntry(catalog, displaced);
         if (!displacedEntry) {
             return { ok: false, code: 'UNKNOWN_ITEM', message: 'Item desconhecido.' };

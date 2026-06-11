@@ -8,7 +8,17 @@ import {
     tickGridMovement,
 } from './gridMovement';
 import type { MovementInputBuffer } from './movementInputBuffer';
+import { movementInputBufferSize } from './movementInputBuffer';
 import { getPlayCombatTargetId } from '../game/playCombat';
+
+/** Mantém animação walk entre passos no modo autoritativo (aguardando ack). */
+export function shouldHoldWalkBetweenSteps(
+    stepping: boolean,
+    blockNewSteps: boolean | undefined,
+    hasMoveIntent: boolean,
+): boolean {
+    return !stepping && !!blockNewSteps && hasMoveIntent;
+}
 
 export interface PlayerMovementController {
     updateMovement(options: {
@@ -110,8 +120,16 @@ export const PlayerMovement: PlayerMovementController = {
         });
 
         // 2. Sprite — face travada durante deslize; teclas novas só após concluir
-        const hasMoveIntent = hasMovementKeyInput(keyState);
+        const hasMoveIntent =
+            hasMovementKeyInput(keyState) ||
+            (options.movementInputBuffer != null &&
+                movementInputBufferSize(options.movementInputBuffer) > 0);
         const standingStill = !gridMovement.stepping && !hasMoveIntent;
+        const holdWalkBetweenSteps = shouldHoldWalkBetweenSteps(
+            gridMovement.stepping,
+            options.blockNewSteps,
+            hasMoveIntent,
+        );
         const combatLocksFacing =
             (activeCharacterController.currentState === 'attack' && standingStill) ||
             activeCharacterController.currentState === 'cast' ||
@@ -133,7 +151,7 @@ export const PlayerMovement: PlayerMovementController = {
             activeCharacterController.currentState !== 'cast' &&
             activeCharacterController.currentState !== 'sit' &&
             activeCharacterController.currentState !== 'dead') {
-            if (gridMovement.stepping) {
+            if (gridMovement.stepping || holdWalkBetweenSteps) {
                 activeCharacterController.setState('walk');
             } else {
                 activeCharacterController.setState('idle');
