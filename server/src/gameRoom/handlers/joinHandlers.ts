@@ -176,6 +176,7 @@ export function handleJoin(
         lastMoveAcceptedAtMs: 0,
         lastObservedMoveIntervalMs: 0,
         lastMoveRejectionSentAtMs: 0,
+        lastAckSeq: 0,
         level: joinLevelFromExp,
         experience: joinExp,
         health: 100,

@@ -47,17 +47,30 @@ import type { CharacterSpriteConfig } from '../character/spriteAnimation';
 import {
     buildMovementKeyState,
     createGridMovementController,
+    getNetworkStepDurationMs,
     hasMovementKeyInput,
     resetGridMovementInputState,
     setGridStepDuration,
     syncGridPlayerVisual,
 } from '../movement/gridMovement';
 import {
+    clearMovementInputBuffer,
+    createMovementInputBuffer,
+} from '../movement/movementInputBuffer';
+import {
+    clearAutoWalk,
+    createAutoWalkState,
+    setAutoWalkGoal,
+    tickAutoWalkDirection,
+} from '../movement/autoWalk';
+import { toProtocolDirection8 } from '../../shared/movement/direction8';
+import {
     beginPositionCorrectionSlide,
     createPositionCorrectionSlide,
     tickPositionCorrectionSlide,
 } from '../movement/positionCorrectionSlide';
 import {
+    confirmServerSeq,
     confirmServerTile,
     createClientMovementPrediction,
     getPendingPredictionCount,
@@ -180,6 +193,10 @@ import {
     isServerAuthoritativePosition,
 } from './serverAuthority';
 import { detectRuntimePlatform } from './runtime/platform';
+import {
+    createMobileJoystick,
+    updateMobileJoystick,
+} from './movement/mobileDirection8';
 import { coalesceLifecycleHandler, type AppLifecycleController } from './runtime/appLifecycle';
 import { setupWebLifecycle } from './runtime/webLifecycle';
 import { setupElectronLifecycle } from './runtime/electronLifecycle';
@@ -259,6 +276,9 @@ let lastLoopMs = 0;
 let movementTooFastThrottleUntilMs = 0;
 /** Tile autoritativo antes do último `onPositionSynced` (reverte otimismo se servidor rejeitar). */
 let lastOutboundSyncedPrevTile: { tileX: number; tileY: number; z: number } | null = null;
+const movementInputBuffer = createMovementInputBuffer();
+const autoWalkState = createAutoWalkState();
+let pendingOutboundMoveSeq: number | undefined;
 let frameDepthDrawables = 0;
 let frameSortHits = 0;
 let frameSortMisses = 0;
@@ -722,8 +742,74 @@ function getRemoteTargetables(): import('./playCombat').PlayCombatTargetable[] {
     }));
 }
 
+function setupMobilePlayJoystick(): void {
+    if (detectRuntimePlatform() !== 'capacitor') return;
+
+    const joystick = createMobileJoystick();
+    let activePointerId: number | null = null;
+    const origin = { x: 0, y: 0 };
+
+    const onPointerDown = (e: PointerEvent) => {
+        const rect = canvas.getBoundingClientRect();
+        const relY = e.clientY - rect.top;
+        if (relY < rect.height * 0.55) return;
+        activePointerId = e.pointerId;
+        origin.x = e.clientX;
+        origin.y = e.clientY;
+        canvas.setPointerCapture(e.pointerId);
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+        if (activePointerId !== e.pointerId) return;
+        const dx = (e.clientX - origin.x) / 48;
+        const dy = (e.clientY - origin.y) / 48;
+        const dir = updateMobileJoystick(joystick, dx, dy, true);
+        if (!dir) return;
+        keys.w = dir === 'north' || dir === 'northwest' || dir === 'northeast';
+        keys.s = dir === 'south' || dir === 'southwest' || dir === 'southeast';
+        keys.a = dir === 'west' || dir === 'northwest' || dir === 'southwest';
+        keys.d = dir === 'east' || dir === 'northeast' || dir === 'southeast';
+        keys.q = dir === 'northwest';
+        keys.e = dir === 'northeast';
+        keys.z = dir === 'southwest';
+        keys.c = dir === 'southeast';
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+        if (activePointerId !== e.pointerId) return;
+        activePointerId = null;
+        updateMobileJoystick(joystick, 0, 0, false);
+        clearPlayMovementInput();
+    };
+
+    canvas.addEventListener('pointerdown', onPointerDown);
+    canvas.addEventListener('pointermove', onPointerMove);
+    canvas.addEventListener('pointerup', onPointerUp);
+    canvas.addEventListener('pointercancel', onPointerUp);
+}
+
 function setupPlayCombatControls(): void {
     const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+
+    canvas.addEventListener('click', (e) => {
+        if (!e.shiftKey || !activeCharacter) return;
+        const rect = canvas.getBoundingClientRect();
+        const zoom = camera.zoom || 1;
+        const worldX = (e.clientX - rect.left) / zoom + camera.x;
+        const worldY = (e.clientY - rect.top) / zoom + camera.y;
+        const goalX = Math.floor(worldX / TILE_SIZE_SCREEN);
+        const goalY = Math.floor(worldY / TILE_SIZE_SCREEN);
+        if (goalX === player.tileX && goalY === player.tileY) {
+            clearAutoWalk(autoWalkState);
+            return;
+        }
+        setAutoWalkGoal(
+            autoWalkState,
+            { tileX: player.tileX, tileY: player.tileY, z: player.worldZ },
+            { tileX: goalX, tileY: goalY, z: player.worldZ },
+            (x, y, z) => isTerrainWalkableAtTile(x, y, z)
+        );
+    });
 
     canvas.addEventListener('contextmenu', (e) => {
         e.preventDefault();
@@ -1048,7 +1134,10 @@ function validateSteppingDestForNetwork(tileX: number, tileY: number, z: number)
 function handleMovementTooFastSoft(): void {
     gridMovement.stepping = false;
     gridMovement.activeStepFacing = null;
+    gridMovement.activeStepDirection = null;
     resetGridMovementInputState(gridMovement);
+    clearMovementInputBuffer(movementInputBuffer);
+    clearAutoWalk(autoWalkState);
     clearPlayMovementInput();
 
     if (lastOutboundSyncedPrevTile) {
@@ -1079,7 +1168,11 @@ function rollbackLocalMovementToServer(): void {
     positionCorrectionSlide.active = false;
     gridMovement.stepping = false;
     gridMovement.activeStepFacing = null;
+    gridMovement.activeStepDirection = null;
     resetGridMovementInputState(gridMovement);
+    clearMovementInputBuffer(movementInputBuffer);
+    clearAutoWalk(autoWalkState);
+    pendingOutboundMoveSeq = undefined;
 
     if (
         player.tileX !== serverTileX ||
@@ -1150,6 +1243,58 @@ function update(dtMs: number): void {
         clearPlayMovementInput();
     }
     if (!correctionSliding) {
+        if (
+            autoWalkState.active &&
+            !gridMovement.stepping &&
+            !hasMovementKeyInput(buildMovementKeyState(keys)) &&
+            !positionCorrectionSlide.active
+        ) {
+            const autoDir = tickAutoWalkDirection(
+                autoWalkState,
+                { tileX: player.tileX, tileY: player.tileY, z: player.worldZ },
+                (x, y, z) => isTerrainWalkableAtTile(x, y, z)
+            );
+            if (autoDir) {
+                const autoKeys = buildMovementKeyState({});
+                switch (autoDir) {
+                    case 'north':
+                        autoKeys.north = true;
+                        break;
+                    case 'south':
+                        autoKeys.south = true;
+                        break;
+                    case 'east':
+                        autoKeys.east = true;
+                        break;
+                    case 'west':
+                        autoKeys.west = true;
+                        break;
+                    case 'northwest':
+                        autoKeys.northwest = true;
+                        break;
+                    case 'northeast':
+                        autoKeys.northeast = true;
+                        break;
+                    case 'southwest':
+                        autoKeys.southwest = true;
+                        break;
+                    case 'southeast':
+                        autoKeys.southeast = true;
+                        break;
+                }
+                Object.assign(keys, {
+                    w: autoKeys.north,
+                    s: autoKeys.south,
+                    a: autoKeys.west,
+                    d: autoKeys.east,
+                    q: autoKeys.northwest,
+                    e: autoKeys.northeast,
+                    z: autoKeys.southwest,
+                    c: autoKeys.southeast,
+                });
+            }
+        }
+
         const result = PlayerMovement.updateMovement({
             keys,
             player,
@@ -1172,6 +1317,7 @@ function update(dtMs: number): void {
             posYEl: document.getElementById('posY') as HTMLElement,
             posZEl: document.getElementById('posZ') as HTMLElement,
             skipCameraUpdate: true,
+            movementInputBuffer,
         });
         editingFloorResult = result.editingFloor;
     } else {
@@ -1187,12 +1333,17 @@ function update(dtMs: number): void {
         if (isServerAuthoritativePosition()) {
             const parts = previousPlayerTileKey.split('_').map(Number);
             const fromZ = parts[2] ?? player.worldZ;
-            recordPredictedMove(
+            pendingOutboundMoveSeq = recordPredictedMove(
                 movementPrediction,
                 { tileX: parts[0]!, tileY: parts[1]!, z: fromZ },
                 { tileX: player.tileX, tileY: player.tileY, z: player.worldZ },
                 nowMs
             );
+            lastOutboundSyncedPrevTile = {
+                tileX: movementPrediction.serverTileX,
+                tileY: movementPrediction.serverTileY,
+                z: movementPrediction.serverZ,
+            };
         } else {
             // Dev sem ticket: servidor aceita moves mas não há fila de predição — manter serverTile alinhado.
             confirmServerTile(
@@ -1622,7 +1773,10 @@ function clearPlayMovementInput(): void {
         keys[key] = false;
     }
     gridMovement.stepping = false;
+    gridMovement.activeStepDirection = null;
     resetGridMovementInputState(gridMovement);
+    clearMovementInputBuffer(movementInputBuffer);
+    clearAutoWalk(autoWalkState);
 }
 
 function snapPlayCameraToLocalPlayer(): void {
@@ -1794,8 +1948,15 @@ function setupNetwork(
             z: player.worldZ,
             direction: getPlayerDirection(),
             appearance: localAppearance,
-            stepDurationMs:
-                gridMovement.lastCompletedStepDurationMs || gridMovement.stepDurationMs,
+            stepDurationMs: getNetworkStepDurationMs(gridMovement),
+            direction8:
+                isServerAuthoritativePosition() &&
+                gridMovement.lastCompletedStepDirection
+                    ? toProtocolDirection8(gridMovement.lastCompletedStepDirection)
+                    : undefined,
+            seq: isServerAuthoritativePosition()
+                ? pendingOutboundMoveSeq
+                : undefined,
             steppingDestTileX: gridMovement.stepping ? gridMovement.destTileX : undefined,
             steppingDestTileY: gridMovement.stepping ? gridMovement.destTileY : undefined,
             level: activeCharacter?.level,
@@ -1810,6 +1971,22 @@ function setupNetwork(
                 z: movementPrediction.serverZ,
             };
             confirmServerTile(movementPrediction, pos.tileX, pos.tileY, pos.z);
+            pendingOutboundMoveSeq = undefined;
+        },
+        onMoveAck: (pos) => {
+            if (pos.seq !== undefined) {
+                confirmServerSeq(
+                    movementPrediction,
+                    pos.seq,
+                    pos.tileX,
+                    pos.tileY,
+                    pos.z
+                );
+                pendingOutboundMoveSeq = undefined;
+                lastOutboundSyncedPrevTile = null;
+            } else {
+                confirmServerTile(movementPrediction, pos.tileX, pos.tileY, pos.z);
+            }
         },
         validateOutgoingMove: validateOutgoingNetworkMove,
         validateSteppingDest: validateSteppingDestForNetwork,
@@ -2277,6 +2454,7 @@ export async function startPlay(
     setupLocationAutosave();
     setupPlayZoomControls();
     setupPlayCombatControls();
+    setupMobilePlayJoystick();
 
     teardownPageVisibility?.();
     teardownPageVisibility = null;

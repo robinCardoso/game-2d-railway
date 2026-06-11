@@ -2,7 +2,7 @@
 
 Documento de referência para humanos e agentes IA. Descreve o que **já está implementado** no Play (2+ jogadores na mesma sala) e o que **fazer quando houver muitos players online**.
 
-Última revisão: **2026-06-09**
+Última revisão: **2026-06-11**
 
 Relacionado: [instanced-maps-and-multiplayer.md](./instanced-maps-and-multiplayer.md) (salas, instâncias, protocolo base), [hosting.md](./hosting.md) (deploy).
 
@@ -21,8 +21,10 @@ Relacionado: [instanced-maps-and-multiplayer.md](./instanced-maps-and-multiplaye
 | AOI — jogadores/criaturas/eventos PvP (25×20 OTC) | ✅ |
 | Viewport cull — NPCs e remotos no draw | ✅ |
 | Cap aggro chase (~10 mobs ativos/alvo) | ✅ |
-| `stepDurationMs` calculado no servidor | ⏳ backlog |
-| `move_request` (intenção, não posição) | ⏳ backlog |
+| `stepDurationMs` com fator diagonal 1.15 no servidor | ✅ |
+| `move` com `direction8` + `seq` (v2) | ✅ |
+| Compat legado `tileX/Y` sem `direction8` | ✅ |
+| `move_request` (intenção, não posição) | ⏳ backlog (substituído parcialmente por direction8) |
 
 ---
 
@@ -45,9 +47,10 @@ sequenceDiagram
     participant S as GameRoom
     participant R as Cliente remoto
 
-    L->>S: move (tileX, tileY, stepDurationMs, direction)
-    S->>S: valida passo adjacente + walkable
-    S->>R: player_moved (mesmos campos)
+    L->>S: move (direction8, seq, stepDurationMs, direction visual)
+    S->>S: applyDirection + canAdjacentStep (OR) + rate limit
+    S->>L: player_moved (seq ack — só jogador local)
+    S->>R: player_moved (tile + stepDurationMs)
     R->>R: interpola visualX/Y até o alvo
     R->>R: walk enquanto moving ou idle grace
 ```
@@ -61,8 +64,10 @@ sequenceDiagram
 | Campo / mensagem | Quando |
 |------------------|--------|
 | `PlayerAppearance` | `welcome`, `player_joined`, `state_sync`, ticket WS |
-| `direction` | `player_moved`, snapshots |
-| `stepDurationMs` | `move`, `map_change` (C→S) → `player_moved` (S→C) |
+| `direction` | `player_moved`, snapshots (4 vias — sprite) |
+| `direction8` | `move` (C→S), opcional em `player_moved` |
+| `seq` | `move` (C→S) → ack em `player_moved` para o jogador local |
+| `stepDurationMs` | `move`, `map_change` (C→S) → `player_moved` (S→C); diagonal ×1.15 no servidor |
 | `parseStepDurationMs()` | Clamp **55–600 ms** (`MIN_SERVER_STEP_DURATION_MS` = `AT_MAX_SPEED`) |
 
 **Não reenviar** `appearance` nem `stepDurationMs` em todo frame — só em join e a cada passo.

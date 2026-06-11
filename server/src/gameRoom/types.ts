@@ -39,6 +39,8 @@ export interface ConnectedPlayer {
     spellCooldownUntil: Record<string, number>;
     groupCooldownUntil: Record<string, number>;
     lastMoveRejectionSentAtMs: number;
+    /** Último `seq` confirmado de movimento (protocolo Direction8). */
+    lastAckSeq: number;
     equipment: CharacterEquipmentState;
     spellBar: SpellBarState;
     learnedSpellIds: string[];

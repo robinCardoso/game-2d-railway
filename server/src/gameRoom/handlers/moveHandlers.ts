@@ -1,12 +1,15 @@
 import type { WebSocket } from 'ws';
 import type { ClientMessage, PlayerSnapshot, ServerMessage } from '../../../../shared/protocol.js';
 import {
+    getVisualFacing,
+    type Direction8,
+} from '../../../../shared/movement/direction8.js';
+import {
     isValidTile,
     MIN_SERVER_STEP_DURATION_MS,
     parseStepDurationMs,
     PROTOCOL_VERSION,
 } from '../../../../shared/protocol.js';
-import { canAdjacentStep } from '../../../../shared/tileWalkable.js';
 import {
     clearSteppingDest,
     computeSteppingDestExpiresAtMs,
@@ -16,9 +19,13 @@ import type { MapInstanceStore } from '../../MapInstanceStore.js';
 import { resolveServerPlayerStepDurationMs } from '../../game/playerMovement.js';
 import type { SpectatorTile } from '../../../../shared/creatureSpectatorRange.js';
 import type { ConnectedPlayer } from '../types.js';
+import { checkMoveRateLimit } from '../movement/movementRateLimit.js';
+import { getAuthoritativeStepDurationMs } from '../movement/movementTiming.js';
+import {
+    validatePlayerStep,
+    validatePlayerStepToTile,
+} from '../movement/movementValidator.js';
 
-/** Tolerância de jitter/latência no intervalo mínimo entre passos (0.80 = até 20% mais rápido que o step). */
-const MOVE_RATE_LIMIT_TOLERANCE = 0.8;
 /** Intervalo mínimo entre `error` + `position_correction` por rejeição de movimento (anti-spam). */
 const MOVE_REJECTION_THROTTLE_MS = 400;
 
@@ -34,6 +41,13 @@ export interface MoveHandlerContext {
     ) => void;
     roomKey: (player: Pick<ConnectedPlayer, 'mapId' | 'instanceId'>) => string;
     isWalkable: (mapId: string, tileX: number, tileY: number, z: number) => boolean;
+    isTileOccupied?: (
+        mapId: string,
+        tileX: number,
+        tileY: number,
+        z: number,
+        exceptPlayerId?: string
+    ) => boolean;
     rejectMove: (
         player: ConnectedPlayer,
         code: string,
@@ -52,6 +66,22 @@ export interface MoveHandlerContext {
     instances: MapInstanceStore;
 }
 
+function resolveMoveDirection8(
+    msg: Extract<ClientMessage, { type: 'move' }>
+): Direction8 | undefined {
+    return msg.direction8;
+}
+
+function resolveVisualDirection(
+    direction8: Direction8 | undefined,
+    cardinal?: ConnectedPlayer['direction']
+): ConnectedPlayer['direction'] | undefined {
+    if (direction8) {
+        return getVisualFacing(direction8);
+    }
+    return cardinal;
+}
+
 export function handleMove(
     ctx: MoveHandlerContext,
     socket: WebSocket,
@@ -61,7 +91,49 @@ export function handleMove(
     const player = ctx.getPlayerBySocket(socket);
     if (!player) return;
 
-    if (!isValidTile(msg.mapId, msg.tileX, msg.tileY, msg.z)) {
+    const from = {
+        tileX: player.tileX,
+        tileY: player.tileY,
+        z: player.z,
+    };
+
+    let destTileX = msg.tileX;
+    let destTileY = msg.tileY;
+    let destZ = msg.z;
+    let moveDirection8: Direction8 | undefined;
+
+    if (!isMapChange && msg.type === 'move') {
+        moveDirection8 = resolveMoveDirection8(msg);
+        if (moveDirection8) {
+            if (msg.seq !== undefined && msg.seq <= player.lastAckSeq) {
+                return;
+            }
+            const derived = validatePlayerStep({
+                from,
+                direction8: moveDirection8,
+                isWalkable: (x, y, z) => ctx.isWalkable(msg.mapId, x, y, z),
+                isOccupied: ctx.isTileOccupied
+                    ? (x, y, z) =>
+                          ctx.isTileOccupied!(msg.mapId, x, y, z, player.id)
+                    : undefined,
+            });
+            if (!derived.ok) {
+                ctx.rejectMove(
+                    player,
+                    derived.code ?? 'INVALID_STEP',
+                    'Movimento rejeitado: passo inválido.',
+                    undefined,
+                    false
+                );
+                return;
+            }
+            destTileX = derived.to.tileX;
+            destTileY = derived.to.tileY;
+            destZ = derived.to.z;
+        }
+    }
+
+    if (!isValidTile(msg.mapId, destTileX, destTileY, destZ)) {
         ctx.rejectMove(
             player,
             'INVALID_TILE',
@@ -91,17 +163,17 @@ export function handleMove(
         msg.type === 'move' &&
         steppingDestTileX !== undefined &&
         steppingDestTileY !== undefined &&
-        msg.tileX === player.tileX &&
-        msg.tileY === player.tileY &&
-        msg.z === player.z &&
+        destTileX === player.tileX &&
+        destTileY === player.tileY &&
+        destZ === player.z &&
         player.mapId === msg.mapId &&
         (player.instanceId ?? undefined) === (instanceId ?? undefined);
 
     if (isSteppingReserveOnly) {
-        if (!isValidTile(msg.mapId, steppingDestTileX, steppingDestTileY, msg.z)) {
+        if (!isValidTile(msg.mapId, steppingDestTileX, steppingDestTileY, destZ)) {
             return;
         }
-        if (!ctx.isWalkable(msg.mapId, steppingDestTileX, steppingDestTileY, msg.z)) {
+        if (!ctx.isWalkable(msg.mapId, steppingDestTileX, steppingDestTileY, destZ)) {
             return;
         }
         const sameDest =
@@ -116,8 +188,9 @@ export function handleMove(
         player.steppingDestExpiresAtMs = computeSteppingDestExpiresAtMs(
             reserveStepMs ?? player.lastStepDurationMs
         );
-        if (msg.direction) {
-            player.direction = msg.direction;
+        const visDir = resolveVisualDirection(moveDirection8, msg.direction);
+        if (visDir) {
+            player.direction = visDir;
         }
         if (sameDest) {
             return;
@@ -134,6 +207,7 @@ export function handleMove(
                 mapId: player.mapId,
                 instanceId: player.instanceId,
                 direction: player.direction,
+                direction8: moveDirection8,
                 stepDurationMs: player.lastStepDurationMs,
             },
             { tileX: steppingDestTileX, tileY: steppingDestTileY, z: player.z },
@@ -144,7 +218,7 @@ export function handleMove(
 
     clearSteppingDest(player);
 
-    if (!ctx.isWalkable(msg.mapId, msg.tileX, msg.tileY, msg.z)) {
+    if (!ctx.isWalkable(msg.mapId, destTileX, destTileY, destZ)) {
         ctx.rejectMove(
             player,
             'NOT_WALKABLE',
@@ -155,27 +229,30 @@ export function handleMove(
         return;
     }
 
-    const from = {
-        tileX: player.tileX,
-        tileY: player.tileY,
-        z: player.z,
-    };
-    const to = { tileX: msg.tileX, tileY: msg.tileY, z: msg.z };
+    const to = { tileX: destTileX, tileY: destTileY, z: destZ };
 
     if (!isMapChange) {
         const sameMap = player.mapId === msg.mapId && player.instanceId === instanceId;
-        if (
-            sameMap &&
-            !canAdjacentStep(from, to, (x, y, z) => ctx.isWalkable(msg.mapId, x, y, z))
-        ) {
-            ctx.rejectMove(
-                player,
-                'INVALID_STEP',
-                'Movimento rejeitado: passo inválido (adjacente, diagonal ou canto bloqueado).',
-                undefined,
-                false
+        if (sameMap && !moveDirection8) {
+            const stepCheck = validatePlayerStepToTile(
+                from,
+                to,
+                (x, y, z) => ctx.isWalkable(msg.mapId, x, y, z),
+                ctx.isTileOccupied
+                    ? (x, y, z) =>
+                          ctx.isTileOccupied!(msg.mapId, x, y, z, player.id)
+                    : undefined
             );
-            return;
+            if (!stepCheck.ok) {
+                ctx.rejectMove(
+                    player,
+                    stepCheck.code ?? 'INVALID_STEP',
+                    'Movimento rejeitado: passo inválido (adjacente, diagonal ou canto bloqueado).',
+                    undefined,
+                    false
+                );
+                return;
+            }
         }
 
         const tileChanged =
@@ -187,24 +264,21 @@ export function handleMove(
                 player.lastStepDurationMs ??
                 MIN_SERVER_STEP_DURATION_MS;
             const serverFloorStep = resolveServerPlayerStepDurationMs(player);
-            const stepMs = Math.max(claimedStep, serverFloorStep);
-            const claimedMin = Math.round(stepMs * MOVE_RATE_LIMIT_TOLERANCE);
-            const floorMin = Math.round(MIN_SERVER_STEP_DURATION_MS * MOVE_RATE_LIMIT_TOLERANCE);
-            let minInterval = Math.max(1, claimedMin);
-            if (player.lastObservedMoveIntervalMs > 0) {
-                const observedMin = Math.round(
-                    player.lastObservedMoveIntervalMs * MOVE_RATE_LIMIT_TOLERANCE
-                );
-                minInterval = Math.min(claimedMin, Math.max(floorMin, observedMin));
-            }
-            const elapsed = now - player.lastMoveAcceptedAtMs;
-            if (player.lastMoveAcceptedAtMs > 0 && elapsed < minInterval) {
+            const baseStepMs = Math.max(claimedStep, serverFloorStep);
+            const stepMs = getAuthoritativeStepDurationMs(baseStepMs, moveDirection8);
+            const rate = checkMoveRateLimit({
+                lastMoveAcceptedAtMs: player.lastMoveAcceptedAtMs,
+                lastObservedMoveIntervalMs: player.lastObservedMoveIntervalMs,
+                authoritativeStepMs: stepMs,
+                nowMs: now,
+            });
+            if (!rate.allowed) {
                 ctx.rejectMove(
                     player,
                     'MOVEMENT_TOO_FAST',
                     'Movimento rejeitado: aguarde o intervalo do passo.',
                     `movimento rápido demais: ${player.name} ` +
-                        `${elapsed}ms < ${minInterval}ms (step ${stepMs}ms, obs ${player.lastObservedMoveIntervalMs}ms)`,
+                        `${rate.elapsedMs}ms < ${rate.minIntervalMs}ms (step ${stepMs}ms, obs ${player.lastObservedMoveIntervalMs}ms)`,
                     false
                 );
                 return;
@@ -217,15 +291,29 @@ export function handleMove(
 
     player.mapId = msg.mapId;
     player.instanceId = instanceId;
-    player.tileX = msg.tileX;
-    player.tileY = msg.tileY;
-    player.z = msg.z;
-    if (msg.direction) {
-        player.direction = msg.direction;
+    player.tileX = destTileX;
+    player.tileY = destTileY;
+    player.z = destZ;
+    const visDir = resolveVisualDirection(
+        moveDirection8,
+        msg.direction ?? player.direction
+    );
+    if (visDir) {
+        player.direction = visDir;
     }
-    const stepMs = parseStepDurationMs(msg.stepDurationMs);
-    if (stepMs !== undefined) {
-        player.lastStepDurationMs = stepMs;
+    const claimedStepMs = parseStepDurationMs(msg.stepDurationMs);
+    const serverFloorStep = resolveServerPlayerStepDurationMs(player);
+    const baseStepMs = Math.max(
+        claimedStepMs ?? player.lastStepDurationMs ?? MIN_SERVER_STEP_DURATION_MS,
+        serverFloorStep
+    );
+    player.lastStepDurationMs = getAuthoritativeStepDurationMs(
+        baseStepMs,
+        moveDirection8
+    );
+
+    if (msg.type === 'move' && msg.seq !== undefined) {
+        player.lastAckSeq = msg.seq;
     }
 
     const newRoom = ctx.roomKey(player);
@@ -259,6 +347,8 @@ export function handleMove(
         mapId: player.mapId,
         instanceId: player.instanceId,
         direction: player.direction,
+        direction8: moveDirection8,
+        seq: msg.type === 'move' ? msg.seq : undefined,
         stepDurationMs: player.lastStepDurationMs,
     };
 
@@ -289,6 +379,10 @@ export function handleMove(
         ctx.sendCreatureSync(player.socket, newRoom, player.mapId, player.instanceId);
     } else {
         ctx.broadcastToPlayerSpectators(newRoom, payload, eventTile, player.id);
+    }
+
+    if (!isMapChange && msg.type === 'move' && msg.seq !== undefined) {
+        ctx.send(socket, payload);
     }
 
     const acceptedAt = Date.now();

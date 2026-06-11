@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+    confirmServerSeq,
     confirmServerTile,
     createClientMovementPrediction,
     reconcileMovementPrediction,
@@ -11,6 +12,19 @@ describe('clientMovementPrediction', () => {
         const pred = createClientMovementPrediction({ tileX: 10, tileY: 10, z: 0 });
         recordPredictedMove(pred, { tileX: 10, tileY: 10, z: 0 }, { tileX: 11, tileY: 10, z: 0 }, 100);
         expect(pred.pending).toHaveLength(1);
+    });
+
+    it('confirmServerSeq confirma pelo número de sequência', () => {
+        const pred = createClientMovementPrediction({ tileX: 10, tileY: 10, z: 0 });
+        const seq = recordPredictedMove(
+            pred,
+            { tileX: 10, tileY: 10, z: 0 },
+            { tileX: 11, tileY: 10, z: 0 },
+            100
+        );
+        confirmServerSeq(pred, seq, 11, 10, 0);
+        expect(pred.pending).toHaveLength(0);
+        expect(pred.serverTileX).toBe(11);
     });
 
     it('confirmServerTile remove passos confirmados', () => {

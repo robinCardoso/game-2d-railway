@@ -47,6 +47,7 @@ Este repositório é **Elarion Online** — MMORPG 2D estilo Tibia com **Elarion
 13. **Magias:** ícones em `tiles/effects/spells/icons/` (PNG 32×32); VFX em `tiles/effects/spells/cast/`; catálogo `spell_catalog.json` — ver [docs/spell-system.md](docs/spell-system.md)
 14. **XP rate:** servidor usa `GAME_RATE_EXP` (`.env`); offline usa `public/game_rates.json` — ver [docs/game-rates.md](docs/game-rates.md)
 15. **Movimento WS:** `MOVEMENT_TOO_FAST` não envia `position_correction` (anti rubber-band em latência alta)
+15b. **Direction8 + seq:** cliente com ticket envia `direction8` + `seq` no `move`; servidor deriva destino (`shared/movement/direction8.ts`); canto diagonal **OR**; fator diagonal servidor **1.15** (`movementTiming.ts`); legado tile-only aceito se `direction8` ausente
 16. **Studio editor-only:** `editorOnly` no bootstrap — sem `NpcAI`/`PlayerMovement`/`respawnEntities`; câmera em `editorCamera.ts`; produção sem `studio.html` (editar local → deploy)
 17. **Loot:** roll **só no servidor** (`rollMobLoot`); loot pessoal por participante elegível (AOI + 5% dano); política A — ver [docs/loot-system.md](docs/loot-system.md)
 18. **Electron build:** `electron:build` / `electron:check` forçam `VITE_USE_LOOSE_ASSETS=false`; `check-electron-asset-bundle.mjs` no CI — ver [docs/electron-desktop.md](docs/electron-desktop.md)

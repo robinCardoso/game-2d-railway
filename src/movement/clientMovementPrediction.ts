@@ -78,6 +78,32 @@ export function recordPredictedMove(
     return seq;
 }
 
+/** Confirma passo pelo `seq` do `player_moved` (protocolo Direction8). */
+export function confirmServerSeq(
+    pred: ClientMovementPrediction,
+    seq: number,
+    tileX: number,
+    tileY: number,
+    z: number
+): void {
+    while (pred.pending.length > 0) {
+        const head = pred.pending[0]!;
+        if (head.seq < seq) {
+            pred.pending.shift();
+            continue;
+        }
+        if (head.seq === seq) {
+            pred.pending.shift();
+            pred.serverTileX = tileX;
+            pred.serverTileY = tileY;
+            pred.serverZ = z;
+            return;
+        }
+        break;
+    }
+    confirmServerTile(pred, tileX, tileY, z);
+}
+
 /** Servidor confirmou tile (via resync / state implícito) — descarta passos já absorvidos. */
 export function confirmServerTile(
     pred: ClientMovementPrediction,

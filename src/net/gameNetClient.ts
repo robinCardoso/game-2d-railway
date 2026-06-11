@@ -3,6 +3,7 @@ import type {
     ChatBroadcastMessage,
     ClientMessage,
     CreatureSnapshot,
+    Direction8,
     PlayerAppearance,
     PlayerSnapshot,
     ServerMessage,
@@ -40,6 +41,8 @@ export interface GameNetClientOptions {
         stepDurationMs?: number;
         steppingDestTileX?: number;
         steppingDestTileY?: number;
+        direction8?: Direction8;
+        seq?: number;
         level?: number;
         experience?: number;
         spellBar?: { slot1?: string; slot2?: string; slot3?: string };
@@ -53,6 +56,8 @@ export interface GameNetClientOptions {
     validateOutgoingMove?: (from: TilePos, to: TilePos) => boolean;
     /** `move` / `map_change` enviado ao servidor — atualiza predição otimista. */
     onPositionSynced?: (pos: TilePos) => void;
+    /** `player_moved` com `seq` para o jogador local — confirma predição. */
+    onMoveAck?: (pos: TilePos & { seq?: number }) => void;
     /** Reserva de deslize (`steppingDest`) — destino bloqueado não envia ao servidor. */
     validateSteppingDest?: (tileX: number, tileY: number, z: number) => boolean;
     /** Passo rejeitado sem `position_correction` — cliente faz rollback suave. */
@@ -388,6 +393,8 @@ export class GameNetClient {
             tileY,
             z,
             direction,
+            direction8,
+            seq,
             stepDurationMs,
             steppingDestTileX,
             steppingDestTileY,
@@ -477,6 +484,9 @@ export class GameNetClient {
                 tileY,
                 z,
                 direction,
+                direction8,
+                seq,
+                clientTime: Date.now(),
                 stepDurationMs,
                 steppingDestTileX,
                 steppingDestTileY,
@@ -495,7 +505,11 @@ export class GameNetClient {
         };
 
         if (tileChanged || mapChanged) {
-            this.options.onPositionSynced?.({ tileX, tileY, z });
+            if (direction8 && seq !== undefined) {
+                // Confirmação otimista adiada até `player_moved` com mesmo seq.
+            } else {
+                this.options.onPositionSynced?.({ tileX, tileY, z });
+            }
         }
     }
 
@@ -656,6 +670,14 @@ export class GameNetClient {
                 this.remotePlayers.delete(msg.playerId);
                 break;
             case 'player_moved': {
+                if (msg.playerId === this.localPlayerId) {
+                    this.options.onMoveAck?.({
+                        tileX: msg.tileX,
+                        tileY: msg.tileY,
+                        z: msg.z,
+                        seq: msg.seq,
+                    });
+                }
                 const existing = this.remotePlayers.get(msg.playerId);
                 if (existing) {
                     existing.tileX = msg.tileX;

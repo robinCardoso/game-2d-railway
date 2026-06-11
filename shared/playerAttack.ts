@@ -6,6 +6,11 @@
  * Fallback legado por ID quando `attackProfile` ausente.
  */
 
+import {
+    chebyshevDistance,
+    manhattanDistance,
+} from './movement/distance.js';
+
 export type PlayerAttackType = 'melee' | 'distance' | 'magic';
 
 export interface PlayerAttackProfile {
@@ -94,7 +99,7 @@ export function chebyshevTileDistance(
     bx: number,
     by: number
 ): number {
-    return Math.max(Math.abs(ax - bx), Math.abs(ay - by));
+    return chebyshevDistance(ax, ay, bx, by);
 }
 
 /** @deprecated Preferir chebyshevTileDistance. Mantido para compatibilidade. */
@@ -104,7 +109,7 @@ export function manhattanTileDistance(
     bx: number,
     by: number
 ): number {
-    return Math.abs(ax - bx) + Math.abs(ay - by);
+    return manhattanDistance(ax, ay, bx, by);
 }
 
 export function isPlayerInAttackRange(

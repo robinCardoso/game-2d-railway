@@ -1,3 +1,21 @@
+## Status da implementação (2026-06-11)
+
+| Fase | Estado | Notas |
+|------|--------|-------|
+| 0 Baseline | ✅ | Testes OR em `tileWalkable`; lifecycle minimize preservado |
+| 1 Primitivos | ✅ | `shared/movement/direction8.ts`, `distance.ts` |
+| 2 Servidor validator | ✅ | `movementValidator`, `movementTiming` (1.15), `movementRateLimit` |
+| 3 Protocolo | ✅ | `move` com `direction8` + `seq`; legado `tileX/Y` sem `direction8` |
+| 4 Cliente buffer | ✅ | `movementInputBuffer`, `inputDirection8`, `getNetworkStepDurationMs` |
+| 5 Combate | ✅ | Chebyshev em `playerAttack` / magias (`isPlayerInAttackRange`) |
+| 6 Mobs diagonal | ✅ | `getChaseDirection8` em `creatureChase` (cardinal → diagonal) |
+| 7 Auto-walk | ✅ | A* `pathfinding8.ts`; Shift+clique no Play |
+| 8 Mobile | ✅ | Joystick 8-dir Capacitor (`mobileDirection8.ts`) |
+
+**Decisões fixas:** canto diagonal **OR** (`sideXOk \|\| sideYOk`); servidor fator diagonal **1.15**; `MOVEMENT_TOO_FAST` sem `position_correction`.
+
+---
+
 Vou estruturar como uma migração segura, não como “trocar a movimentação inteira de uma vez”. A parte mais delicada é diagonal sem quebrar colisão, ataque, monstros, PvP e validação do servidor.
 
 Pensou por 6s

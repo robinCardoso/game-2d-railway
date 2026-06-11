@@ -7,6 +7,7 @@ import {
     resolveSpriteDirection,
     tickGridMovement,
 } from './gridMovement';
+import type { MovementInputBuffer } from './movementInputBuffer';
 import { getPlayCombatTargetId } from '../game/playCombat';
 
 export interface PlayerMovementController {
@@ -33,6 +34,7 @@ export interface PlayerMovementController {
         posZEl: HTMLElement;
         /** Play: câmera com lerp/shake em playCameraJuice — não snap aqui. */
         skipCameraUpdate?: boolean;
+        movementInputBuffer?: MovementInputBuffer;
     }): { editingFloor: number };
     teleportPlayer(options: {
         player: any;
@@ -88,6 +90,7 @@ export const PlayerMovement: PlayerMovementController = {
             controller: gridMovement,
             nowMs,
             keys: keyState,
+            inputBuffer: options.movementInputBuffer,
             deps: {
                 tileSize: TILE_SIZE_SCREEN,
                 mapSize: MAP_SIZE,

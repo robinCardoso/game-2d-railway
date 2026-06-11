@@ -9,6 +9,9 @@ import { buildRoomKey } from './roomKey.js';
 import { parseSpellBar } from './spellBar.js';
 import type { ChatChannel, ChatMessageKind, ChatPlayerChannel } from './chatConfig.js';
 import type { Gender } from './types/character.js';
+import { isDirection8, type Direction8 } from './movement/direction8.js';
+
+export type { Direction8 };
 
 export const PROTOCOL_VERSION = 1;
 export const DEFAULT_WS_PORT = 8787;
@@ -173,7 +176,13 @@ export interface MoveMessage {
     z: number;
     mapId: string;
     instanceId?: string;
+    /** Direção 4 vias — visual / legado. */
     direction?: 'north' | 'south' | 'east' | 'west';
+    /** Direção 8 vias — servidor deriva destino quando presente. */
+    direction8?: Direction8;
+    /** Sequência monotônica do cliente (predição). */
+    seq?: number;
+    clientTime?: number;
     /** Duração do passo que acabou de ocorrer (ms), do cliente local. */
     stepDurationMs?: number;
     /** Destino do deslize em andamento — reserva colisão; tileX/tileY permanecem na origem. */
@@ -269,6 +278,9 @@ export interface PlayerMovedMessage {
     mapId: string;
     instanceId?: string;
     direction?: 'north' | 'south' | 'east' | 'west';
+    direction8?: Direction8;
+    /** Confirmação de predição para o jogador local. */
+    seq?: number;
     /** Duração autoritativa do passo para interpolação nos clientes remotos. */
     stepDurationMs?: number;
 }
@@ -551,7 +563,10 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
                         : undefined,
                 spellBar: parseSpellBar(m.spellBar),
             };
-        case 'move':
+        case 'move': {
+            const direction8 = isDirection8(m.direction8) ? m.direction8 : undefined;
+            const seq = parseOptionalPositiveInt(m.seq);
+            const clientTime = parseOptionalNonNegativeInt(m.clientTime);
             return {
                 type: 'move',
                 v: PROTOCOL_VERSION,
@@ -561,9 +576,13 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
                 mapId: typeof m.mapId === 'string' ? m.mapId.slice(0, 48) : 'mainland',
                 instanceId,
                 direction,
+                direction8,
+                seq,
+                clientTime,
                 stepDurationMs: parseStepDurationMs(m.stepDurationMs),
                 ...parseSteppingDest(m),
             };
+        }
         case 'map_change':
             return {
                 type: 'map_change',

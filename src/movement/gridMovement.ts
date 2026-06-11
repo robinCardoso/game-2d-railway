@@ -1,3 +1,11 @@
+import { resolveInputDirection8 } from './inputDirection8';
+import type { MovementInputBuffer } from './movementInputBuffer';
+import {
+    consumeMovementInput,
+    peekMovementInput,
+    pushMovementInput,
+} from './movementInputBuffer';
+
 /**
  * Movimento por grid (tileSize da engine, ex. 32×32) com deslize visual entre tiles.
  *
@@ -55,8 +63,12 @@ export interface GridMovementController {
     destTileY: number;
     /** Face travada durante o deslize — teclas novas não mudam sprite até concluir. */
     activeStepFacing: CardinalDirection | null;
+    /** Direção lógica do deslize em andamento. */
+    activeStepDirection: GridDirection | null;
     /** Duração do último deslize concluído — enviar na rede (não o próximo passo). */
     lastCompletedStepDurationMs: number;
+    /** Direção do último passo concluído — alinhar duração com servidor (sem √2 na rede). */
+    lastCompletedStepDirection: GridDirection | null;
     /** Estado de input por instância (evita globals entre Play/Studio/reload). */
     chordHeldSinceMs: Partial<Record<DiagonalChord, number>>;
     lastMovementFacingKey: FacingKey | null;
@@ -77,7 +89,9 @@ export function createGridMovementController(
         destTileX: 0,
         destTileY: 0,
         activeStepFacing: null,
+        activeStepDirection: null,
         lastCompletedStepDurationMs: stepDurationMs,
+        lastCompletedStepDirection: null,
         chordHeldSinceMs: {},
         lastMovementFacingKey: null,
         prevMovementFacingKeys: {},
@@ -261,95 +275,6 @@ export function hasMovementKeyInput(keys: MovementKeyState): boolean {
         keys.southwest ||
         keys.southeast
     );
-}
-
-function updateChordHoldTiming(
-    ctrl: GridMovementController,
-    keys: MovementKeyState,
-    nowMs: number
-): void {
-    const pairs: [DiagonalChord, boolean][] = [
-        ['northwest', keys.chordNorthwest],
-        ['northeast', keys.chordNortheast],
-        ['southwest', keys.chordSouthwest],
-        ['southeast', keys.chordSoutheast],
-    ];
-    for (const [chord, held] of pairs) {
-        if (held) {
-            if (ctrl.chordHeldSinceMs[chord] === undefined) {
-                ctrl.chordHeldSinceMs[chord] = nowMs;
-            }
-        } else {
-            delete ctrl.chordHeldSinceMs[chord];
-        }
-    }
-}
-
-function isChordDiagonalReady(
-    ctrl: GridMovementController,
-    chord: DiagonalChord,
-    nowMs: number
-): boolean {
-    const since = ctrl.chordHeldSinceMs[chord];
-    return since !== undefined && nowMs - since >= DIAGONAL_CHORD_DELAY_MS;
-}
-
-function cardinalFromFacingKey(ctrl: GridMovementController): GridDirection | null {
-    if (ctrl.lastMovementFacingKey === 'w') return 'north';
-    if (ctrl.lastMovementFacingKey === 's') return 'south';
-    if (ctrl.lastMovementFacingKey === 'a') return 'west';
-    if (ctrl.lastMovementFacingKey === 'd') return 'east';
-    return null;
-}
-
-function resolveDirection(
-    ctrl: GridMovementController,
-    keys: MovementKeyState,
-    nowMs: number
-): GridDirection | null {
-    updateChordHoldTiming(ctrl, keys, nowMs);
-
-    if (keys.explicitNorthwest) return 'northwest';
-    if (keys.explicitNortheast) return 'northeast';
-    if (keys.explicitSouthwest) return 'southwest';
-    if (keys.explicitSoutheast) return 'southeast';
-
-    const pendingChords: DiagonalChord[] = [];
-
-    if (keys.chordNorthwest) {
-        if (isChordDiagonalReady(ctrl, 'northwest', nowMs)) return 'northwest';
-        pendingChords.push('northwest');
-    }
-    if (keys.chordNortheast) {
-        if (isChordDiagonalReady(ctrl, 'northeast', nowMs)) return 'northeast';
-        pendingChords.push('northeast');
-    }
-    if (keys.chordSouthwest) {
-        if (isChordDiagonalReady(ctrl, 'southwest', nowMs)) return 'southwest';
-        pendingChords.push('southwest');
-    }
-    if (keys.chordSoutheast) {
-        if (isChordDiagonalReady(ctrl, 'southeast', nowMs)) return 'southeast';
-        pendingChords.push('southeast');
-    }
-
-    if (pendingChords.length > 1) return null;
-
-    if (pendingChords.length === 1) {
-        const fallback = cardinalFromFacingKey(ctrl);
-        if (fallback) return fallback;
-    }
-
-    const { north, south, east, west } = keys;
-    if (!north && !south && !east && !west) return null;
-    if (north && south) return null;
-    if (east && west) return null;
-
-    if (north) return 'north';
-    if (south) return 'south';
-    if (west) return 'west';
-    if (east) return 'east';
-    return null;
 }
 
 const MOVEMENT_FACING_KEYS = [
@@ -554,13 +479,16 @@ function beginStep(
     const dest = tileToWorld(ntx, nty, tileSize);
     ctrl.destTileX = ntx;
     ctrl.destTileY = nty;
+    ctrl.activeStepDirection = dir;
     ctrl.activeStepFacing = facingForStep(ctrl, dir);
 
     if (instant) {
         commitTilePosition(player, ntx, nty);
         ctrl.stepping = false;
         ctrl.activeStepFacing = null;
+        ctrl.activeStepDirection = null;
         ctrl.lastCompletedStepDurationMs = Math.max(16, stepDurationMs);
+        ctrl.lastCompletedStepDirection = dir;
         player.worldX = dest.x;
         player.worldY = dest.y;
         return;
@@ -600,18 +528,35 @@ function advanceStepVisual(
             player.worldY = ctrl.fromY;
             ctrl.stepping = false;
             ctrl.activeStepFacing = null;
+            ctrl.activeStepDirection = null;
             return true;
         }
 
         ctrl.lastCompletedStepDurationMs = ctrl.stepDurationMs;
+        ctrl.lastCompletedStepDirection = ctrl.activeStepDirection;
         commitTilePosition(player, ctrl.destTileX, ctrl.destTileY);
         player.worldX = ctrl.toX;
         player.worldY = ctrl.toY;
         ctrl.stepping = false;
         ctrl.activeStepFacing = null;
+        ctrl.activeStepDirection = null;
         return true;
     }
     return false;
+}
+
+/** Duração base para rede — sem fator √2 visual (servidor aplica 1.15). */
+export function getNetworkStepDurationMs(ctrl: GridMovementController): number {
+    const visualMs =
+        ctrl.lastCompletedStepDurationMs || ctrl.stepDurationMs;
+    const dir = ctrl.lastCompletedStepDirection;
+    if (dir && isDiagonalDirection(dir)) {
+        return Math.max(
+            16,
+            Math.round(visualMs / DIAGONAL_STEP_DURATION_FACTOR)
+        );
+    }
+    return Math.max(16, visualMs);
 }
 
 export interface TickGridMovementParams {
@@ -620,6 +565,7 @@ export interface TickGridMovementParams {
     keys: MovementKeyState;
     nowMs: number;
     deps: TileGridDeps;
+    inputBuffer?: MovementInputBuffer;
 }
 
 function tryStartStep(
@@ -735,7 +681,17 @@ function tryStartStep(
  * Novo passo só após o deslize anterior concluir (tile lógico + visual alinhados).
  */
 export function tickGridMovement(params: TickGridMovementParams): boolean {
-    const { player, controller: ctrl, keys: k, nowMs, deps } = params;
+    const { player, controller: ctrl, keys: k, nowMs, deps, inputBuffer } = params;
+
+    const liveDir = resolveInputDirection8(ctrl, k, nowMs);
+    if (ctrl.stepping && liveDir && inputBuffer) {
+        const buffered = peekMovementInput(inputBuffer);
+        if (buffered !== liveDir) {
+            pushMovementInput(inputBuffer, liveDir);
+        }
+        const done = advanceStepVisual(ctrl, player, nowMs, deps);
+        return !done;
+    }
 
     if (ctrl.stepping) {
         const done = advanceStepVisual(ctrl, player, nowMs, deps);
@@ -746,7 +702,10 @@ export function tickGridMovement(params: TickGridMovementParams): boolean {
         return false;
     }
 
-    const dir = resolveDirection(ctrl, k, nowMs);
+    let dir = liveDir;
+    if (!dir && inputBuffer) {
+        dir = consumeMovementInput(inputBuffer);
+    }
     if (!dir) return false;
 
     return tryStartStep(ctrl, player, dir, nowMs, deps);

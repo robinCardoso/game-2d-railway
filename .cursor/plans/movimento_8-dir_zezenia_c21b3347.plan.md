@@ -4,34 +4,34 @@ overview: Plano de migração incremental para movimento 8 direções estilo Zez
 todos:
   - id: phase-0-baseline
     content: "Fase 0: validar release 0.1.3+ (minimize, 20 tiles, sem INVALID_STEP) + testes baseline"
-    status: pending
+    status: completed
   - id: phase-1-shared
     content: "Fase 1: criar shared/movement/direction8.ts + distance.ts + testes vetores/OR"
-    status: pending
+    status: completed
   - id: phase-2-server
     content: "Fase 2: extrair movementValidator/timing/rateLimit; fator diagonal 1.15 servidor"
-    status: pending
+    status: completed
   - id: phase-3-protocol
     content: "Fase 3: protocolo MoveMessage direction8+seq; cliente envia; compat legado 1 release"
-    status: pending
+    status: completed
   - id: phase-4-client-buffer
     content: "Fase 4: movementInputBuffer + alinhar duração cliente/servidor + visual facing 4 vias"
-    status: pending
+    status: completed
   - id: phase-5-combat
     content: "Fase 5: Chebyshev unificado combate/magias + ocupação opcional no validator"
-    status: pending
+    status: completed
   - id: phase-6-mobs
     content: "Fase 6: chase mob com mesmo validator (cardinal primeiro, diagonal depois)"
-    status: pending
+    status: completed
   - id: phase-7-pathfinding
     content: "Fase 7: A* 8-dir + auto-walk com validação servidor passo a passo"
-    status: pending
+    status: completed
   - id: phase-8-mobile
     content: "Fase 8: joystick mobile 8 direções"
-    status: pending
+    status: completed
   - id: docs-sync
     content: Atualizar andar-zezenia.md, multiplayer-remote-players, AGENTS a cada fase
-    status: pending
+    status: completed
 isProject: false
 ---
 

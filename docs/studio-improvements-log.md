@@ -1365,3 +1365,34 @@ Ver **[game-rates.md](./game-rates.md)**.
 ### 59.3 Electron updater
 - Já ligado: `main.ts` (`registerUpdaterIpcHandlers`, `setupAutoUpdater`), `preload.ts` (`electronAPI.updater`), `desktopUpdateToast.ts` (check ~8 s)
 
+---
+
+## 60. Movimento 8 direções Zezenia-like (2026-06-11)
+
+### 60.1 Shared
+- `shared/movement/direction8.ts` — `Direction8`, vetores, `toProtocolDirection8`, `getVisualFacing`
+- `shared/movement/distance.ts` — Chebyshev/Manhattan (reexport em `playerAttack`)
+- `shared/movement/pathfinding8.ts` — A* 8 vizinhos, custo 1 / 1.15, filtro `canAdjacentStep`
+
+### 60.2 Servidor
+- `server/src/gameRoom/movement/` — `movementValidator`, `movementTiming` (×1.15), `movementRateLimit`
+- `moveHandlers.ts` — `direction8` deriva destino; `seq` + ack `player_moved` ao socket local; legado tile-only
+
+### 60.3 Cliente
+- `movementInputBuffer.ts` (fila máx. 2), `inputDirection8.ts`, `getNetworkStepDurationMs` (sem √2 na rede)
+- `gameNetClient` — envia `direction8`/`seq`; `onMoveAck` → `confirmServerSeq`
+- `autoWalk.ts` — Shift+clique; `mobileDirection8.ts` — joystick Capacitor
+
+### 60.4 Mobs
+- `getChaseDirection8` — cardinais primeiro, diagonal com mesma regra OR
+
+### 60.5 Doc
+- [andar-zezenia.md](./andar-zezenia.md) — tabela de status
+- [multiplayer-remote-players.md](./multiplayer-remote-players.md) §2
+
+### 60.6 Checklist manual
+- [ ] 20 tiles retos/diagonais sem `INVALID_STEP`
+- [ ] Minimize/restaurar sem teleporte
+- [ ] Shift+clique auto-walk em campo aberto
+- [ ] Capacitor: joystick inferior do canvas
+

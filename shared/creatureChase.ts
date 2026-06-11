@@ -1,5 +1,13 @@
 /** Lógica pura de chase de monstros — compartilhada cliente/servidor. */
 
+import {
+    applyDirection,
+    DIRECTION_VECTORS,
+    getVisualFacing,
+    type Direction8,
+} from './movement/direction8.js';
+import { canAdjacentStep } from './tileWalkable.js';
+
 export const MONSTER_AGGRO_RADIUS = 7;
 /** Máximo de mobs com IA de chase ativa por jogador-alvo (surround 8 + fila no anel). */
 export const MONSTER_MAX_ACTIVE_CHASERS_PER_TARGET = 10;
@@ -542,6 +550,55 @@ function isPingPongRetreat(
     return false;
 }
 
+export type ChaseStepResult = {
+    dx: number;
+    dy: number;
+    dir: CardinalDirection;
+};
+
+/** Passo 8-dir com cardinais primeiro — mesma regra OR de `canAdjacentStep`. */
+export function getChaseDirection8(
+    mobTileX: number,
+    mobTileY: number,
+    mobZ: number,
+    goalX: number,
+    goalY: number,
+    canWalkTo: (tx: number, ty: number) => boolean
+): Direction8 | null {
+    const from = { tileX: mobTileX, tileY: mobTileY, z: mobZ };
+    const isWalkableAt = (x: number, y: number, z: number) =>
+        z === mobZ && canWalkTo(x, y);
+
+    const cardinals: Direction8[] = ['north', 'south', 'east', 'west'];
+    const diagonals: Direction8[] = [
+        'north_west',
+        'north_east',
+        'south_west',
+        'south_east',
+    ];
+
+    for (const group of [cardinals, diagonals]) {
+        let best: Direction8 | null = null;
+        let bestDist = Infinity;
+        for (const dir of group) {
+            const to = applyDirection(from, dir);
+            if (!canAdjacentStep(from, to, isWalkableAt)) continue;
+            const d = manhattanDist(to.tileX, to.tileY, goalX, goalY);
+            if (d < bestDist) {
+                bestDist = d;
+                best = dir;
+            }
+        }
+        if (best) return best;
+    }
+    return null;
+}
+
+export function chaseStepFromDirection8(dir: Direction8): ChaseStepResult {
+    const v = DIRECTION_VECTORS[dir];
+    return { dx: v.dx, dy: v.dy, dir: getVisualFacing(dir) };
+}
+
 export function pickMonsterChaseStep(
     mobTileX: number,
     mobTileY: number,
@@ -828,6 +885,36 @@ export function tickMonsterChaseStep(
                 player.tileY,
                 canStepTo
             );
+        }
+
+        if (!step) {
+            const goals = collectMeleeChaseGoals(
+                player.tileX,
+                player.tileY,
+                canGoalTile,
+                canStepTo
+            );
+            for (const goal of goals) {
+                const dir8 = getChaseDirection8(
+                    mob.tileX,
+                    mob.tileY,
+                    mob.z,
+                    goal.tx,
+                    goal.ty,
+                    canStepTo
+                );
+                if (dir8) {
+                    const chaseStep = chaseStepFromDirection8(dir8);
+                    mob.tileX += chaseStep.dx;
+                    mob.tileY += chaseStep.dy;
+                    if (mob.lastAggroMoveTime === 0 || nowMs - mob.lastAggroMoveTime > walkStepMs * 2) {
+                        mob.lastAggroMoveTime = nowMs;
+                    } else {
+                        mob.lastAggroMoveTime += walkStepMs;
+                    }
+                    return chaseStep;
+                }
+            }
         }
     } else {
         const { minRange, maxRange } = resolveRangedComfortBand(config);

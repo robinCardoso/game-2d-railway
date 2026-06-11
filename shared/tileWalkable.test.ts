@@ -14,6 +14,16 @@ describe('canAdjacentStep', () => {
         expect(ok).toBe(false);
     });
 
+    it('permite diagonal com regra OR quando um lateral está livre', () => {
+        const sideYBlocked = (x: number, y: number) => !(x === 0 && y === 1);
+        const ok = canAdjacentStep(
+            { tileX: 0, tileY: 0, z: 0 },
+            { tileX: 1, tileY: 1, z: 0 },
+            sideYBlocked
+        );
+        expect(ok).toBe(true);
+    });
+
     it('permite ortogonal adjacente', () => {
         const ok = canAdjacentStep(
             { tileX: 0, tileY: 0, z: 0 },
