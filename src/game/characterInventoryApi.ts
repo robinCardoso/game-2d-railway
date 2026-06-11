@@ -1,5 +1,9 @@
 import { apiFetch } from '../shared/apiFetch';
-import { normalizeInventoryDocument, type CharacterInventoryDocument } from '../../shared/inventory';
+import { getItemCatalog } from '../game-data/itemCatalog';
+import {
+    normalizeInventoryForStackRules,
+    type CharacterInventoryDocument,
+} from '../../shared/inventory';
 
 export async function fetchCharacterInventory(
     characterId: string
@@ -10,7 +14,7 @@ export async function fetchCharacterInventory(
         throw new Error(body.error ?? `Falha ao carregar inventário (${res.status}).`);
     }
     const data = (await res.json()) as { inventory: CharacterInventoryDocument };
-    return normalizeInventoryDocument(data.inventory);
+    return normalizeInventoryForStackRules(data.inventory, getItemCatalog()).inventory;
 }
 
 export async function saveCharacterInventory(
@@ -30,5 +34,5 @@ export async function saveCharacterInventory(
         throw new Error((body.error ?? `Falha ao salvar inventário (${res.status}).`) + detail);
     }
     const data = (await res.json()) as { inventory: CharacterInventoryDocument };
-    return normalizeInventoryDocument(data.inventory);
+    return normalizeInventoryForStackRules(data.inventory, getItemCatalog()).inventory;
 }

@@ -5,7 +5,12 @@ import {
     type ItemCatalogDocument,
     type ItemCatalogEntry,
 } from '../src/game-data/itemCatalogTypes.js';
-import { createEmptyBags } from './inventoryBags.js';
+import {
+    addQuantityToBags,
+    cloneBags,
+    createEmptyBags,
+    firstSequentialFreeSlot,
+} from './inventoryBags.js';
 
 /** Número total de storages de bolsa por personagem. */
 export const INVENTORY_BAG_COUNT = 5;
@@ -110,20 +115,6 @@ function parseBackpackRows(
             errors.push(`Item ${itemId} não está disponível no jogo.`);
             continue;
         }
-        if (entry) {
-            const rules = getItemStackRules(entry);
-            if (!rules.stackable && quantity > 1) {
-                errors.push(
-                    `${bagLabel}[${i}].quantity: ${itemId} não empilha (máx 1 por slot).`
-                );
-            }
-            if (quantity > rules.maxStack) {
-                errors.push(
-                    `${bagLabel}[${i}].quantity: ${itemId} excede pilha máxima (${rules.maxStack}).`
-                );
-            }
-        }
-
         seenSlots.add(slotIndex);
         rows.push({ slotIndex, itemId, quantity });
     }
@@ -184,6 +175,121 @@ export function normalizeInventoryDocument(raw: unknown): CharacterInventoryDocu
     }
 
     return { equipment, bags, unlockedBagSlots };
+}
+
+export interface SanitizeStackRulesResult {
+    inventory: CharacterInventoryDocument;
+    /** Unidades descartadas por falta de espaço nas bolsas liberadas. */
+    overflow: Map<string, number>;
+    warnings: string[];
+}
+
+/**
+ * Corrige pilhas legadas (ex.: equipamento com quantity > 1) dividindo em slots válidos.
+ * Excesso sem espaço é descartado com aviso em console.
+ */
+export function sanitizeInventoryStackRules(
+    inventory: CharacterInventoryDocument,
+    catalog: ItemCatalogDocument
+): SanitizeStackRulesResult {
+    const byId = catalogById(catalog);
+    const bags = cloneBags(inventory.bags);
+    const overflow = new Map<string, number>();
+    const warnings: string[] = [];
+    const unlocked = inventory.unlockedBagSlots;
+
+    const addOverflow = (itemId: string, qty: number) => {
+        if (qty <= 0) return;
+        overflow.set(itemId, (overflow.get(itemId) ?? 0) + qty);
+        warnings.push(`${qty}x ${itemId} descartado(s) — sem espaço na bolsa.`);
+    };
+
+    for (let bagIndex = 0; bagIndex < unlocked; bagIndex++) {
+        const bag = bags[bagIndex] ?? [];
+        for (let rowIndex = 0; rowIndex < bag.length; rowIndex++) {
+            const row = bag[rowIndex];
+            const entry = byId.get(row.itemId);
+            if (!entry || entry.implemented === false) continue;
+
+            const rules = getItemStackRules(entry);
+
+            if (!rules.stackable && row.quantity > 1) {
+                const extra = row.quantity - 1;
+                row.quantity = 1;
+                for (let unit = 0; unit < extra; unit++) {
+                    const free = firstSequentialFreeSlot(bags, unlocked);
+                    if (free === null) {
+                        addOverflow(row.itemId, extra - unit);
+                        break;
+                    }
+                    const targetBag = bags[free.bagIndex] ?? [];
+                    targetBag.push({
+                        slotIndex: free.slotIndex,
+                        itemId: row.itemId,
+                        quantity: 1,
+                    });
+                    targetBag.sort((a, b) => a.slotIndex - b.slotIndex);
+                    bags[free.bagIndex] = targetBag;
+                }
+            } else if (rules.stackable && row.quantity > rules.maxStack) {
+                const excess = row.quantity - rules.maxStack;
+                row.quantity = rules.maxStack;
+                const { overflow: remaining } = addQuantityToBags(
+                    bags,
+                    row.itemId,
+                    excess,
+                    unlocked,
+                    rules
+                );
+                if (remaining > 0) addOverflow(row.itemId, remaining);
+            }
+        }
+    }
+
+    if (warnings.length > 0) {
+        console.warn('[inventory] sanitizeInventoryStackRules:', warnings.join(' '));
+    }
+
+    return {
+        inventory: { equipment: inventory.equipment, bags, unlockedBagSlots: unlocked },
+        overflow,
+        warnings,
+    };
+}
+
+/** Normaliza documento bruto e aplica regras de pilha (migração automática). */
+export function normalizeInventoryForStackRules(
+    raw: unknown,
+    catalog: ItemCatalogDocument
+): SanitizeStackRulesResult {
+    return sanitizeInventoryStackRules(normalizeInventoryDocument(raw), catalog);
+}
+
+function assertValidStackRules(
+    bags: BackpackSlotRow[][],
+    unlockedBagSlots: number,
+    byId: Map<string, ItemCatalogEntry>,
+    errors: string[]
+): void {
+    for (let bagIndex = 0; bagIndex < unlockedBagSlots; bagIndex++) {
+        const bagLabel = `bags[${bagIndex}]`;
+        for (let i = 0; i < (bags[bagIndex] ?? []).length; i++) {
+            const row = bags[bagIndex][i];
+            const entry = byId.get(row.itemId);
+            if (!entry) continue;
+            const rules = getItemStackRules(entry);
+            if (!rules.stackable && row.quantity > 1) {
+                errors.push(
+                    `${bagLabel}[${i}].quantity: ${row.itemId} não empilha (máx 1 por slot).`
+                );
+            }
+            if (row.quantity > rules.maxStack) {
+                errors.push(
+                    `${bagLabel}[${i}].quantity: ${row.itemId} excede pilha máxima (${rules.maxStack}).`
+                );
+            }
+        }
+    }
 }
 
 /** Contagem total por itemId (equipamento + todas as bolsas). */
@@ -306,10 +412,22 @@ export function validateCharacterInventory(
         }
     }
 
+    let sanitizedBags = bags;
+    let sanitizedEquipment = equipment;
+    if (errors.length === 0) {
+        const sanitized = sanitizeInventoryStackRules(
+            { equipment, bags, unlockedBagSlots },
+            catalog
+        );
+        sanitizedBags = sanitized.inventory.bags;
+        sanitizedEquipment = sanitized.inventory.equipment;
+        assertValidStackRules(sanitizedBags, unlockedBagSlots, byId, errors);
+    }
+
     if (errors.length === 0) {
         const equippedIds = new Set<string>();
         for (const slot of EQUIPMENT_SLOTS) {
-            const itemId = equipment[slot];
+            const itemId = sanitizedEquipment[slot];
             if (!itemId) continue;
             if (equippedIds.has(itemId)) {
                 errors.push(`Item ${itemId} equipado em mais de um slot.`);
@@ -319,7 +437,7 @@ export function validateCharacterInventory(
 
         const backpackItemIds = new Set<string>();
         for (let bagIndex = 0; bagIndex < unlockedBagSlots; bagIndex++) {
-            for (const row of bags[bagIndex]) {
+            for (const row of sanitizedBags[bagIndex]) {
                 backpackItemIds.add(row.itemId);
             }
         }
@@ -333,7 +451,11 @@ export function validateCharacterInventory(
 
         if (options?.previous) {
             const prevCounts = countInventoryItems(options.previous);
-            const nextCounts = countInventoryItems({ equipment, bags, unlockedBagSlots });
+            const nextCounts = countInventoryItems({
+                equipment: sanitizedEquipment,
+                bags: sanitizedBags,
+                unlockedBagSlots,
+            });
             for (const [itemId, nextQty] of nextCounts) {
                 const prevQty = prevCounts.get(itemId) ?? 0;
                 if (nextQty > prevQty) {
@@ -352,6 +474,10 @@ export function validateCharacterInventory(
     const clampedUnlocked = Math.min(unlockedBagSlots, maxUnlocked);
     return {
         ok: true,
-        value: { equipment, bags, unlockedBagSlots: clampedUnlocked },
+        value: {
+            equipment: sanitizedEquipment,
+            bags: sanitizedBags,
+            unlockedBagSlots: clampedUnlocked,
+        },
     };
 }
