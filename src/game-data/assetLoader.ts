@@ -44,6 +44,17 @@ export function normalizePackPath(publicPath: string): string {
     return path;
 }
 
+/** Cliente empacotado (`file://`) — sprites só existem no assets.pak, nunca soltos no disco. */
+export function isPackagedFileClient(): boolean {
+    return typeof window !== 'undefined' && window.location.protocol === 'file:';
+}
+
+/** Loose só em dev HTTP; ignorar flag se o bundle roda em Electron/Capacitor file://. */
+export function isLooseAssetsMode(): boolean {
+    if (import.meta.env.VITE_USE_LOOSE_ASSETS !== 'true') return false;
+    return !isPackagedFileClient();
+}
+
 class AssetLoader {
     private active = false;
     private initPromise: Promise<void> | null = null;
@@ -96,7 +107,7 @@ class AssetLoader {
     }
 
     private async doInitialize(): Promise<void> {
-        if (import.meta.env.VITE_USE_LOOSE_ASSETS === 'true') {
+        if (isLooseAssetsMode()) {
             console.log('[AssetLoader] Usando modo loose assets (arquivos soltos).');
             return;
         }
@@ -111,6 +122,12 @@ class AssetLoader {
             ]);
 
             if (!pakRes.ok) {
+                const pakUrl = resolvePublicAssetUrl(PAK_URL);
+                if (isPackagedFileClient()) {
+                    throw new Error(
+                        `[AssetLoader] assets.pak não encontrado em ${pakUrl}. Rebuild sem VITE_USE_LOOSE_ASSETS.`,
+                    );
+                }
                 console.log('[AssetLoader] Pacote assets.pak não encontrado. Fallback para loose files.');
                 return;
             }
