@@ -56,11 +56,13 @@ jobs:
         run: |
           $version = "${{ needs.detect-bump.outputs.version }}"
           $tag = "v$version"
-          gh release view $tag 2>$null
+          gh release view $tag 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) {
             Write-Error "Release $tag já existe no GitHub — incremente VITE_BUILD_VERSION em .env.production"
+            exit 1
           }
           Write-Host "Tag $tag disponível para publicação"
+          exit 0
 
       - name: Instalar dependências
         run: |
