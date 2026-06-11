@@ -157,6 +157,22 @@ Railway (painel web ou valores base64 para colar):
 .\scripts\set-pack-railway-vars.ps1
 ```
 
+**Checklist — empacotamento pronto para produção**
+
+| Item | Como verificar |
+|------|----------------|
+| Secrets GitHub + Railway | `ASSET_PACK_PRIVATE_KEY` (+ opcional `ASSET_PACK_PUBLIC_KEY`) configurados |
+| Nada sensível no Git | `npm test` inclui `check-pack-artifacts-tracked.mjs` |
+| Pack local | `npm run pack` → `public/assets.pak` + `assets.sig` |
+| Assinatura válida | `node scripts/smoke-asset-pack.mjs` |
+| Build completo | `npm run build` e `npm run electron:check` |
+| CI `main` verde | GitHub Actions com secrets |
+| Dev Studio | `.env` com `VITE_USE_LOOSE_ASSETS=true` (não definir em Railway) |
+
+**Auditoria externa:** visualizar arquivos via GitHub *raw* pode colapsar quebras de linha em comentários/strings e parecer “sintaxe quebrada” em `.gitignore`, `pack-assets.mjs` ou `assetLoader.ts`. Valide sempre com clone local ou `npm test` / `npm run build`.
+
+Chaves que já apareceram em commits antigos devem ser tratadas como **vazadas** — use apenas o par atual dos secrets, nunca re-commitar `.pem`/`.pak`.
+
 **Build do frontend** (variáveis `VITE_*` no Railway ou CI):
 
 | Variável build | Descrição |
