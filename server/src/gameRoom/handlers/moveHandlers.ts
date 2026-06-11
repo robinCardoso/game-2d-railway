@@ -106,6 +106,20 @@ export function handleMove(
         moveDirection8 = resolveMoveDirection8(msg);
         if (moveDirection8) {
             if (msg.seq !== undefined && msg.seq <= player.lastAckSeq) {
+                ctx.send(socket, {
+                    type: 'player_moved',
+                    v: PROTOCOL_VERSION,
+                    playerId: player.id,
+                    tileX: player.tileX,
+                    tileY: player.tileY,
+                    z: player.z,
+                    mapId: player.mapId,
+                    instanceId: player.instanceId,
+                    direction: player.direction,
+                    direction8: moveDirection8,
+                    seq: msg.seq,
+                    stepDurationMs: player.lastStepDurationMs,
+                });
                 return;
             }
             const derived = validatePlayerStep({

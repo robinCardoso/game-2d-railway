@@ -566,6 +566,8 @@ export interface TickGridMovementParams {
     nowMs: number;
     deps: TileGridDeps;
     inputBuffer?: MovementInputBuffer;
+    /** Produção: aguardar ack WS antes de iniciar outro passo (evita 2+ tiles à frente do servidor). */
+    blockNewSteps?: boolean;
 }
 
 function tryStartStep(
@@ -681,24 +683,28 @@ function tryStartStep(
  * Novo passo só após o deslize anterior concluir (tile lógico + visual alinhados).
  */
 export function tickGridMovement(params: TickGridMovementParams): boolean {
-    const { player, controller: ctrl, keys: k, nowMs, deps, inputBuffer } = params;
+    const { player, controller: ctrl, keys: k, nowMs, deps, inputBuffer, blockNewSteps } =
+        params;
 
     const liveDir = resolveInputDirection8(ctrl, k, nowMs);
-    if (ctrl.stepping && liveDir && inputBuffer) {
-        const buffered = peekMovementInput(inputBuffer);
-        if (buffered !== liveDir) {
-            pushMovementInput(inputBuffer, liveDir);
+    if (ctrl.stepping) {
+        if (liveDir && inputBuffer) {
+            const buffered = peekMovementInput(inputBuffer);
+            if (buffered !== liveDir) {
+                pushMovementInput(inputBuffer, liveDir);
+            }
         }
         const done = advanceStepVisual(ctrl, player, nowMs, deps);
-        return !done;
-    }
-
-    if (ctrl.stepping) {
-        const done = advanceStepVisual(ctrl, player, nowMs, deps);
         if (!done) return false;
+        // Passo concluído neste frame — aguardar próximo frame (e ack WS em prod).
+        return false;
     }
 
     if (!ensureStepComplete(ctrl, player, deps.tileSize)) {
+        return false;
+    }
+
+    if (blockNewSteps) {
         return false;
     }
 

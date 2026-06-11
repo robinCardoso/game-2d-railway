@@ -35,6 +35,8 @@ export interface PlayerMovementController {
         /** Play: câmera com lerp/shake em playCameraJuice — não snap aqui. */
         skipCameraUpdate?: boolean;
         movementInputBuffer?: MovementInputBuffer;
+        /** Bloqueia novo passo até ack do movimento anterior (modo autoritativo). */
+        blockNewSteps?: boolean;
     }): { editingFloor: number };
     teleportPlayer(options: {
         player: any;
@@ -91,6 +93,7 @@ export const PlayerMovement: PlayerMovementController = {
             nowMs,
             keys: keyState,
             inputBuffer: options.movementInputBuffer,
+            blockNewSteps: options.blockNewSteps,
             deps: {
                 tileSize: TILE_SIZE_SCREEN,
                 mapSize: MAP_SIZE,

@@ -1130,15 +1130,47 @@ function validateSteppingDestForNetwork(tileX: number, tileY: number, z: number)
     return isWalkable(wx, wy, z).walkable;
 }
 
-/** `MOVEMENT_TOO_FAST` — servidor sem `position_correction`; reverte otimismo e segura input. */
-function handleMovementTooFastSoft(): void {
+/** Alinha tile lógico + visual ao tile autoritativo (sem slide). */
+function snapLocalPlayerToAuthoritativeTile(tileX: number, tileY: number, z: number): void {
+    player.worldZ = clampFloorZ(z);
     gridMovement.stepping = false;
     gridMovement.activeStepFacing = null;
     gridMovement.activeStepDirection = null;
     resetGridMovementInputState(gridMovement);
+    syncGridPlayerVisual(player, TILE_SIZE_SCREEN, tileX, tileY);
+}
+
+/**
+ * Corrige divergência cliente/servidor após ack ou rejeição.
+ * Ignora se o deslize atual já vai terminar no tile do servidor.
+ */
+function reconcileLocalTileToAuthoritative(tileX: number, tileY: number, z: number): void {
+    const steppingTowardAck =
+        gridMovement.stepping &&
+        gridMovement.destTileX === tileX &&
+        gridMovement.destTileY === tileY &&
+        player.worldZ === z;
+    if (steppingTowardAck) return;
+
+    if (
+        player.tileX === tileX &&
+        player.tileY === tileY &&
+        player.worldZ === z &&
+        !gridMovement.stepping
+    ) {
+        return;
+    }
+
+    snapLocalPlayerToAuthoritativeTile(tileX, tileY, z);
+    previousPlayerTileKey = getPlayerTileKey();
+}
+
+/** `MOVEMENT_TOO_FAST` — servidor sem `position_correction`; reverte otimismo e segura input. */
+function handleMovementTooFastSoft(): void {
     clearMovementInputBuffer(movementInputBuffer);
     clearAutoWalk(autoWalkState);
     clearPlayMovementInput();
+    pendingOutboundMoveSeq = undefined;
 
     if (lastOutboundSyncedPrevTile) {
         confirmServerTile(
@@ -1147,7 +1179,18 @@ function handleMovementTooFastSoft(): void {
             lastOutboundSyncedPrevTile.tileY,
             lastOutboundSyncedPrevTile.z
         );
+        snapLocalPlayerToAuthoritativeTile(
+            lastOutboundSyncedPrevTile.tileX,
+            lastOutboundSyncedPrevTile.tileY,
+            lastOutboundSyncedPrevTile.z
+        );
         lastOutboundSyncedPrevTile = null;
+    } else {
+        snapLocalPlayerToAuthoritativeTile(
+            movementPrediction.serverTileX,
+            movementPrediction.serverTileY,
+            movementPrediction.serverZ
+        );
     }
 
     movementTooFastThrottleUntilMs = performance.now() + 120;
@@ -1318,6 +1361,9 @@ function update(dtMs: number): void {
             posZEl: document.getElementById('posZ') as HTMLElement,
             skipCameraUpdate: true,
             movementInputBuffer,
+            blockNewSteps:
+                isServerAuthoritativePosition() &&
+                getPendingPredictionCount(movementPrediction) > 0,
         });
         editingFloorResult = result.editingFloor;
     } else {
@@ -1951,6 +1997,7 @@ function setupNetwork(
             stepDurationMs: getNetworkStepDurationMs(gridMovement),
             direction8:
                 isServerAuthoritativePosition() &&
+                pendingOutboundMoveSeq !== undefined &&
                 gridMovement.lastCompletedStepDirection
                     ? toProtocolDirection8(gridMovement.lastCompletedStepDirection)
                     : undefined,
@@ -1984,8 +2031,10 @@ function setupNetwork(
                 );
                 pendingOutboundMoveSeq = undefined;
                 lastOutboundSyncedPrevTile = null;
+                reconcileLocalTileToAuthoritative(pos.tileX, pos.tileY, pos.z);
             } else {
                 confirmServerTile(movementPrediction, pos.tileX, pos.tileY, pos.z);
+                reconcileLocalTileToAuthoritative(pos.tileX, pos.tileY, pos.z);
             }
         },
         validateOutgoingMove: validateOutgoingNetworkMove,
