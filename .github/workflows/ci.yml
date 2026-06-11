@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main, interface, Empacotar]
+  pull_request:
+    branches: [main, interface]
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Instalar dependências
+        run: |
+          npm ci
+          npm ci --prefix server
+
+      - name: Preparar chave pública (assets.pak)
+        env:
+          ASSET_PACK_PUBLIC_KEY: ${{ secrets.ASSET_PACK_PUBLIC_KEY }}
+        run: node scripts/write-pack-public-key.mjs
+
+      - name: Testes
+        run: npm test
+
+      - name: Build produção (assets.pak assinado)
+        env:
+          ASSET_PACK_PRIVATE_KEY: ${{ secrets.ASSET_PACK_PRIVATE_KEY }}
+          ASSET_PACK_PUBLIC_KEY: ${{ secrets.ASSET_PACK_PUBLIC_KEY }}
+        run: npm run build
